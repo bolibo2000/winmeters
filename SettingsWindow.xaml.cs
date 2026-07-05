@@ -473,14 +473,26 @@ public partial class SettingsWindow : Window
         }
     }
 
+    // Slider.ValueChanged fires synchronously inside InitializeComponent()
+    // when WPF coerces the slider's default Value=0.0 to satisfy the
+    // Minimum=0.5 attribute. At that point _working has been declared
+    // (field initializer) but not yet assigned (the ctor body runs that
+    // assignment AFTER InitializeComponent), so dereferencing _working.General
+    // would NRE. The earliest the ctor reaches PopulateUi is post-_working
+    // assignment, so guarding once on _working covers every coerce-during-init
+    // case. PopulateAppearance writes the real values afterward; the eventual
+    // ValueChanged then fires with _working non-null and the e.NewValue write
+    // back is a harmless echo of the value just assigned.
     private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        if (_working is null) return;
         _working.General.Scale = e.NewValue;
         TriggerLiveUpdate();
     }
 
     private void SliderOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
+        if (_working is null) return;
         _working.General.Opacity = e.NewValue;
         TriggerLiveUpdate();
     }
