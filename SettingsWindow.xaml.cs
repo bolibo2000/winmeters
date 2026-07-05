@@ -101,26 +101,17 @@ public partial class SettingsWindow : Window
     // blocks save while this is true -- inline errors on the MetricCard
     // already call out which input is bad.
     private bool _hasValidationError;
-    // Lifecycle gate. WPF's BAML parser wires `ValueChanged="..."` event
-    // handlers via IComponentConnector.Connect BEFORE the corresponding
-    // property setters run, so the Slider's Minimum=0.5 coerce fires
-    // SliderScale_ValueChanged synchronously inside InitializeComponent()
-    // with e.NewValue=0.5 -- it would clobber the saved Scale if allowed
-    // to write through. Flag flips true at field init, runs through the
-    // entire InitializeComponent + PopulateUi window, and flips false at
-    // the very end of PopulateUi so subsequent user drags reach the handler.
-    private bool _isInitializing = true;
 
     public SettingsWindow(AppSettings original)
     {
-        // Assign backing fields BEFORE InitializeComponent so handlers
-        // attached by IComponentConnector.Connect during XAML load (e.g.
-        // Slider coerce -> ValueChanged firing with e.NewValue=0.5 because
-        // default Value=0.0 was below Minimum=0.5) find `_working`,
-        // `_liveUpdateTimer`, and `_isInitializing` already initialised.
-        // The Slider handlers short-circuit on `_isInitializing` and the
-        // gate flips false at the END of PopulateUi() so user-driven
-        // drags after construction reach the handler normally.
+        // Assign backing fields BEFORE InitializeComponent so the BAML
+        // parser's pre-Connect event wireups (e.g. ComboBox SelectionChanged
+        // via inline `SelectionChanged="..."`) find `_working` and
+        // `_liveUpdateTimer` already initialised. The Slider ValueChanged
+        // handlers are NOT subscribed via XAML attr (intentionally) -- the
+        // explicit subscribe happens at the END of PopulateUi() below so
+        // the Slider coerce during InitializeComponent can't write through
+        // to `_working` and clobber the saved Scale/Opacity.
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
         var json = JsonSerializer.Serialize(original);
@@ -214,10 +205,19 @@ public partial class SettingsWindow : Window
         PopulateMeterOrder();
         PopulateAbout();
         PopulateMetrics();
-        // End of init window. Slider ValueChanged writes from the post-init
-        // user drags go through; the Slider coerce write-backs that fired
-        // during InitializeComponent() are now firmly behind us.
-        _isInitializing = false;
+        // Idempotent event attach. The XAML-side `ValueChanged="..."` attr
+        // is intentionally omitted (SettingsWindow.xaml's SliderScale and
+        // SliderOpacity) so the BAML Connect step does NOT wire those
+        // handlers during InitializeComponent -- the Slider coerce firing
+        // ValueChanged there would otherwise write through to `_working`
+        // and clobber the saved Scale/Opacity. Subscribe-then-set keeps
+        // the Reset-all path's second PopulateUi() reseat from double-tap
+        // (same rationale as PopulateMetrics' card handlers below; the
+        // -= on a never-subscribed event is a safe no-op on a C# event).
+        SliderScale.ValueChanged   -= SliderScale_ValueChanged;
+        SliderScale.ValueChanged   += SliderScale_ValueChanged;
+        SliderOpacity.ValueChanged -= SliderOpacity_ValueChanged;
+        SliderOpacity.ValueChanged += SliderOpacity_ValueChanged;
     }
 
     private void PopulateGeneralToggles()
@@ -495,14 +495,12 @@ public partial class SettingsWindow : Window
 
     private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isInitializing) return;
         _working.General.Scale = e.NewValue;
         TriggerLiveUpdate();
     }
 
     private void SliderOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
-        if (_isInitializing) return;
         _working.General.Opacity = e.NewValue;
         TriggerLiveUpdate();
     }

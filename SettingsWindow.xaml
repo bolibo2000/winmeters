@@ -426,8 +426,7 @@
                                                Text="{Binding ElementName=SliderScale, Path=Value, StringFormat=F2}"/>
                                     <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0"
                                             TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource Kil0bitSlider}"
-                                            ValueChanged="SliderScale_ValueChanged"/>
+                                            Style="{StaticResource Kil0bitSlider}"/>
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Opacity" Margin="0,0,0,4"/>
                                 <DockPanel Margin="0,0,0,4">
@@ -435,8 +434,7 @@
                                                Text="{Binding ElementName=SliderOpacity, Path=Value, StringFormat=F2}"/>
                                     <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0"
                                             TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource Kil0bitSlider}"
-                                            ValueChanged="SliderOpacity_ValueChanged"/>
+                                            Style="{StaticResource Kil0bitSlider}"/>
                                 </DockPanel>
                                 <TextBlock Style="{StaticResource Kil0bitTextSub}"
                                            Text="Tip: opacity is ignored when the bar is docked to the taskbar. Edit the alpha byte of Background instead."
