@@ -87,14 +87,6 @@ namespace WinMeters
         // for wiring + lifetime.
         private WnForms.NotifyIcon? _trayIcon;
 
-        // Cached reference to the "Show / Hide Bar" tray menu item so its
-        // Checked state can be kept in sync with the bar's actual visibility
-        // (without rebuilding the whole ContextMenuStrip on every toggle).
-        // Single source of truth is _settings.Window.IsHiddenByUser, which
-        // ToggleVisibility flips; this field is only updated by InitializeTrayIcon
-        // (initial state) and ToggleVisibility (after-state).
-        private WnForms.ToolStripMenuItem? _toggleTrayMenuItem;
-
         public MainWindow()
         {
             InitializeComponent();
@@ -139,35 +131,7 @@ namespace WinMeters
                     Text = "WinMeters",
                     Visible = true,
                 };
-
-                var menu = new WnForms.ContextMenuStrip();
-
-                var settingsItem = new WnForms.ToolStripMenuItem("Show Settings");
-                settingsItem.Click += (_, _) => Dispatcher.Invoke(() =>
-                    MenuItem_Settings_Click(this, new RoutedEventArgs()));
-
-                var toggleItem = new WnForms.ToolStripMenuItem("Show / Hide Bar")
-                {
-                    // Reflect the persisted "user elected to hide" state at startup
-                    // so the checkmark matches the bar's actual visibility the very
-                    // first time the menu opens. CheckOnClick stays false (default):
-                    // ToggleVisibility sets the property so the checkmark tracks the
-                    // post-toggle state, not the click-time state.
-                    Checked = !_settings.Window.IsHiddenByUser,
-                };
-                _toggleTrayMenuItem = toggleItem;
-                toggleItem.Click += (_, _) => Dispatcher.Invoke(() => ToggleVisibility());
-
-                var quitItem = new WnForms.ToolStripMenuItem("Quit");
-                quitItem.Click += (_, _) => Dispatcher.Invoke(() =>
-                    MenuItem_Exit_Click(this, new RoutedEventArgs()));
-
-                menu.Items.Add(settingsItem);
-                menu.Items.Add(toggleItem);
-                menu.Items.Add(new WnForms.ToolStripSeparator());
-                menu.Items.Add(quitItem);
-
-                _trayIcon.ContextMenuStrip = menu;
+                _trayIcon.ContextMenuStrip = BuildTrayMenu();
 
                 _trayIcon.MouseDoubleClick += (_, args) =>
                 {
@@ -185,6 +149,45 @@ namespace WinMeters
                 // the bar + global hotkey are unaffected.
                 WinMeters.Log.D($"InitializeTrayIcon failed: {ex.Message}");
             }
+        }
+
+        /// <summary>
+        /// Builds (or rebuilds) the tray ContextMenuStrip. Single source of
+        /// truth = <c>_settings.Window.IsHiddenByUser</c> -- the trailing
+        /// ternary above flips the toggle item's label between
+        /// "Hide Bar" (when the bar is visible -- so clicking will hide it)
+        /// and "Show Bar" (when the bar is hidden -- so clicking will show
+        /// it), and the Checked mark restamps from the same field. The
+        /// whole menu is rebuilt rather than just mutating .Text on the
+        /// existing item so the user sees the label change BEFORE the
+        /// next right-click on the tray icon.
+        /// </summary>
+        private WnForms.ContextMenuStrip BuildTrayMenu()
+        {
+            bool isBarVisible = !_settings.Window.IsHiddenByUser;
+            var menu = new WnForms.ContextMenuStrip();
+
+            var settingsItem = new WnForms.ToolStripMenuItem("Show Settings");
+            settingsItem.Click += (_, _) => Dispatcher.Invoke(() =>
+                MenuItem_Settings_Click(this, new RoutedEventArgs()));
+
+            var toggleItem = new WnForms.ToolStripMenuItem(
+                isBarVisible ? "Hide Bar" : "Show Bar")
+            {
+                Checked = isBarVisible,
+            };
+            toggleItem.Click += (_, _) => Dispatcher.Invoke(() => ToggleVisibility());
+
+            var quitItem = new WnForms.ToolStripMenuItem("Quit");
+            quitItem.Click += (_, _) => Dispatcher.Invoke(() =>
+                MenuItem_Exit_Click(this, new RoutedEventArgs()));
+
+            menu.Items.Add(settingsItem);
+            menu.Items.Add(toggleItem);
+            menu.Items.Add(new WnForms.ToolStripSeparator());
+            menu.Items.Add(quitItem);
+
+            return menu;
         }
 
         private void InitializeHardwareMonitor()
@@ -333,6 +336,15 @@ namespace WinMeters
                 // the user sees the bar close — keeps the visual contract
                 // intact (tray = running process) and removes the misleading
                 // "Quit didn't work" affordance on slow widget disposes below.
+                // Both the currently-attached ContextMenuStrip AND the
+                // NotifyIcon must be disposed: the strip holds a native
+                // menu HWND the icon does not own-transitively, and while
+                // every toggle in ToggleVisibility already disposes the
+                // obsolete strip via oldMenu?.Dispose(), the most recently
+                // rebuilt strip stays attached to the icon right up to
+                // shutdown. Without this line the strip leaks its native
+                // handle on every WinMeters exit.
+                _trayIcon?.ContextMenuStrip?.Dispose();
                 _trayIcon?.Dispose();
                 _trayIcon = null;
 
@@ -551,24 +563,28 @@ namespace WinMeters
             {
                 _settings.Window.IsHiddenByUser = false;
                 this.Visibility = Visibility.Visible;
-                // kil0bit's behaviour: in floating mode we keep the saved X/Y verbatim.
-                // If the user dragged off-screen while hidden, the next
-                // AlignToTaskbarCenter (or settings reload) handles the recovery.
-                // In AppBar mode the shell repositions us on the next ABN_POSCHANGED.
+                // In floating mode we keep the saved X/Y verbatim; if the
+                // user dragged off-screen while hidden, the next
+                // AlignToTaskbarCenter (or settings reload) handles the
+                // recovery. In AppBar mode the shell repositions us on
+                // the next ABN_POSCHANGED.
             }
             _settings.Save();
 
-            // Mirror the post-toggle state into the tray "Show / Hide Bar" item
-            // so its checkmark tracks the bar either way the toggle was driven:
-            // from the global hotkey (this method called directly) or from the
-            // tray menu (ToggleVisibility called via Dispatcher.Invoke). Single
-            // source of truth -- _settings.Window.IsHiddenByUser -- keeps the
-            // tray and the bar in lockstep without rebuilding the menu.
-            // ToolStripMenuItem.Checked drives the native checkmark rendering
-            // in ContextMenuStrip, so no P/Invoke or allocation churn needed.
-            if (_toggleTrayMenuItem is { } trayItem)
+            // Rebuild the tray ContextMenuStrip so:
+            //   (1) the toggle item's label flips ("Hide Bar" -> "Show Bar"
+            //       or vice-versa) to reflect the action available next,
+            //   (2) the checkmark restamps from the source of truth.
+            // BuildTrayMenu reads _settings.Window.IsHiddenByUser directly,
+            // so the rebuild implicitly performs both updates. The old
+            // ContextMenuStrip is disposed so its native handles don't
+            // accumulate on every toggle -- safe because WinForms has
+            // already closed the menu before this click handler runs.
+            if (_trayIcon is not null)
             {
-                trayItem.Checked = !_settings.Window.IsHiddenByUser;
+                var oldMenu = _trayIcon.ContextMenuStrip;
+                _trayIcon.ContextMenuStrip = BuildTrayMenu();
+                oldMenu?.Dispose();
             }
         }
 
