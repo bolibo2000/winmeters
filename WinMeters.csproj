@@ -41,6 +41,25 @@
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.4" />
   </ItemGroup>
 
+  <!--
+    <Page Update> for the hand-built kil0bit theme, NOT <Page Include>.
+    The SDK's <UseWPF>true</UseWPF> auto-default globs cover `**\*.xaml`
+    so the file is already included as a Page item. <Page Include> would
+    collide with the auto-included one and trigger NETSDK1022. <Page
+    Update> adds explicit generator metadata to the existing item
+    without creating a duplicate. This guarantees the .xaml is compiled
+    to BAML by MSBuild:Compile with the Wpf XAML runtime, regardless
+    of any default-glob corner cases under <PublishSingleFile> source
+    permutations.
+  -->
+  <ItemGroup>
+    <Page Update="Themes\Kil0bitTheme.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <XamlRuntime>Wpf</XamlRuntime>
+      <SubType>Designer</SubType>
+    </Page>
+  </ItemGroup>
+
   <!-- During design-time builds include a lightweight logging shim and exclude heavy logging implementation so temp builds succeed -->
   <PropertyGroup Condition=" '$(DesignTimeBuild)' == 'true' Or '$(BuildingInsideVisualStudio)' == 'true' ">
     <DefineConstants>$(DefineConstants);DESIGN_TIME</DefineConstants>
