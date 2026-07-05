@@ -1,6 +1,7 @@
 using System.Threading;
 using System.Windows;
 using System.Security.Principal;
+using System.Windows.Threading;
 
 namespace WinMeters
 {
@@ -8,24 +9,108 @@ namespace WinMeters
     {
         private static Mutex? _singleInstanceMutex;
 
+        public App()
+        {
+            // Surface unhandled exceptions instead of dying silently. The user
+            // reported 'WinMeters does not start, not showing in Task Manager'
+            // which usually means an exception fired before MainWindow.Show()
+            // and the OS already-terminated process is invisible. Showing the
+            // crash message + log path turns that into something actionable.
+            // Handlers are wired in App() (before StartupUri fires) so they
+            // catch failures during InitializeComponent as well.
+            AppDomain.CurrentDomain.UnhandledException += OnAppDomainUnhandledException;
+            DispatcherUnhandledException += OnDispatcherUnhandledException;
+        }
+
+        /// <summary>
+        /// AppDomain-level crash sink. Fires on any unhandled exception on
+        /// any thread (background, threadpool, DispatcherTimer). We log via
+        /// WinMeters.Log and surface a MessageBox so the user has evidence
+        /// even if the process is killed immediately afterwards by the OS.
+        /// </summary>
+        private static void OnAppDomainUnhandledException(object? sender, UnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                var ex = e.ExceptionObject as Exception;
+                WinMeters.Log.D($"AppDomain.UnhandledException (isTerminating={e.IsTerminating}): {ex}");
+                System.Windows.MessageBox.Show(
+                    $"WinMeters encountered a fatal error and will close.\n\n{ex?.Message ?? ex?.ToString()}",
+                    "WinMeters - Fatal Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
+            catch
+            {
+                // Last-ditch; we are already in a fatal path. Swallow so the
+                // default unhandled-exception machinery can still terminate
+                // the process cleanly.
+            }
+        }
+
+        /// <summary>
+        /// WPF Dispatcher (UI thread) crash sink. Marks the exception as
+        /// Handled so the application can shut down gracefully via the next
+        /// Shutdown() call rather than Windows terminating it abruptly.
+        /// </summary>
+        private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
+        {
+            try
+            {
+                WinMeters.Log.D($"DispatcherUnhandledException: {e.Exception}");
+                System.Windows.MessageBox.Show(
+                    $"WinMeters UI error: {e.Exception.Message}\n\nThe error has been logged.",
+                    "WinMeters - UI Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+                e.Handled = true;
+                // Treat a UI-thread exception as fatal so we don't keep
+                // pumping dispatch ops on a half-broken UI thread. OnExit
+                // fires and releases the single-instance mutex cleanly.
+                Shutdown();
+            }
+            catch
+            {
+                // fall through; the default handler terminates the process.
+            }
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
-            base.OnStartup(e);
-
-            // Theme is built in plain WPF: Kil0bitTheme.xaml merged globally by
-            // App.xaml. We intentionally do NOT depend on Wpf.Ui (its 3.x line
-            // only ships net451 assemblies; cannot be used on net10.0-windows).
-            // Re-evaluated periodically: when Wpf.Ui publishes a real
-            // net8.0/net10.0 build we can switch the ToggleSwitch to a native
-            // Fluent control without touching the rest of the dialog.
-
-            // Single-instance enforcement
+            // Single-instance enforcement FIRST so we do not spin up MainWindow
+            // (and its hardware-monitor thread + WPF DPI dance) just to discover
+            // another WinMeters.exe is already running. If a previous instance
+            // crashed via kill -9 -- common in fullscreen games where the
+            // foreground process can yank us out by force -- the mutex ends
+            // up ABANDONED; the .NET BCL throws AbandonedMutexException on
+            // the next acquire, which we recover from so the user is not
+            // stuck unable to launch a fresh instance.
             bool createdNew;
-            _singleInstanceMutex = new Mutex(true, Constants.Process.SingleInstanceMutexName, out createdNew);
+            try
+            {
+                _singleInstanceMutex = new Mutex(
+                    true, Constants.Process.SingleInstanceMutexName, out createdNew);
+            }
+            catch (AbandonedMutexException)
+            {
+                // The previous owner crashed without releasing the mutex.
+                // The BCL's `new Mutex` ctor quietly grants the calling
+                // thread ownership of the kernel handle before throwing
+                // AbandonedMutexException as a signal, but the C# Mutex
+                // wrapper itself was never assigned. The `createdNew` out
+                // param is unreliable (typically false) on this throw
+                // path. We are effectively the new owner; set createdNew
+                // = true so the "already running" branch does NOT fire.
+                // OnExit null-checks `_singleInstanceMutex` -- a missing
+                // wrapper just skips ReleaseMutex. The OS auto-releases any
+                // owned handle when the process exits, so the abandoned
+                // mutex is cleaned up next boot.
+                createdNew = true;
+            }
 
             if (!createdNew)
             {
-                // Another instance is already running
+                // Another healthy instance is already running.
                 System.Windows.MessageBox.Show(
                     "WinMeters is already running.\n\nCheck your system tray or taskbar for the existing instance.",
                     "WinMeters",
@@ -36,7 +121,17 @@ namespace WinMeters
                 return;
             }
 
-            // Check for admin privileges (some performance counters may need it)
+            // Safe to start the WPF machinery now (MainWindow +
+            // InitializeComponent + ResourceDictionary merges via
+            // App.xaml). base.OnStartup fires the StartupUri which constructs
+            // MainWindow; we want that only after we know we're the unique
+            // instance.
+            base.OnStartup(e);
+
+            // Check for admin privileges (some performance counters may need
+            // it). WinMeters' manifest declares requireAdministrator (see
+            // app.manifest); this warning fires when someone bypasses UAC by
+            // launching via `dotnet run` or a non-elevated shell.
             if (!IsRunningAsAdmin())
             {
                 WinMeters.Log.D("App: Not running as administrator. Some performance counters may be limited.");
@@ -44,7 +139,7 @@ namespace WinMeters
 
             // Load settings (with backup/restore support)
             var settings = AppSettings.Load();
-            WinMeters.Log.D("App starting. Settings loaded.");
+            WinMeters.Log.D($"App starting. Settings loaded (Accent={settings.Colors.Accent}).");
         }
 
         protected override void OnExit(ExitEventArgs e)

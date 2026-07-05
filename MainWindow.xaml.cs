@@ -10,6 +10,7 @@ using WpfRectangle = System.Windows.Shapes.Rectangle;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfMessageBox = System.Windows.MessageBox;
 using WpfBitmapSource = System.Windows.Media.Imaging.BitmapSource;
+using WnForms = System.Windows.Forms;
 using WinMeters.Utils;
 
 namespace WinMeters
@@ -76,6 +77,16 @@ namespace WinMeters
         // dynamically by ApplyWindowMode based on _settings.Window.WindowMode.
         private Services.AppBarService _appBarService = null!;
 
+        // System tray icon. WinMeters runs as a transparent overlay on the
+        // taskbar (MainWindow.xaml: ShowInTaskbar=False by design) so the user
+        // has no other persistent UI surface to find it in. The tray icon gives
+        // them a visible "WinMeters is running" affordance plus an always-on
+        // path to open Settings and Quit, which closes the "doesn't start /
+        // not showing in Task Manager" complaint path: even if the bar is
+        // crashed or hidden, the tray stays there. See InitializeTrayIcon()
+        // for wiring + lifetime.
+        private WnForms.NotifyIcon? _trayIcon;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -88,9 +99,75 @@ namespace WinMeters
             ApplySettingsInternal();
             _settings.Save();
 
+            InitializeTrayIcon();
+
             this.Loaded += MainWindow_Loaded;
             this.Closed += MainWindow_Closed;
             this.Deactivated += MainWindow_Deactivated;
+        }
+
+        /// <summary>
+        /// Builds the <see cref="WnForms.NotifyIcon"/> that lives in the
+        /// system tray for the entire lifetime of the process. Menu is kept
+        /// minimal on purpose: Show Settings (also wired to left-double-click
+        /// to match Windows tray conventions), Show / Hide Bar (delegates to
+        /// the same ToggleVisibility the global hotkey uses), and Quit. The
+        /// Quit handler defers to MenuItem_Exit_Click so cleanup logic stays
+        /// in exactly one place.
+        /// All click handlers marshal onto the WPF Dispatcher because
+        /// NotifyIcon's events fire on a WinForms MessageOnlyWindow thread,
+        /// not on the WPF UI thread.
+        /// </summary>
+        private void InitializeTrayIcon()
+        {
+            try
+            {
+                _trayIcon = new WnForms.NotifyIcon
+                {
+                    // System.Drawing.SystemIcons is a property of the
+                    // System.Drawing namespace, not System.Windows.Forms --
+                    // so it lives outside the WnForms alias on purpose.
+                    Icon = System.Drawing.SystemIcons.Application,
+                    Text = "WinMeters",
+                    Visible = true,
+                };
+
+                var menu = new WnForms.ContextMenuStrip();
+
+                var settingsItem = new WnForms.ToolStripMenuItem("Show Settings");
+                settingsItem.Click += (_, _) => Dispatcher.Invoke(() =>
+                    MenuItem_Settings_Click(this, new RoutedEventArgs()));
+
+                var toggleItem = new WnForms.ToolStripMenuItem("Show / Hide Bar");
+                toggleItem.Click += (_, _) => Dispatcher.Invoke(() => ToggleVisibility());
+
+                var quitItem = new WnForms.ToolStripMenuItem("Quit");
+                quitItem.Click += (_, _) => Dispatcher.Invoke(() =>
+                    MenuItem_Exit_Click(this, new RoutedEventArgs()));
+
+                menu.Items.Add(settingsItem);
+                menu.Items.Add(toggleItem);
+                menu.Items.Add(new WnForms.ToolStripSeparator());
+                menu.Items.Add(quitItem);
+
+                _trayIcon.ContextMenuStrip = menu;
+
+                _trayIcon.MouseDoubleClick += (_, args) =>
+                {
+                    if (args.Button == WnForms.MouseButtons.Left)
+                    {
+                        Dispatcher.Invoke(() =>
+                            MenuItem_Settings_Click(this, new RoutedEventArgs()));
+                    }
+                };
+            }
+            catch (Exception ex)
+            {
+                // Best-effort: tray is optional. If it fails (e.g. headless
+                // service environment with no shell), WinMeters still works;
+                // the bar + global hotkey are unaffected.
+                WinMeters.Log.D($"InitializeTrayIcon failed: {ex.Message}");
+            }
         }
 
         private void InitializeHardwareMonitor()
@@ -235,6 +312,13 @@ namespace WinMeters
         {
             try
             {
+                // Tear down the tray icon FIRST so it disappears the moment
+                // the user sees the bar close — keeps the visual contract
+                // intact (tray = running process) and removes the misleading
+                // "Quit didn't work" affordance on slow widget disposes below.
+                _trayIcon?.Dispose();
+                _trayIcon = null;
+
                 _hotkeyService?.Dispose();
                 _timer?.Stop();
                 _zOrderTimer?.Stop();
