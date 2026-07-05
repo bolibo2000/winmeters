@@ -87,6 +87,16 @@ namespace WinMeters
         // for wiring + lifetime.
         private WnForms.NotifyIcon? _trayIcon;
 
+        // Active Settings dialog. Cached so repeated clicks on the RMB-menu
+        // Settings item (or the tray Show Settings entry) re-activate the
+        // existing window instead of stacking a second copy. Modeless Show()
+        // keeps the WPF owner window interactive so DragMove() and
+        // MouseLeftButtonDown fire on the bar even while Settings is up,
+        // which is the user's explicit request: "able to reposition main
+        // window when settings window is open". Cleared by the Closed
+        // subscriber attached inside MenuItem_Settings_Click.
+        private SettingsWindow? _existingSettingsWindow;
+
         public MainWindow()
         {
             InitializeComponent();
@@ -602,11 +612,50 @@ namespace WinMeters
 
         private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
         {
-            var dlg = new SettingsWindow(_settings) { Owner = this };
-            if (dlg.ShowDialog() == true)
+            // Single-instance gating: if Settings is already open, just bring
+            // it to the front. Without this gate, switching from modal
+            // ShowDialog to modeless Show lets an impatient user spawn N
+            // independent SettingsWindow instances, each holding a private
+            // clone of _settings (the JSON round-trip in their ctor) and
+            // competing on close for which one's BtnSave_Click wins.
+            if (_existingSettingsWindow is { } existing)
             {
-                ApplySettings();
+                existing.Activate();
+                return;
             }
+
+            var dlg = new SettingsWindow(_settings) { Owner = this };
+            _existingSettingsWindow = dlg;
+
+            // Closed subscriber replaces the "if (dlg.ShowDialog() == true)"
+            // contract we used to live by. SettingsWindow sets DialogResult
+            // = true then Close() on the BtnSave_Click path; that fires
+            // Closed with DialogResult == true and we run the full
+            // ApplySettings branch here. SettingsWindow_Closing (subscribed
+            // inside SettingsWindow's own ctor) already handles cancel-revert
+            // on its side: when DialogResult != true it restores
+            // _snapshotBeforeEdit to _original before Closed even fires, so
+            // we don't need extra work in that branch.
+            dlg.Closed += (_, _) =>
+            {
+                try
+                {
+                    if (dlg.DialogResult == true)
+                    {
+                        ApplySettings();
+                    }
+                }
+                finally
+                {
+                    // Always clear the cached reference so the next click
+                    // opens a fresh Settings. finally runs regardless of
+                    // whether ApplySettings throws, so a corrupt .json
+                    // doesn't permanently lock the user out of Settings.
+                    _existingSettingsWindow = null;
+                }
+            };
+
+            dlg.Show();
         }
 
         private void MenuItem_TaskManager_Click(object sender, RoutedEventArgs e)
