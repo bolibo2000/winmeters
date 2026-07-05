@@ -295,20 +295,22 @@
                 </ContextMenu.ItemContainerStyle>
                 <ContextMenu.Resources>
                     <!--
-                        Plain TargetType=Separator style (no BasedOn). WPF happily
-                        applies our cosmetic setters on top of the framework default
-                        chrome; the dividers render as 1-px themed lines without
-                        clobbering the implicit-keyed style that the MenuItem
-                        template's sub-Separators resolve to. Adding BasedOn here
-                        earlier collided with the implicit-key lookup (both the
-                        style's own TargetType=typeof(Separator) entry AND the
-                        BasedOn resource-key typeof(Separator) ended up resolving
-                        to the same style) and produced "A Style intended for type
-                        'MenuItem' cannot be applied to type 'Separator'" at
-                        opening time when WPF walked the container's template.
-                        Pre-fix approach below is therefore correct by design.
+                        Keyed Separator style for the menu's explicit dividers.
+                        Adding x:Key=MenuDivider pulls our dividers out of WPF's
+                        implicit-key style lookup path entirely — the runtime
+                        only enters our style chain when an opt-in
+                        Separator Style={StaticResource MenuDivider} says so.
+                        The framework default Separator chrome is used
+                        unmodified otherwise (e.g. by the WPF MenuItem chrome's
+                        internal sub-Separator parts), so we never trigger
+                        "A Style intended for type 'MenuItem' cannot be applied
+                        to type 'Separator'" while opening the menu. The 3
+                        cosmetic setters below layer onto the default chrome
+                        (no Template setter, so the implicit ControlTemplate is
+                        preserved) and only fire on dividers in the actual Items
+                        collection — not on WPF-internal template plumbing.
                     -->
-                    <Style TargetType="Separator">
+                    <Style x:Key="MenuDivider" TargetType="Separator">
                         <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
                         <Setter Property="Height" Value="1"/>
                         <Setter Property="Margin" Value="4,4"/>
@@ -316,14 +318,14 @@
                 </ContextMenu.Resources>
                 <MenuItem Header="Settings" x:Name="MenuSettings" Click="MenuItem_Settings_Click"/>
                 <MenuItem Header="Task Manager" x:Name="MenuTaskManager" Click="MenuItem_TaskManager_Click"/>
-                <Separator/>
+                <Separator Style="{StaticResource MenuDivider}"/>
                 <MenuItem Header="Keep on Top" IsCheckable="True" x:Name="MenuKeepOnTop" Click="MenuItem_KeepOnTop_Click"/>
                 <MenuItem Header="Hide in Fullscreen" IsCheckable="True" x:Name="MenuHideInFullscreen" Click="MenuItem_HideInFullscreen_Click"/>
                 <MenuItem Header="Lock Position" IsCheckable="True" x:Name="MenuLock" Click="MenuItem_Lock_Click"/>
                 <MenuItem Header="Snap to Taskbar" IsCheckable="True" x:Name="MenuSnapToTaskbar" Click="MenuItem_SnapToTaskbar_Click"/>
-                <Separator/>
+                <Separator Style="{StaticResource MenuDivider}"/>
                 <MenuItem Header="About" x:Name="MenuAbout" Click="MenuItem_About_Click"/>
-                <Separator/>
+                <Separator Style="{StaticResource MenuDivider}"/>
                 <MenuItem Header="Exit" x:Name="MenuExit" Click="MenuItem_Exit_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
