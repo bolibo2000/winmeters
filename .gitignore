@@ -23,6 +23,10 @@ Tests/obj/
 build.log
 test.log
 
+## MSBuild binary logs (created by `dotnet build -bl:<path>.binlog`)
+*.binlog
+msbuild.binlog
+
 ## Visual Studio
 .vs/
 *.user
