@@ -203,7 +203,23 @@ public class AppSettings
         public int RefreshRateMs { get; set; } = 1000;
         public double Opacity { get; set; } = 1.0;
         public double Scale { get; set; } = 1.0;
-        public bool StartWithWindows { get; set; } = false;
+        /// <summary>
+        /// Kil0bit-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
+        /// Kil0bit-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
+        /// WPF Window and gates the float-mode EnforceZOrder timer. Mirrors kil0bit's
+        /// <c>_config.Config.AlwaysOnTop</c>; default true to preserve WinMeters's
+        /// pre-toggle behaviour (TOPMOST + periodic re-assertion).
+        /// </summary>
+        public bool KeepOnTop { get; set; } = true;
+        /// <summary>
+        /// Kil0bit-style “Hide in Fullscreen” toggle. When true and a fullscreen app
+        /// is the foreground, the bar is collapsed. Mirror kil0bit's
+        /// <c>_config.Config.HideOnFullscreen</c>. Dock-mode fullscreen detection
+        /// rides on the existing AppBarService ABN_FULLSCREENAPP handler; floating
+        /// mode rides on a WM_ACTIVATEAPP hook in MainWindow (borderless-maximised
+        /// detection -- same heuristic as kil0bit).
+        /// </summary>
+        public bool HideInFullscreen { get; set; } = false;
         public string? NetworkInterfaceName { get; set; }
         public string DiskInstanceName { get; set; } = "_Total";
         public bool CombineLogicalCores { get; set; } = true;

@@ -293,29 +293,22 @@ namespace WinMeters
 
             if (_settings.Window.StickToTaskbar)
             {
-                // Stuck mode: shell owns positioning once attached. The persistent 500ms
-                // z-order keepalive is only needed in float mode (where other apps can demote
-                // us), so we stop it here.
-                StopZOrderTimer();
-                this.Topmost = true;
+                // Stuck mode: shell owns positioning once attached. Apply the user's
+                // KeepOnTop preference LAST so it overrides the unconditional
+                // Topmost=true that follows (the shell keeps us above the taskbar
+                // regardless of Z-order anyway; Topmost is a backup).
                 _appBarService.ApplyIntegrationState(savedXDip, savedYDip);
+                ApplyKeepOnTop(_settings.General.KeepOnTop);
                 WinMeters.Log.D("MainWindow: Stuck-to-taskbar mode active.");
             }
             else
             {
-                // Float mode: detach (or stay detached) and put the window back at the saved X/Y.
-                this.Topmost = true;
+                // Float mode: detach (or stay detached) and put the window back at
+                // the saved X/Y. One-time HWND_TOPMOST placement is folded into
+                // ApplyKeepOnTop so it fires only when the user actually wants
+                // keep-on-top; otherwise we land at HWND_NOTOPMOST.
                 _appBarService.ApplyIntegrationState(savedXDip, savedYDip);
-
-                // One-time HWND_TOPMOST set so we immediately sit above normal windows.
-                // The 500ms timer takes over from here.
-                var hwnd = new WindowInteropHelper(this).Handle;
-                if (hwnd != IntPtr.Zero)
-                {
-                    NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
-                        NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
-                }
-                StartZOrderTimer();
+                ApplyKeepOnTop(_settings.General.KeepOnTop);
                 WinMeters.Log.D("MainWindow: Float mode active.");
             }
         }
@@ -335,6 +328,41 @@ namespace WinMeters
         private void StopZOrderTimer() => _zOrderTimer?.Stop();
 
         /// <summary>
+        /// Kil0bit's <c>_config.Config.AlwaysOnTop</c> toggle semantics. When
+        /// <paramref name="keepOnTop"/> is <c>true</c>: install WPF Topmost=true
+        /// and start the EnforceZOrder timer (so we keep re-asserting
+        /// HWND_TOPMOST in floating mode). When <c>false</c>: stop the timer
+        /// (zero CPU cost — no background re-assertion wars with other apps),
+        /// demote the WPF Topmost flag, and fire a single one-time HWND_NOTOPMOST
+        /// so we fall back into standard Windows Z-order immediately rather than
+        /// staying stuck above normal windows from the last timer tick.
+        ///
+        /// In stuck-to-taskbar mode the shell owns z-order so the Topmost flag is
+        /// effectively decorative; both branches are still applied so direct
+        /// staging (e.g. shell pause during a debug session) lands predictably.
+        /// </summary>
+        private void ApplyKeepOnTop(bool keepOnTop)
+        {
+            this.Topmost = keepOnTop;
+
+            if (keepOnTop)
+            {
+                StartZOrderTimer();
+                return;
+            }
+
+            StopZOrderTimer();
+
+            // One-shot HWND_NOTOPMOST demote so we don't keep sitting above
+            // normal windows from a previous timer tick. SWP_NOMOVE / NOSIZE /
+            // NOACTIVATE so we don't disrupt focus or layout.
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+            NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
+        }
+
+        /// <summary>
         /// kil0bit's z-order enforcement. Runs every 500ms in floating mode and
         /// re-asserts HWND_TOPMOST only when the foreground window is NOT the
         /// shell's taskbar (re-asserting while the taskbar is in front causes
@@ -347,6 +375,13 @@ namespace WinMeters
             // while the user is interacting with other apps. In stuck-to-taskbar
             // mode the shell owns z-order so the timer is not started at all
             // (see StartZOrderTimer / StopZOrderTimer).
+            //
+            // The kil0bit-style KeepOnTop toggle gates the timer: when false we
+            // have nothing to enforce, so we exit immediately and avoid waking
+            // the timer thread. ApplyKeepOnTop stops the timer entirely when the
+            // user disables KeepOnTop, but a late Tick could still be in flight
+            // when the menu toggle fires — this gate defends against that.
+            if (!_settings.General.KeepOnTop) return;
             if (_settings.Window.StickToTaskbar) return;
             if (this.Visibility != Visibility.Visible) return;
 
@@ -427,6 +462,82 @@ namespace WinMeters
 
         #region Menu Event Handlers
 
+        // Kil0bit-order RMB menu, mirroring .Kilobit/OverlayWindow.cs WndProc
+        // WM_RBUTTONUP handler:
+        //   1. Utility actions: Settings (opens SettingsWindow, identical to legacy).
+        //   2. View toggles: Keep on Top, Hide in Fullscreen, Lock Position,
+        //      Snap to Taskbar — each gated on _settings and applied immediately
+        //      so the toggle takes effect without a restart.
+        //   3. About + Exit (separated by their own dividers in the XAML).
+
+        private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new SettingsWindow(_settings) { Owner = this };
+            if (dlg.ShowDialog() == true)
+            {
+                ApplySettings();
+            }
+        }
+
+        private void MenuItem_TaskManager_Click(object sender, RoutedEventArgs e)
+        {
+            // Kil0bit's "Task Manager" entry launches taskmgr.exe verbatim —
+            // no flags, no arguments, no pre-check. Windows deduplicates at
+            // the OS layer if one is already running.
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "taskmgr",
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.D($"MenuItem_TaskManager_Click: {ex}");
+            }
+        }
+
+        private void MenuItem_KeepOnTop_Click(object sender, RoutedEventArgs e)
+        {
+            // Mirrors kil0bit's _config.Config.AlwaysOnTop toggle. Applied
+            // immediately (Topmost + ZOrderTimer gate) so the user sees the
+            // change without a restart, and persisted via _settings.Save()
+            // so the preference survives. ApplyKeepOnTop also runs from
+            // OnSourceInitialized → ApplyWindowMode so the saved flag is
+            // honoured at every boot.
+            _settings.General.KeepOnTop = MenuKeepOnTop.IsChecked;
+            ApplyKeepOnTop(_settings.General.KeepOnTop);
+            _settings.Save();
+        }
+
+        private void MenuItem_HideInFullscreen_Click(object sender, RoutedEventArgs e)
+        {
+            // Mirrors kil0bit's _config.Config.HideOnFullscreen toggle. The
+            // AppBar service's ABN_FULLSCREENAPP handler reads this flag
+            // every time a fullscreen app activates / deactivates, so no
+            // immediate visibility work is required here — the next
+            // fullscreen transition picks up the new value automatically.
+            _settings.General.HideInFullscreen = MenuHideInFullscreen.IsChecked;
+            _settings.Save();
+        }
+
+        private void MenuItem_Lock_Click(object sender, RoutedEventArgs e)
+        {
+            _settings.Window.LockPosition = MenuLock.IsChecked;
+            SavePosition();
+        }
+
+        private void MenuItem_SnapToTaskbar_Click(object sender, RoutedEventArgs e)
+        {
+            // Kil0bit has a single "Snap to Taskbar" boolean. ApplyWindowMode
+            // routes the change through the AppBar service (attach / detach
+            // + saved X/Y restore) so we don't duplicate any logic here.
+            _settings.Window.StickToTaskbar = MenuSnapToTaskbar.IsChecked;
+            ApplyWindowMode();
+            _settings.Save();
+        }
+
         private void MenuItem_About_Click(object sender, RoutedEventArgs e)
         {
             WpfMessageBox.Show(
@@ -459,74 +570,6 @@ namespace WinMeters
                 WinMeters.Log.D($"MenuItem_Exit_Click: {ex}");
             }
             System.Windows.Application.Current.Shutdown();
-        }
-
-        private void MenuItem_Startup_Click(object sender, RoutedEventArgs e)
-        {
-            _settings.General.StartWithWindows = MenuStartup.IsChecked;
-            SetStartup(_settings.General.StartWithWindows);
-            _settings.Save();
-        }
-
-        private void SetStartup(bool enable)
-        {
-            try
-            {
-                string? assemblyPath = Environment.ProcessPath
-                    ?? System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-                if (string.IsNullOrEmpty(assemblyPath)) return;
-
-                string taskName = @"Custom Tasks\WinMeters";
-                string args = enable
-                    ? $"/Create /TN \"{taskName}\" /TR \"'{assemblyPath}'\" /SC ONLOGON /RL HIGHEST /F"
-                    : $"/Delete /TN \"{taskName}\" /F";
-
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "schtasks",
-                    Arguments = args,
-                    CreateNoWindow = true,
-                    UseShellExecute = false,
-                    WindowStyle = System.Diagnostics.ProcessWindowStyle.Hidden
-                };
-
-                System.Diagnostics.Process.Start(startInfo);
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"SetStartup: {ex}");
-            }
-        }
-
-        private void MenuItem_Reload_Click(object sender, RoutedEventArgs e)
-        {
-            ApplySettings();
-        }
-
-        private void MenuItem_EditSettings_Click(object sender, RoutedEventArgs e)
-        {
-            var dlg = new SettingsWindow(_settings) { Owner = this };
-            if (dlg.ShowDialog() == true)
-            {
-                ApplySettings();
-            }
-        }
-
-        private void MenuItem_Lock_Click(object sender, RoutedEventArgs e)
-        {
-            _settings.Window.LockPosition = MenuLock.IsChecked;
-            SavePosition();
-        }
-
-        private void MenuItem_Dock_Click(object sender, RoutedEventArgs e)
-        {
-            // Kil0bit has a single `StickToTaskbar` flag; this menu toggles it
-            // directly. ApplyWindowMode routes the change through the AppBar
-            // service (attach/detach + saved X/Y restore) so we don't duplicate
-            // any logic here.
-            _settings.Window.StickToTaskbar = MenuDock.IsChecked;
-            ApplyWindowMode();
-            _settings.Save();
         }
 
         #endregion
@@ -776,9 +819,16 @@ namespace WinMeters
 
         private void ApplyMenuState()
         {
+            // Refresh the four checkable menu items from the live settings. The bar
+            // is re-bound to settings via BindSettings() after SettingsWindow.Save(),
+            // so this picks up both newly-loaded and freshly-edited values without
+            // re-applying the full InitializeComponent cycle. Legacy menu names
+            // (MenuDock / MenuStartup) were folded into the kil0bit-style 4-tuple:
+            // MenuLock, MenuSnapToTaskbar, MenuKeepOnTop, MenuHideInFullscreen.
             MenuLock.IsChecked = _settings.Window.LockPosition;
-            MenuDock.IsChecked = _settings.Window.StickToTaskbar;
-            MenuStartup.IsChecked = _settings.General.StartWithWindows;
+            MenuSnapToTaskbar.IsChecked = _settings.Window.StickToTaskbar;
+            MenuKeepOnTop.IsChecked = _settings.General.KeepOnTop;
+            MenuHideInFullscreen.IsChecked = _settings.General.HideInFullscreen;
         }
 
         private void ApplyMeterOrder()

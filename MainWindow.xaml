@@ -251,14 +251,26 @@
         </StackPanel>
         
         <Border.ContextMenu>
+            <!--
+                Right-mouse-button menu, restructured to match .Kilobit/OverlayWindow.cs
+                WM_RBUTTONUP handler:
+                  1. Utility actions (Settings opens the dialog, Task Manager spawns taskmgr.exe).
+                  2. View toggles (Keep on Top + Hide in Fullscreen + Lock Position + Snap
+                     to Taskbar) gated by the runtime settings in AppSettings.
+                  3. About + Exit separated by their own dividers, kil0bit-style.
+                 -->
             <ContextMenu x:Name="MainContextMenu">
-                <MenuItem Header="Lock Position" IsCheckable="True" x:Name="MenuLock" Click="MenuItem_Lock_Click"/>
-                <MenuItem Header="Dock on Taskbar" IsCheckable="True" x:Name="MenuDock" Click="MenuItem_Dock_Click"/>
-                <MenuItem Header="Start with Windows" IsCheckable="True" x:Name="MenuStartup" Click="MenuItem_Startup_Click"/>
+                <MenuItem Header="Settings" x:Name="MenuSettings" Click="MenuItem_Settings_Click"/>
+                <MenuItem Header="Task Manager" x:Name="MenuTaskManager" Click="MenuItem_TaskManager_Click"/>
                 <Separator/>
-                <MenuItem Header="Edit Settings..." Click="MenuItem_EditSettings_Click"/>
-                <MenuItem Header="About..." Click="MenuItem_About_Click"/>
-                <MenuItem Header="Exit" Click="MenuItem_Exit_Click"/>
+                <MenuItem Header="Keep on Top" IsCheckable="True" x:Name="MenuKeepOnTop" Click="MenuItem_KeepOnTop_Click"/>
+                <MenuItem Header="Hide in Fullscreen" IsCheckable="True" x:Name="MenuHideInFullscreen" Click="MenuItem_HideInFullscreen_Click"/>
+                <MenuItem Header="Lock Position" IsCheckable="True" x:Name="MenuLock" Click="MenuItem_Lock_Click"/>
+                <MenuItem Header="Snap to Taskbar" IsCheckable="True" x:Name="MenuSnapToTaskbar" Click="MenuItem_SnapToTaskbar_Click"/>
+                <Separator/>
+                <MenuItem Header="About" x:Name="MenuAbout" Click="MenuItem_About_Click"/>
+                <Separator/>
+                <MenuItem Header="Exit" x:Name="MenuExit" Click="MenuItem_Exit_Click"/>
             </ContextMenu>
         </Border.ContextMenu>
     </Border>
