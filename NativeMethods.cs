@@ -477,6 +477,8 @@ namespace WinMeters
         public const uint IDM_SNAP = 1007;
         public const uint IDM_KEEPONTOP = 1008;
         public const uint IDM_HIDEFULLSCREEN = 1009;
+        /// <summary>IDM_RESTART (1010) — WinMeters extension beyond the kil0bit 1001-1009 ID space. Restarts the bar so the user can pick up settings changes without manual close/reopen.</summary>
+        public const uint IDM_RESTART = 1010;
 
         #endregion
 
@@ -512,6 +514,29 @@ namespace WinMeters
         /// </summary>
         [DllImport("uxtheme.dll", EntryPoint = "#136")]
         public static extern void FlushMenuThemes();
+
+        /// <summary>
+        /// uxtheme.dll ordinal #138: returns 1 if the system is currently in
+        /// dark mode, 0 if light. Available since Windows 10 1903 (May 2019).
+        /// WinMeters reads this in <c>WmRButtonUp</c> to decide whether to
+        /// force the popup menu chrome dark (matches kil0bit) or leave it
+        /// alone (so light-mode users see the OS-default light chrome). The
+        /// default fallback (return 0) is treated as "light" by the caller;
+        /// if the function is unavailable on an older Windows version the
+        /// caller wraps in try/catch and defaults to forcing dark to match
+        /// kil0bit behaviour.
+        /// </summary>
+        [DllImport("uxtheme.dll", EntryPoint = "#138")]
+        public static extern int ShouldSystemUseDarkMode();
+
+        // SetPreferredAppMode argument values (uxtheme.h PreferredAppMode enum).
+        // WinMeters uses Default (0) on light-mode systems so the OS renders
+        // the popup menu in the user's chosen chrome, and ForceDark (2) on
+        // dark-mode systems to match the kil0bit reference port's chrome.
+        public const int PREFERRED_APP_MODE_DEFAULT = 0;
+        public const int PREFERRED_APP_MODE_ALLOW_DARK = 1;
+        public const int PREFERRED_APP_MODE_FORCE_DARK = 2;
+        public const int PREFERRED_APP_MODE_FORCE_LIGHT = 3;
 
         #endregion
 

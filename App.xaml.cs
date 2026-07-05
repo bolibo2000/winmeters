@@ -142,6 +142,41 @@ namespace WinMeters
             WinMeters.Log.D($"App starting. Settings loaded (Accent={settings.Colors.Accent}).");
         }
 
+        /// <summary>
+        /// Releases the single-instance mutex WITHOUT exiting the process.
+        /// Used by the Restart menu command (cmd 1010 in
+        /// <c>MainWindow.WmRButtonUp</c>) to let the freshly-launched
+        /// WinMeters instance take ownership of the mutex immediately,
+        /// avoiding the "already running" race where the new process
+        /// tries to acquire the mutex before <see cref="OnExit"/> has
+        /// released it.
+        ///
+        /// After this call, the static field is nulled out so the
+        /// subsequent <see cref="OnExit"/>'s null check skips the
+        /// release path — no double-release of the kernel handle, and
+        /// the OS will auto-release any remaining handle on process
+        /// exit if the field were somehow not null.
+        /// </summary>
+        public static void ReleaseSingleInstanceMutex()
+        {
+            if (_singleInstanceMutex is { } mutex)
+            {
+                try
+                {
+                    mutex.ReleaseMutex();
+                }
+                catch (ApplicationException ex)
+                {
+                    WinMeters.Log.D($"App.ReleaseSingleInstanceMutex: ReleaseMutex failed: {ex.Message}");
+                }
+
+                try { mutex.Dispose(); }
+                catch (Exception ex) { WinMeters.Log.D($"App.ReleaseSingleInstanceMutex: dispose failed: {ex.Message}"); }
+
+                _singleInstanceMutex = null;
+            }
+        }
+
         protected override void OnExit(ExitEventArgs e)
         {
             // Release the mutex. ReleaseMutex throws ApplicationException if the current

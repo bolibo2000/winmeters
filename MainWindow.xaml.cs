@@ -614,9 +614,11 @@ namespace WinMeters
         // the menu chrome forced dark via uxtheme calls (SetPreferredAppMode
         // / AllowDarkModeForWindow / FlushMenuThemes) right before
         // TrackPopupMenuEx. Replaces the previous WPF <ContextMenu> in
-        // MainWindow.xaml (and its 4 WPF MenuItem Click handlers + the
-        // custom WinMetersMenuItemTemplate / MenuDivider / ItemContainerStyle)
-        // with a single OS-drawn HMENU.
+        // MainWindow.xaml (and its 4 WPF MenuItem Click handlers) with a
+        // single OS-drawn HMENU. The custom WinMetersMenuItemTemplate
+        // ControlTemplate + MenuDivider + ItemContainerStyle were removed
+        // from Themes/WinMetersTheme.xaml in the same commit as no
+        // consumer remained after the WPF ContextMenu was deleted.
 
         /// <summary>Win32 WM_RBUTTONUP message id - fires when the user releases the right mouse button.</summary>
         private const int WM_RBUTTONUP = 0x0205;
@@ -662,16 +664,20 @@ namespace WinMeters
             // convention, same coordinate space as GetWindowRect / MONITORINFO).
             if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return IntPtr.Zero;
 
-            // Force dark mode for the native menu chrome, matching the
-            // .Kilobit reference. Order matters: SetPreferredAppMode
-            // first, then AllowDarkModeForWindow for our HWND, then
-            // FlushMenuThemes to invalidate any cached theme so the
-            // next CreatePopupMenu picks up the dark mode. The OS
-            // ignores all three if dark mode is already the system
-            // default, so this is a no-op cost on Win11-dark machines.
-            NativeMethods.SetPreferredAppMode(2);
-            NativeMethods.AllowDarkModeForWindow(hwnd, true);
-            NativeMethods.FlushMenuThemes();
+            // Force the menu chrome to match the user's system theme.
+            // On dark-mode systems we force dark (matches the .Kilobit
+            // reference's hardcoded SetPreferredAppMode(2) call). On
+            // light-mode systems we explicitly reset to default +
+            // disable dark for our HWND so the OS renders the popup in
+            // the user's light chrome rather than in a jarring dark
+            // box. The three calls (SetPreferredAppMode, AllowDarkModeForWindow,
+            // FlushMenuThemes) must run in that order either way -
+            // FlushMenuThemes invalidates the menu theme cache so the
+            // next CreatePopupMenu picks up the chosen mode. The whole
+            // dance is wrapped in a try/catch so an older Windows that
+            // doesn't export ShouldSystemUseDarkMode (#138 was added in
+            // 1903) falls back to kil0bit parity (always force dark).
+            ApplyMenuChromeMode(hwnd);
 
             IntPtr hMenu = NativeMethods.CreatePopupMenu();
             if (hMenu == IntPtr.Zero) return IntPtr.Zero;
@@ -806,7 +812,16 @@ namespace WinMeters
             // 6. Separator
             NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
 
-            // 7. Exit
+            // 7. Restart (WinMeters extension cmd 1010, beyond the
+            //    kil0bit 1001-1009 ID space). Power-user request: lets
+            //    the user pick up settings changes without manually
+            //    closing + reopening the bar.
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_RESTART, "Restart");
+
+            // 8. Separator
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
+
+            // 9. Exit
             NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_EXIT, "Exit");
         }
 
@@ -858,6 +873,10 @@ namespace WinMeters
 
                 case NativeMethods.IDM_HIDEFULLSCREEN:
                     ToggleHideInFullscreen();
+                    break;
+
+                case NativeMethods.IDM_RESTART:
+                    RestartWinMeters();
                     break;
 
                 default:
@@ -932,6 +951,149 @@ namespace WinMeters
             _settings.Window.StickToTaskbar = !_settings.Window.StickToTaskbar;
             ApplyWindowMode();
             _settings.Save();
+        }
+
+        /// <summary>
+        /// Restarts WinMeters (cmd 1010, WinMeters extension beyond the
+        /// kil0bit 1001-1009 ID space) so the user can pick up settings
+        /// changes without manually closing + reopening the bar. The
+        /// flow:
+        ///
+        ///   1. <see cref="SavePosition"/> persists the current X/Y so
+        ///      the new instance launches at the same screen spot.
+        ///   2. <see cref="App.ReleaseSingleInstanceMutex"/> drops the
+        ///      kernel handle so the freshly-launched process can
+        ///      acquire it without hitting the "already running" branch
+        ///      in App.OnStartup. Without this, the new process
+        ///      sometimes races the old one's OnExit mutex release and
+        ///      shows a spurious "WinMeters is already running" dialog.
+        ///   3. Process.Start launches a fresh WinMeters.exe with the
+        ///      same executable path as the current process. The path
+        ///      resolution handles both the standalone .exe (published
+        ///      output) and the .dll + dotnet.exe pair (dotnet run /
+        ///      dotnet test dev workflow).
+        ///   4. Application.Current.Shutdown() tears the old process
+        ///      down. MainWindow_Closed + App.OnExit fire normally and
+        ///      dispose of services / tray / appbar / hotkey. The
+        ///      <c>_singleInstanceMutex</c> field is already null (set
+        ///      by step 2) so OnExit's release is a no-op.
+        /// </summary>
+        private void RestartWinMeters()
+        {
+            SavePosition();
+
+            // Step 1: find the entry-point path. Assembly.GetEntryAssembly
+            // is the only fully-trustable source for "what executable
+            // (or dll) started me" - Environment.ProcessPath returns
+            // dotnet.exe in the dotnet-run scenario, which is NOT what
+            // we want to relaunch. If the entry assembly is a .dll we
+            // launch via "dotnet path/to.dll"; otherwise the entry path
+            // is itself the .exe.
+            string? entryPath = null;
+            try { entryPath = System.Reflection.Assembly.GetEntryAssembly()?.Location; }
+            catch { /* GetEntryAssembly can throw in some hosted scenarios; fall through */ }
+
+            if (string.IsNullOrEmpty(entryPath))
+            {
+                entryPath = Environment.ProcessPath;
+            }
+            if (string.IsNullOrEmpty(entryPath))
+            {
+                entryPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
+            }
+            if (string.IsNullOrEmpty(entryPath))
+            {
+                WinMeters.Log.D("RestartWinMeters: could not determine entry path; aborting restart.");
+                return;
+            }
+
+            // Step 2: drop the single-instance mutex so the new process
+            // can take ownership immediately. Done before Process.Start
+            // so the new process doesn't race the old one's OnExit.
+            try { App.ReleaseSingleInstanceMutex(); }
+            catch (Exception ex) { WinMeters.Log.D($"RestartWinMeters: ReleaseSingleInstanceMutex: {ex.Message}"); }
+
+            // Step 3: launch a fresh process. UseShellExecute=true so
+            // the OS resolves any PATHEXT / shell-association quirks
+            // (e.g. when the entry path is a .dll we still go through
+            // "dotnet" + .dll, which is a registered file association).
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo
+                {
+                    UseShellExecute = true,
+                };
+                if (entryPath.EndsWith(".dll", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    // dotnet-run / dotnet-test dev workflow: re-launch
+                    // via dotnet so the host runtime is set up again.
+                    psi.FileName = "dotnet";
+                    psi.Arguments = $"\"{entryPath}\"";
+                }
+                else
+                {
+                    // Standalone published exe: relaunch the .exe directly.
+                    psi.FileName = entryPath;
+                }
+                System.Diagnostics.Process.Start(psi);
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.D($"RestartWinMeters: Process.Start failed: {ex.Message}");
+                // We already released the mutex; the only safe way to
+                // recover is to let the current process keep running
+                // and let the user retry. OnExit will re-acquire / re-
+                // release cleanly on the next normal exit.
+                return;
+            }
+
+            // Step 4: tear down the old process. SavePosition already ran
+            // (step 0); OnExit is no-op for mutex thanks to step 2.
+            System.Windows.Application.Current.Shutdown();
+        }
+
+        /// <summary>
+        /// Applies the dark/light menu-chrome mode to match the user's
+        /// system theme. On dark-mode systems we force dark chrome
+        /// (matches the .Kilobit reference's hardcoded
+        /// SetPreferredAppMode(2)). On light-mode systems we reset
+        /// the preferred mode to Default and disable dark for our HWND
+        /// so the OS renders the popup in the user's light chrome.
+        /// Wrapped in a try/catch so an older Windows that doesn't
+        /// export uxtheme #138 (ShouldSystemUseDarkMode, added in
+        /// 1903) falls back to the kil0bit behaviour of always
+        /// forcing dark.
+        /// </summary>
+        private static void ApplyMenuChromeMode(IntPtr hwnd)
+        {
+            try
+            {
+                if (NativeMethods.ShouldSystemUseDarkMode() != 0)
+                {
+                    // System is in dark mode - force dark chrome.
+                    NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
+                    NativeMethods.AllowDarkModeForWindow(hwnd, true);
+                }
+                else
+                {
+                    // System is in light mode - reset to default +
+                    // disable dark for our HWND so the OS paints the
+                    // popup in the user's light chrome.
+                    NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_DEFAULT);
+                    NativeMethods.AllowDarkModeForWindow(hwnd, false);
+                }
+                NativeMethods.FlushMenuThemes();
+            }
+            catch (System.EntryPointNotFoundException)
+            {
+                // Older Windows without uxtheme #138 - fall back to
+                // kil0bit parity (always force dark). The SetPreferredAppMode
+                // / AllowDarkModeForWindow / FlushMenuThemes trio is the
+                // same one kil0bit calls unconditionally.
+                NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
+                NativeMethods.AllowDarkModeForWindow(hwnd, true);
+                NativeMethods.FlushMenuThemes();
+            }
         }
 
         /// <summary>
