@@ -258,8 +258,36 @@
                   2. View toggles (Keep on Top + Hide in Fullscreen + Lock Position + Snap
                      to Taskbar) gated by the runtime settings in AppSettings.
                   3. About + Exit separated by their own dividers, kil0bit-style.
-                 -->
-            <ContextMenu x:Name="MainContextMenu">
+
+                Visual styling (kil0bit parity): dark surface (ThemeCardBgBrush), white
+                foreground, accent-tinted highlight (ThemeAccentDimBrush) so hovering
+                an item lights up the same colour the Settings dialog uses for active
+                toggles. ItemContainerStyle derives from WPF's default MenuItem template
+                so we keep keyboard nav (alt-underscore mnemonics, IsChecked checkmark
+                rendering, arrow-key traversal) and only override Background / Padding.
+            -->
+            <ContextMenu x:Name="MainContextMenu"
+                         Background="{DynamicResource ThemeCardBgBrush}"
+                         BorderBrush="{DynamicResource ThemeCardBorderBrush}"
+                         BorderThickness="1"
+                         Foreground="{DynamicResource ThemeTextBrush}"
+                         Padding="4">
+                <ContextMenu.ItemContainerStyle>
+                    <Style TargetType="MenuItem">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+                        <Setter Property="FontFamily" Value="Segoe UI"/>
+                        <Setter Property="FontSize" Value="12"/>
+                        <Setter Property="Padding" Value="10,5"/>
+                    </Style>
+                </ContextMenu.ItemContainerStyle>
+                <ContextMenu.Resources>
+                    <Style TargetType="Separator">
+                        <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
+                        <Setter Property="Height" Value="1"/>
+                        <Setter Property="Margin" Value="4,4"/>
+                    </Style>
+                </ContextMenu.Resources>
                 <MenuItem Header="Settings" x:Name="MenuSettings" Click="MenuItem_Settings_Click"/>
                 <MenuItem Header="Task Manager" x:Name="MenuTaskManager" Click="MenuItem_TaskManager_Click"/>
                 <Separator/>

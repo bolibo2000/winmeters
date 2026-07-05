@@ -1,0 +1,325 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!--
+        Hand-built kil0bit visual theme (no ModernWfp NuGet). Mirrors the colours,
+        surface hierarchy, and iconic affordances of .Kilobit/OverlayWindow.cs so
+        WinMeters can render the same way with stock WPF.
+
+        Token brushes (kil0bit style):
+            ThemeBgBrush          — Window background (Win11 Settings dark).
+            ThemeCardBgBrush      — Surface 1 (cards, nav rail).
+            ThemeCardBorderBrush  — 1px semi transparent white border (rounded cards).
+            ThemeAccentBrush      — System accent (default #00CCFF; user editable
+                                    via _settings.Colors.Accent). Toggle / active nav.
+            ThemeAccentDimBrush   — Accent at low alpha for hover fills.
+            ThemeTextBrush        — Primary text (white).
+            ThemeSubtextBrush     — 70 percent opacity text for descriptions.
+            ThemeDangerBrush      — Quit / destructive action foreground.
+            ThemeMutedTextBrush   — 50 percent opacity text (placeholder / hint).
+
+        The accent brushes are static so changing _settings.Colors.Accent at
+        runtime re tints the active UI without a window close/open round trip.
+    -->
+
+    <SolidColorBrush x:Key="ThemeBgBrush"          Color="#1F1F1F"/>
+    <SolidColorBrush x:Key="ThemeCardBgBrush"      Color="#2D2D2D"/>
+    <SolidColorBrush x:Key="ThemeCardBorderBrush"  Color="#1AFFFFFF"/>
+    <SolidColorBrush x:Key="ThemeAccentBrush" Color="#00CCFF"/>
+    <SolidColorBrush x:Key="ThemeAccentDimBrush"   Color="#3300CCFF"/>
+    <SolidColorBrush x:Key="ThemeTextBrush"        Color="White"/>
+    <SolidColorBrush x:Key="ThemeSubtextBrush"     Color="#B3FFFFFF"/>
+    <SolidColorBrush x:Key="ThemeMutedTextBrush"   Color="#80FFFFFF"/>
+    <SolidColorBrush x:Key="ThemeDangerBrush"      Color="#D32F2F"/>
+    <SolidColorBrush x:Key="ThemeToggleTrackOff"  Color="#333333"/>
+    <SolidColorBrush x:Key="ThemeToggleTrackOn"   Color="#00CCFF"/>
+    <SolidColorBrush x:Key="ThemeToggleThumb"     Color="White"/>
+
+    <!--
+        Kil0bit primary body text style: Segoe UI, semibold body weight. Used for
+        section titles and toggle row labels. Falls back to Segoe UI when the
+        user installed fonts do not carry the Display variant.
+    -->
+    <Style x:Key="Kil0bitTextHeading" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+    </Style>
+
+    <Style x:Key="Kil0bitTextBody" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Opacity" Value="0.85"/>
+    </Style>
+
+    <Style x:Key="Kil0bitTextSub" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
+        <Setter Property="FontSize" Value="12.5"/>
+    </Style>
+
+    <Style x:Key="Kil0bitTextHint" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeMutedTextBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+    </Style>
+
+    <!--
+        Card surface: rounded corner Border following kil0bit SettingsWindow card
+        pattern. One Background / one BorderBrush / one CornerRadius. Reused
+        across Appearance, Monitoring, and the Home cards. Margin is left to the
+        consumer so the same card can be tiled in different layouts.
+    -->
+    <Style x:Key="Kil0bitCard" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="20,16"/>
+    </Style>
+
+    <Style x:Key="Kil0bitCardCompact" TargetType="Border" BasedOn="{StaticResource Kil0bitCard}">
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="CornerRadius" Value="8"/>
+    </Style>
+
+    <!--
+        Section header: kil0bit General / Monitoring / About titles
+        (FontSize 28 Semibold, Margin 0 0 0 24). Reused in each Settings page.
+    -->
+    <Style x:Key="Kil0bitSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+        <Setter Property="FontSize" Value="28"/>
+        <Setter Property="Margin" Value="0,0,0,24"/>
+    </Style>
+
+    <!--
+        Subsubsection header inside a card (Hardware Telemetry inside the
+        Monitoring card, for example). Smaller, butting tight against the
+        first toggle.
+    -->
+    <Style x:Key="Kil0bitSubHeader" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Margin" Value="0,0,0,12"/>
+    </Style>
+
+    <!--
+        Nav rail item: a RadioButton re styled as a flat left pane selector. The
+        check glyph is replaced with a 3px left border that lights up in the
+        accent colour when IsChecked is true. Matches the kil0bit NavigationView
+        selected item visual.
+    -->
+    <Style x:Key="Kil0bitNavItem" TargetType="RadioButton">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Border x:Name="NavBorder"
+                            Background="Transparent"
+                            BorderThickness="3,0,0,0"
+                            BorderBrush="Transparent"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="NavBorder" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+                            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+                        </Trigger>
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsMouseOver" Value="True"/>
+                                <Condition Property="IsChecked" Value="False"/>
+                            </MultiTrigger.Conditions>
+                            <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
+                        </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Kil0bit toggle switch look alike. A CheckBox with a 40x20 rounded Border
+        (the track) plus a 12x12 Thumb Border inside it. No animation: the thumb
+        snaps to the right edge via a Margin setter on IsChecked=True. The Thumb
+        is reachable through Setter TargetName because descendant names in the
+        template root namescope are findable.
+
+        Note: a previous version used a TranslateTransform sibling named
+        ThumbTransform nested inside Ellipse.RenderTransform, which the XAML
+        parser rejects (Setter TargetName references must point to direct
+        template children). Margin animation on the Thumb Border sidesteps the
+        constraint with the same visual effect.
+    -->
+    <Style x:Key="Kil0bitToggleSwitch" TargetType="CheckBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border x:Name="Track"
+                                Width="40" Height="20"
+                                CornerRadius="10"
+                                Background="{DynamicResource ThemeToggleTrackOff}"
+                                BorderBrush="#555555"
+                                BorderThickness="1">
+                            <Border x:Name="Thumb"
+                                    Width="12" Height="12" CornerRadius="6"
+                                    Background="{DynamicResource ThemeToggleThumb}"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Margin="3,0,0,0"/>
+                        </Border>
+                        <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Track" Property="Background"  Value="{DynamicResource ThemeToggleTrackOn}"/>
+                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource ThemeToggleTrackOn}"/>
+                            <Setter TargetName="Thumb"  Property="Margin"      Value="22,0,0,0"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Kil0bit primary action button. Flat surface, white foreground, subtle
+        accent border on hover. Used for the Save & Close button in the
+        settings footer.
+    -->
+    <Style x:Key="Kil0bitPrimaryButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Padding" Value="20,8"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="BtnBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="4"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BtnBorder" Property="Opacity" Value="0.8"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Secondary button: muted, used for Quit / Reset / Cancel actions.
+    -->
+    <Style x:Key="Kil0bitSecondaryButton" TargetType="Button" BasedOn="{StaticResource Kil0bitPrimaryButton}">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
+    </Style>
+
+    <Style x:Key="Kil0bitDangerButton" TargetType="Button" BasedOn="{StaticResource Kil0bitPrimaryButton}">
+        <Setter Property="Background" Value="{DynamicResource ThemeDangerBrush}"/>
+        <Setter Property="Foreground" Value="White"/>
+    </Style>
+
+    <!--
+        ComboBox: dark surface, accent selection. Plain WPF ComboBox accepts our
+        brush overrides via setters. On Windows 11 the dropdown popup paints with
+        the system default chrome; we accept that and rely on the card surface
+        for the inline feel.
+    -->
+    <Style x:Key="Kil0bitComboBox" TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="MinHeight" Value="28"/>
+    </Style>
+
+    <Style x:Key="Kil0bitTextBox" TargetType="TextBox">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="FontFamily" Value="Segoe UI"/>
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Padding" Value="6,3"/>
+        <Setter Property="MinHeight" Value="26"/>
+        <Setter Property="CaretBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+        <Setter Property="SelectionBrush" Value="{DynamicResource ThemeAccentDimBrush}"/>
+    </Style>
+
+    <Style x:Key="Kil0bitSlider" TargetType="Slider">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="IsMoveToPointEnabled" Value="True"/>
+    </Style>
+
+    <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
+         inline color picker swatch inside each Appearance card row. -->
+    <Style x:Key="Kil0bitColorSwatch" TargetType="Border">
+        <Setter Property="Width" Value="20"/>
+        <Setter Property="Height" Value="20"/>
+        <Setter Property="CornerRadius" Value="3"/>
+        <Setter Property="BorderBrush" Value="White"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Margin" Value="0,0,10,0"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!--
+        Kil0bit horizontal rule: 1px semi transparent white divider used at the
+        Settings dialog About / Project Links section boundaries. Lives in the
+        theme so any future window that wants the same divider inherits it
+        without re declaring.
+    -->
+    <Style x:Key="Kil0bitHorizontalRule" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Margin" Value="0,8,0,16"/>
+    </Style>
+
+    <!--
+        Info bar callout: kil0bit's "Performance Note" / "Welcome" accent left
+        border tinted surface. Used on the Home page to advertise the active
+        monitor.
+    -->
+    <Style x:Key="Kil0bitInfoBar" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+        <Setter Property="BorderThickness" Value="4,0,0,0"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+
+</ResourceDictionary>

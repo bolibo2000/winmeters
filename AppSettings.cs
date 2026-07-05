@@ -253,6 +253,13 @@ public class AppSettings
 
     public class ColorSettings
     {
+        /// <summary>
+        /// Accent color used for kil0bit-style UI affordances: focused nav-rail item,
+        /// ToggleSwitch track (on), button accents, link underline. Mirrors kil0bit's
+        /// <c>Config.AccentColorHex</c>; default #00CCFF (kil0bit's default accent).
+        /// Editing this updates the theme; live-preview re-applies on the open dialog.
+        /// </summary>
+        public string Accent { get; set; } = "#00CCFF";
         public string Background { get; set; } = "#FF202020";
         public string Border { get; set; } = "#44FFFFFF";
         public double BorderThickness { get; set; }

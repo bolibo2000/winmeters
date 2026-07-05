@@ -4,6 +4,27 @@
              xmlns:local="clr-namespace:WinMeters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-         
+        <!--
+            Hand-built kil0bit visual theme merged globally. Provides:
+              * Token brushes (ThemeBg / ThemeCardBg / ThemeAccent / ThemeText /
+                ThemeSubtext / ThemeDanger / ThemeToggleTrackOn/Off).
+              * Kil0bitCard / Kil0bitSectionHeader / Kil0bitSubHeader text styles.
+              * Kil0bitNavItem (RadioButton look-alike for left-rail navigation).
+              * Kil0bitToggleSwitch (CheckBox look-alike for on/off toggles).
+              * Kil0bitPrimaryButton / Kil0bitSecondaryButton / Kil0bitDangerButton
+                (template-based button styles).
+              * Kil0bitComboBox / Kil0bitTextBox / Kil0bitSlider / Kil0bitColorSwatch
+                / Kil0bitInfoBar (per-control affordance styles).
+
+            Merging into Application.Resources means every window's content can
+            reference these by StaticResource / DynamicResource without
+            re-declaring. Theme tokens are DynamicResources (where applicable) so
+            that future updates to _settings.Colors.Accent propagate live.
+        -->
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Themes/Kil0bitTheme.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
     </Application.Resources>
 </Application>

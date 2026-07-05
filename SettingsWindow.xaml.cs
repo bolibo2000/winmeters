@@ -1,19 +1,30 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Input;
+using System.Windows.Threading;
 using WnControls = System.Windows.Controls;
-using WnShapes = System.Windows.Shapes;
 #if !DESIGN_TIME
 using WnForms = System.Windows.Forms;
-using WnDrawing = System.Drawing;
 #endif
 
 namespace WinMeters;
 
 /// <summary>
-/// Settings dialog window for configuring WinMeters appearance and behavior.
+/// Kil0bit-style Settings dialog. Five-section NavigationView (Home / General /
+/// Monitoring / Appearance / About) over a 720x900 dark window. The structure is
+/// hand-built in plain WPF -- no ModernWfp NuGet. Theme brushes and templates
+/// come from Kil0bitTheme.xaml (merged in App.xaml).
+///
+/// The data flow is the same as the legacy single-page settings: a deep clone
+/// of the caller's <see cref="AppSettings"/> is held in <c>_working</c>; on
+/// Save, <c>_working</c> is copied back to <c>_original</c> and <c>_original</c>
+/// is persisted. On cancel (window close without save), <c>_original</c> is
+/// restored from <c>_snapshotBeforeEdit</c> so live-preview state can't leak
+/// across an OK-then-Edit-again cycle. On Quit, both are persisted and the
+/// application shuts down.
 /// </summary>
 public partial class SettingsWindow : Window
 {
@@ -21,311 +32,222 @@ public partial class SettingsWindow : Window
     private readonly AppSettings _working;
     private readonly AppSettings _snapshotBeforeEdit;
 
-    private static readonly Dictionary<string, string> FriendlyNames = new()
+    private static readonly Dictionary<string, string> MeterDisplayNames = new()
     {
         ["Cpu"] = "CPU Usage",
-        ["Ram"] = "Total RAM Usage",
-        ["Disk"] = "Disk Activity",
-        ["Net"] = "Network Activity",
-        ["H/W Temps"] = "H/W Temperatures",
-        ["GpuDedicated"] = "GPU VRAM Usage",
-        ["GpuShared"] = "GPU SRAM Usage",
-        ["Time"] = "System Time"
+        ["CpuTemp"] = "CPU Temp",
+        ["GpuTemp"] = "GPU Temp",
+        ["Ram"] = "RAM Usage",
+        ["GpuDedicated"] = "GPU VRAM",
+        ["GpuShared"] = "GPU SRAM",
+        ["Disk"] = "Disk",
+        ["Net"] = "Network",
+        ["Time"] = "Time",
     };
 
-    // Debounce timer for live updates to avoid excessive work while the user is dragging.
-    private System.Windows.Threading.DispatcherTimer? _liveUpdateTimer;
-    private const int LiveUpdateDebounceMs = 100;
+    private readonly DispatcherTimer _liveUpdateTimer;
+    private const int LiveUpdateDebounceMs = 120;
+
+    private bool _isNavigating;
 
     public SettingsWindow(AppSettings original)
     {
         InitializeComponent();
+
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
-        // Deep clone via JSON roundtrip so we never mutate the caller's settings until OK.
         var json = JsonSerializer.Serialize(original);
         _working = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
         _snapshotBeforeEdit = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
 
-        DataContext = _working;
-        SetupLiveUpdateDebounce();
-        PopulateUi();
-        // The window is closed-and-discarded; the GC will reclaim the handlers naturally,
-        // so no manual -=/Unsubscribe work is needed here.
-    }
-
-    private void SetupLiveUpdateDebounce()
-    {
-        _liveUpdateTimer = new System.Windows.Threading.DispatcherTimer
-        {
-            Interval = TimeSpan.FromMilliseconds(LiveUpdateDebounceMs)
-        };
+        _liveUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(LiveUpdateDebounceMs) };
         _liveUpdateTimer.Tick += (s, e) =>
         {
-            _liveUpdateTimer?.Stop();
+            _liveUpdateTimer.Stop();
             ApplyChangesLive();
         };
+
+        PopulateUi();
+        SelectSection("Home");
+
+        this.Closing += SettingsWindow_Closing;
     }
 
-    private void TriggerLiveUpdate()
+    // ---------------------------------------------------------------------
+    // Section routing
+    // ---------------------------------------------------------------------
+
+    private void NavRail_Click(object sender, RoutedEventArgs e)
     {
-        _liveUpdateTimer?.Stop();
-        _liveUpdateTimer?.Start();
+        if (sender is WnControls.RadioButton rb && rb.Tag is string tag)
+        {
+            SelectSection(tag);
+        }
     }
+
+    private void HomeCard_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is WnControls.Button btn && btn.Tag is string tag)
+        {
+            SelectSection(tag);
+        }
+    }
+
+    private void SelectSection(string sectionName)
+    {
+        if (string.IsNullOrEmpty(sectionName) || _isNavigating) return;
+        _isNavigating = true;
+        try
+        {
+            SectionHome.Visibility       = Visibility.Collapsed;
+            SectionGeneral.Visibility    = Visibility.Collapsed;
+            SectionMonitoring.Visibility = Visibility.Collapsed;
+            SectionAppearance.Visibility = Visibility.Collapsed;
+            SectionAbout.Visibility      = Visibility.Collapsed;
+
+            switch (sectionName)
+            {
+                case "Home":       SectionHome.Visibility       = Visibility.Visible; break;
+                case "General":    SectionGeneral.Visibility    = Visibility.Visible; break;
+                case "Monitoring": SectionMonitoring.Visibility = Visibility.Visible; break;
+                case "Appearance": SectionAppearance.Visibility = Visibility.Visible; break;
+                case "About":      SectionAbout.Visibility      = Visibility.Visible; break;
+            }
+
+            // Sync the rail radio-button to the section we just rendered.
+            WnControls.RadioButton? match = sectionName switch
+            {
+                "Home"       => NavHome,
+                "General"    => NavGeneral,
+                "Monitoring" => NavMonitoring,
+                "Appearance" => NavAppearance,
+                "About"      => NavAbout,
+                _ => null
+            };
+            if (match is not null && match.IsChecked != true)
+                match.IsChecked = true;
+        }
+        finally
+        {
+            _isNavigating = false;
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // UI population
+    // ---------------------------------------------------------------------
 
     private void PopulateUi()
     {
-        PopulateSliders();
-        PopulateVisibilityCheckboxes();
-        PopulateRateTextboxes();
-        PopulateColors();
+        PopulateGeneralToggles();
+        PopulateMonitoringToggles();
+        PopulateAppearance();
         PopulateDisks();
         PopulateNetworkInterfaces();
         PopulateMeterOrder();
+        PopulateAbout();
     }
 
-    private void PopulateSliders()
+    private void PopulateGeneralToggles()
     {
+        ToggleLockPosition.IsChecked       = _working.Window.LockPosition;
+        ToggleSnapToTaskbar.IsChecked      = _working.Window.StickToTaskbar;
+        ToggleHideInFullscreen.IsChecked   = _working.General.HideInFullscreen;
+        ToggleKeepOnTop.IsChecked          = _working.General.KeepOnTop;
+        ToggleTime24H.IsChecked            = _working.General.Time24H;
+        ToggleCombineLogicalCores.IsChecked = _working.General.CombineLogicalCores;
+
+        // Refresh-rate combo: select the entry whose Tag matches the current
+        // GlobalRefreshRateMs, falling back to the closest default for stale
+        // values that pre-date the kil0bit-style preset list.
+        int currentRate = _working.General.RefreshRateMs;
+        int[] rateSteps = { 500, 1000, 2000, 5000 };
+        int closest = rateSteps.OrderBy(v => Math.Abs(v - currentRate)).First();
+        for (int i = 0; i < ComboRefreshRate.Items.Count; i++)
+        {
+            if (ComboRefreshRate.Items[i] is WnControls.ComboBoxItem item &&
+                item.Tag is string tag &&
+                int.TryParse(tag, out int v) && v == closest)
+            {
+                ComboRefreshRate.SelectedIndex = i;
+                break;
+            }
+        }
+
+        // Per-meter rates. SetRateText also wires the PreviewTextInput digit-only
+        // filter (legacy behaviour) so the user can't paste non-digit characters
+        // before ValidateRate catches them with an inline error.
+        SetRateText(TxtRateCpu,          _working.Rates.Cpu);
+        SetRateText(TxtRateRam,          _working.Rates.Ram);
+        SetRateText(TxtRateDisk,         _working.Rates.Disk);
+        SetRateText(TxtRateNet,          _working.Rates.Net);
+        SetRateText(TxtRateCpuTemp,      _working.Rates.CpuTemp);
+        SetRateText(TxtRateGpuTemp,      _working.Rates.GpuTemp);
+        SetRateText(TxtRateGpuDedicated, _working.Rates.GpuDedicated);
+        SetRateText(TxtRateGpuShared,    _working.Rates.GpuShared);
+    }
+
+    private void SetRateText(WnControls.TextBox tb, int? value)
+    {
+        tb.Text = (value ?? _working.General.RefreshRateMs).ToString();
+        // Idempotent subscribe: detach-then-attach. CLR events cannot be
+        // compared for nullness via == (CS0079); the cleanest "wire once" is
+        // -= then += which is a no-op when the handler is absent. SetRateText
+        // runs every PopulateUi (initial open + Reset All re-init or future
+        // reload paths) so we MUSTN'T double-subscribe — two handlers on the
+        // same TextBox would fire twice per keystroke and re-set e.Handled
+        // twice (harmless but work doubling that compounds).
+        tb.PreviewTextInput -= RateTextBox_PreviewTextInput;
+        tb.PreviewTextInput += RateTextBox_PreviewTextInput;
+    }
+
+    private void RateTextBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+    {
+        // Digit-only filter -- prevents accidental unit suffixes, signs, etc.
+        // from landing in the TextBox before our ValidateRate catches them.
+        // Matches the legacy single-page dialog filter exactly.
+        e.Handled = !string.IsNullOrEmpty(e.Text) && !e.Text.All(char.IsDigit);
+    }
+
+    private void PopulateMonitoringToggles()
+    {
+        ToggleShowCpu.IsChecked          = _working.Visibility.ShowCpu;
+        ToggleShowRam.IsChecked          = _working.Visibility.ShowRam;
+        ToggleShowDisk.IsChecked         = _working.Visibility.ShowDisk;
+        ToggleShowNet.IsChecked          = _working.Visibility.ShowNet;
+        ToggleShowGpuDedicated.IsChecked = _working.Visibility.ShowGpuDedicated;
+        ToggleShowGpuShared.IsChecked    = _working.Visibility.ShowGpuShared;
+        ToggleShowCpuTemp.IsChecked      = _working.Visibility.ShowCpuTemp;
+        ToggleShowGpuTemp.IsChecked      = _working.Visibility.ShowGpuTemp;
+        ToggleShowHardwareLoad.IsChecked = _working.Visibility.ShowHardwareLoad;
+        ToggleShowTime.IsChecked         = _working.Visibility.ShowTime;
+    }
+
+    private void PopulateAppearance()
+    {
+        SliderScale.Value   = _working.General.Scale;
         SliderOpacity.Value = _working.General.Opacity;
-        TxtOpacity.Text = _working.General.Opacity.ToString("F2");
-        SliderOpacity.ValueChanged += (s, e) =>
-        {
-            TxtOpacity.Text = SliderOpacity.Value.ToString("F2");
-            TriggerLiveUpdate();
-        };
 
-        SliderScale.Value = _working.General.Scale;
-        TxtScale.Text = _working.General.Scale.ToString("F2");
-        SliderScale.ValueChanged += (s, e) =>
-        {
-            TxtScale.Text = SliderScale.Value.ToString("F2");
-            TriggerLiveUpdate();
-        };
-    }
-
-    private void PopulateVisibilityCheckboxes()
-    {
-        // Single check handler is shared — null check is suppressed by the cast pattern below.
-        ChkCpu.IsChecked = _working.Visibility.ShowCpu;
-        ChkRam.IsChecked = _working.Visibility.ShowRam;
-        ChkDisk.IsChecked = _working.Visibility.ShowDisk;
-        ChkNet.IsChecked = _working.Visibility.ShowNet;
-        ChkCpuTemp.IsChecked = _working.Visibility.ShowCpuTemp;
-        ChkGpuTemp.IsChecked = _working.Visibility.ShowGpuTemp;
-        ChkHardwareLoad.IsChecked = _working.Visibility.ShowHardwareLoad;
-        ChkGpuDedicated.IsChecked = _working.Visibility.ShowGpuDedicated;
-        ChkGpuShared.IsChecked = _working.Visibility.ShowGpuShared;
-        ChkCombineCpu.IsChecked = _working.General.CombineLogicalCores;
-        ChkTime.IsChecked = _working.Visibility.ShowTime;
-        ChkTime24H.IsChecked = _working.General.Time24H;
-
-        RoutedEventHandler checkHandler = (s, e) => TriggerLiveUpdate();
-        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
-        {
-            chk.Checked += checkHandler;
-            chk.Unchecked += checkHandler;
-        }
-    }
-
-    private void PopulateRateTextboxes()
-    {
-        var rateMap = new Dictionary<WnControls.TextBox, string>
-        {
-            { TxtRateCpu, nameof(_working.Rates.Cpu) },
-            { TxtRateRam, nameof(_working.Rates.Ram) },
-            { TxtRateDisk, nameof(_working.Rates.Disk) },
-            { TxtRateNet, nameof(_working.Rates.Net) },
-            { TxtRateCpuTemp, nameof(_working.Rates.CpuTemp) },
-            { TxtRateGpuTemp, nameof(_working.Rates.GpuTemp) },
-            { TxtRateGpuDedicated, nameof(_working.Rates.GpuDedicated) },
-            { TxtRateGpuShared, nameof(_working.Rates.GpuShared) }
-        };
-
-        // Set initial values
-        foreach (var (tb, prop) in rateMap)
-        {
-            var value = prop switch
-            {
-                nameof(_working.Rates.Cpu) => _working.Rates.Cpu ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.Ram) => _working.Rates.Ram ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.Disk) => _working.Rates.Disk ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.Net) => _working.Rates.Net ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.CpuTemp) => _working.Rates.CpuTemp ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.GpuTemp) => _working.Rates.GpuTemp ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.GpuDedicated) => _working.Rates.GpuDedicated ?? _working.General.RefreshRateMs,
-                nameof(_working.Rates.GpuShared) => _working.Rates.GpuShared ?? _working.General.RefreshRateMs,
-                _ => _working.General.RefreshRateMs
-            };
-            tb.Text = value.ToString();
-        }
-
-        // Setup validation and input filtering
-        var textChangedHandler = new TextChangedEventHandler((s, e) =>
-        {
-            if (s is WnControls.TextBox tb)
-            {
-                var errorBlock = tb.Parent is WnControls.StackPanel panel && panel.Children.Count >= 3
-                    ? panel.Children[2] as TextBlock
-                    : null;
-                if (ValidateRate(tb, errorBlock))
-                    TriggerLiveUpdate();
-            }
-        });
-
-        var previewTextHandler = new TextCompositionEventHandler((s, e) =>
-        {
-            e.Handled = !string.IsNullOrEmpty(e.Text) && !e.Text.All(char.IsDigit);
-        });
-
-        foreach (var tb in rateMap.Keys)
-        {
-            tb.TextChanged += textChangedHandler;
-            tb.PreviewTextInput += previewTextHandler;
-        }
-
-        // Setup error display references
-        SetupRateError(TxtRateCpu, ErrRateCpu);
-        SetupRateError(TxtRateRam, ErrRateRam);
-        SetupRateError(TxtRateDisk, ErrRateDisk);
-        SetupRateError(TxtRateNet, ErrRateNet);
-        SetupRateError(TxtRateCpuTemp, ErrRateCpuTemp);
-        SetupRateError(TxtRateGpuTemp, ErrRateGpuTemp);
-        SetupRateError(TxtRateGpuDedicated, ErrRateGpuDedicated);
-        SetupRateError(TxtRateGpuShared, ErrRateGpuShared);
-
-        ValidateAll();
-    }
-
-    private void SetupRateError(WnControls.TextBox tb, TextBlock err)
-    {
-        // Store error reference for validation
-        tb.Tag = err;
-    }
-
-    private void PopulateColors()
-    {
-        ColorsPanel.Children.Clear();
-
-        var colorProperties = new[]
-        {
-            ("Background", (Action<string>)(v => _working.Colors.Background = v)),
-            ("Border", (Action<string>)(v => _working.Colors.Border = v)),
-            ("CpuSys", (Action<string>)(v => _working.Colors.CpuSys = v)),
-            ("CpuUser", (Action<string>)(v => _working.Colors.CpuUser = v)),
-            ("RAM", (Action<string>)(v => _working.Colors.RamPie = v)),
-            ("RamBorder", (Action<string>)(v => _working.Colors.RamBorder = v)),
-            ("VRAM", (Action<string>)(v => _working.Colors.GpuDedicatedPie = v)),
-            ("SRAM", (Action<string>)(v => _working.Colors.GpuSharedPie = v)),
-            ("CpuTemp", (Action<string>)(v => _working.Colors.CpuTemp = v)),
-            ("GpuTemp", (Action<string>)(v => _working.Colors.GpuTemp = v)),
-            ("DiskRead", (Action<string>)(v => _working.Colors.DiskRead = v)),
-            ("DiskWrite", (Action<string>)(v => _working.Colors.DiskWrite = v)),
-            ("NetDown", (Action<string>)(v => _working.Colors.NetDown = v)),
-            ("NetUp", (Action<string>)(v => _working.Colors.NetUp = v)),
-            ("Time", (Action<string>)(v => _working.Colors.TimeText = v))
-        };
-
-        foreach (var (name, setter) in colorProperties)
-        {
-            AddColorEditor(name, setter);
-        }
-    }
-
-    private void AddColorEditor(string name, Action<string> setter)
-    {
-        string GetHex() => name switch
-        {
-            "Background" => _working.Colors.Background,
-            "Border" => _working.Colors.Border,
-            "CpuSys" => _working.Colors.CpuSys,
-            "CpuUser" => _working.Colors.CpuUser,
-            "RAM" => _working.Colors.RamPie,
-            "RamBorder" => _working.Colors.RamBorder,
-            "VRAM" => _working.Colors.GpuDedicatedPie,
-            "SRAM" => _working.Colors.GpuSharedPie,
-            "CpuTemp" => _working.Colors.CpuTemp,
-            "GpuTemp" => _working.Colors.GpuTemp,
-            "DiskRead" => _working.Colors.DiskRead,
-            "DiskWrite" => _working.Colors.DiskWrite,
-            "NetDown" => _working.Colors.NetDown,
-            "NetUp" => _working.Colors.NetUp,
-            "Time" => _working.Colors.TimeText,
-            _ => "#000000"
-        };
-
-        var panel = new StackPanel
-        {
-            Width = 200,
-            Margin = new Thickness(4),
-            Orientation = System.Windows.Controls.Orientation.Horizontal
-        };
-
-        panel.Children.Add(new TextBlock
-        {
-            Text = name,
-            Width = 60,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10
-        });
-
-        var rect = new WnShapes.Rectangle
-        {
-            Width = 20,
-            Height = 20,
-            Stroke = System.Windows.Media.Brushes.Black,
-            StrokeThickness = 1,
-            Margin = new Thickness(6, 0, 6, 0),
-            Fill = ColorHelper.ParseBrush(GetHex()),
-            Cursor = System.Windows.Input.Cursors.Hand
-        };
-        rect.MouseLeftButtonUp += (s, e) => OpenColorPicker(rect, setter, GetHex);
-        panel.Children.Add(rect);
-
-        var txt = new TextBlock
-        {
-            Text = GetHex(),
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10,
-            MinWidth = 70
-        };
-        panel.Children.Add(txt);
-
-        ColorsPanel.Children.Add(panel);
-    }
-
-    private void OpenColorPicker(WnShapes.Rectangle rect, Action<string> setter, Func<string> getCurrentHex)
-    {
-        try
-        {
-#if !DESIGN_TIME
-            using var dlg = new WnForms.ColorDialog
-            {
-                Color = ColorHelper.ToDrawingColor(getCurrentHex()),
-                FullOpen = true
-            };
-
-            if (dlg.ShowDialog() == WnForms.DialogResult.OK)
-            {
-                var hex = ColorHelper.ToHexString(dlg.Color);
-                setter(hex);
-                rect.Fill = ColorHelper.FromDrawingColor(dlg.Color);
-
-                // Update the text block
-                if (rect.Parent is StackPanel parent && parent.Children.Count >= 3)
-                {
-                    (parent.Children[2] as TextBlock)?.SetCurrentValue(TextBlock.TextProperty, hex);
-                }
-
-                TriggerLiveUpdate();
-            }
-#else
-            rect.Fill = ColorHelper.ParseBrush(getCurrentHex());
-#endif
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.OpenColorPicker: {ex}");
-        }
+        // Each color swatch is a 20x20 Border. Brush is set in code so the swatch
+        // can update in-place when the user picks a new colour (refreshes only
+        // this single border; the wallpaper / dialog stays put).
+        SetSwatch(SwatchAccent,         _working.Colors.Accent);
+        SetSwatch(SwatchBackground,     _working.Colors.Background);
+        SetSwatch(SwatchBorder,         _working.Colors.Border);
+        SetSwatch(SwatchCpuSys,         _working.Colors.CpuSys);
+        SetSwatch(SwatchCpuUser,        _working.Colors.CpuUser);
+        SetSwatch(SwatchRamPie,         _working.Colors.RamPie);
+        SetSwatch(SwatchRamBorder,      _working.Colors.RamBorder);
+        SetSwatch(SwatchGpuDedicatedPie, _working.Colors.GpuDedicatedPie);
+        SetSwatch(SwatchGpuSharedPie,   _working.Colors.GpuSharedPie);
+        SetSwatch(SwatchCpuTemp,        _working.Colors.CpuTemp);
+        SetSwatch(SwatchGpuTemp,        _working.Colors.GpuTemp);
+        SetSwatch(SwatchDiskRead,       _working.Colors.DiskRead);
+        SetSwatch(SwatchDiskWrite,      _working.Colors.DiskWrite);
+        SetSwatch(SwatchNetDown,        _working.Colors.NetDown);
+        SetSwatch(SwatchNetUp,          _working.Colors.NetUp);
+        SetSwatch(SwatchTimeText,       _working.Colors.TimeText);
+        SetSwatch(SwatchSeparator,      _working.Colors.Separator);
     }
 
     private void PopulateDisks()
@@ -334,22 +256,14 @@ public partial class SettingsWindow : Window
         {
             using var mgr = new Monitors.MonitorManager();
             var disks = mgr.GetDiskInstances();
-
             ComboDisk.ItemsSource = disks;
-            SelectComboItem(ComboDisk, _working.General.DiskInstanceName);
-
-            ComboDisk.SelectionChanged += (s, e) =>
-            {
-                if (ComboDisk.SelectedItem is string sel)
-                {
-                    _working.General.DiskInstanceName = sel;
-                    TriggerLiveUpdate();
-                }
-            };
+            ComboDisk.SelectedItem = _working.General.DiskInstanceName;
+            if (ComboDisk.SelectedIndex == -1 && ComboDisk.Items.Count > 0)
+                ComboDisk.SelectedIndex = 0;
         }
         catch (Exception ex)
         {
-            WinMeters.Log.D($"PopulateDisks: {ex}");
+            WinMeters.Log.D($"SettingsWindow.PopulateDisks: {ex}");
         }
     }
 
@@ -364,197 +278,209 @@ public partial class SettingsWindow : Window
                     continue;
                 interfaces.Add(nic.Name);
             }
-
             ComboNetwork.ItemsSource = interfaces;
-
-            var selectedNet = string.IsNullOrWhiteSpace(_working.General.NetworkInterfaceName)
+            var selected = string.IsNullOrWhiteSpace(_working.General.NetworkInterfaceName)
                 ? "(All Interfaces)"
                 : _working.General.NetworkInterfaceName;
-            SelectComboItem(ComboNetwork, selectedNet);
-
-            ComboNetwork.SelectionChanged += (s, e) =>
-            {
-                if (ComboNetwork.SelectedItem is string sel)
-                {
-                    _working.General.NetworkInterfaceName =
-                        (sel == "(All Interfaces)") ? null : sel;
-                    TriggerLiveUpdate();
-                }
-            };
+            ComboNetwork.SelectedItem = selected;
+            if (ComboNetwork.SelectedIndex == -1 && ComboNetwork.Items.Count > 0)
+                ComboNetwork.SelectedIndex = 0;
         }
         catch (Exception ex)
         {
-            WinMeters.Log.D($"PopulateNetworkInterfaces: {ex}");
+            WinMeters.Log.D($"SettingsWindow.PopulateNetworkInterfaces: {ex}");
         }
-    }
-
-    private void SelectComboItem(WnControls.ComboBox combo, string? value)
-    {
-        combo.SelectedItem = value;
-        if (combo.SelectedIndex == -1 && combo.Items.Count > 0)
-            combo.SelectedIndex = 0;
     }
 
     private void PopulateMeterOrder()
     {
-        var displayItems = new ObservableCollection<MeterOrderItem>();
+        var items = new ObservableCollection<MeterOrderItem>();
         bool hwAdded = false;
-
         foreach (var key in _working.General.MeterOrder)
         {
             if (key is "CpuTemp" or "GpuTemp")
             {
                 if (!hwAdded)
                 {
-                    displayItems.Add(new MeterOrderItem { Key = "H/W Temps", Name = FriendlyNames["H/W Temps"] });
+                    items.Add(new MeterOrderItem { Key = "CpuTemp", Name = "CPU Temp" });
+                    items.Add(new MeterOrderItem { Key = "GpuTemp", Name = "GPU Temp" });
                     hwAdded = true;
                 }
             }
             else
             {
-                displayItems.Add(new MeterOrderItem
+                items.Add(new MeterOrderItem
                 {
                     Key = key,
-                    Name = FriendlyNames.GetValueOrDefault(key, key)
+                    Name = MeterDisplayNames.GetValueOrDefault(key, key)
                 });
             }
         }
-
-        ListMeterOrder.ItemsSource = displayItems;
+        ListMeterOrder.ItemsSource = items;
     }
 
-    private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
-    {
-        int index = ListMeterOrder.SelectedIndex;
-        if (index > 0 && ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
-        {
-            list.Move(index, index - 1);
-            TriggerLiveUpdate();
-        }
-    }
-
-    private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
-    {
-        int index = ListMeterOrder.SelectedIndex;
-        if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list
-            && index >= 0 && index < list.Count - 1)
-        {
-            list.Move(index, index + 1);
-            TriggerLiveUpdate();
-        }
-    }
-
-    private void BtnOk_Click(object sender, RoutedEventArgs e)
-    {
-        if (!ValidateAll())
-        {
-            System.Windows.MessageBox.Show(
-                this,
-                $"One or more refresh rates are invalid. Fix the highlighted values (minimum {Constants.Timing.MinValidationRateMs} ms) before saving.",
-                "Validation Error",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Warning);
-            return;
-        }
-
-        ApplyValuesToWorking();
-        CopyWorkingToOriginal();
-        _original.Save();
-
-        DialogResult = true;
-        Close();
-    }
-
-    private void BtnCancel_Click(object sender, RoutedEventArgs e)
+    private void PopulateAbout()
     {
         try
         {
-            // Restore the original settings from the snapshot via a JSON roundtrip so any
-            // future code path that ends up aliasing _working and _snapshotBeforeEdit sub-objects
-            // (e.g. via a live-preview setter that mutates an inner list in place) cannot silently
-            // keep preview state. The roundtrip guarantees `restored` has fresh, independent
-            // sub-references that the assignment below cannot be tripped up by.
-            var restored = JsonSerializer.Deserialize<AppSettings>(
-                JsonSerializer.Serialize(_snapshotBeforeEdit)) ?? new AppSettings();
-
-            _original.General    = restored.General;
-            _original.Window     = restored.Window;
-            _original.Colors     = restored.Colors;
-            _original.Visibility = restored.Visibility;
-            _original.Rates      = restored.Rates;
-
-            if (Owner is MainWindow mw)
-                mw.ApplySettingsLive(_original);
+            string assemblyPath = Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName;
+            if (!string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath))
+            {
+                var info = FileVersionInfo.GetVersionInfo(assemblyPath);
+                AboutVersion.Text = $"v{info.FileVersion}";
+            }
         }
         catch (Exception ex)
         {
-            WinMeters.Log.D($"SettingsWindow.CancelRevert: {ex}");
-        }
-
-        DialogResult = false;
-        Close();
-    }
-
-    private void ApplyChangesLive()
-    {
-        if (!ValidateAll()) return;
-
-        ApplyValuesToWorking();
-        CopyWorkingToOriginal();
-
-        if (Owner is MainWindow mw)
-        {
-            // ApplySettingsLive internally calls ApplyWindowMode, so we don't need
-            // a separate explicit call here — that would issue a duplicate
-            // ABM_REMOVE / ABM_NEW round-trip on every dropdown tick in AppBar mode.
-            mw.ApplySettingsLive(_original);
+            WinMeters.Log.D($"SettingsWindow.PopulateAbout: {ex}");
         }
     }
 
-    private void ApplyValuesToWorking()
+    private static void SetSwatch(Border swatch, string hex)
     {
-        _working.General.Opacity = SliderOpacity.Value;
-        _working.General.Scale = SliderScale.Value;
+        swatch.Background = ColorHelper.ParseBrush(hex);
+    }
 
-        _working.Rates.Cpu = ParseNullableInt(TxtRateCpu.Text);
-        _working.Rates.Ram = ParseNullableInt(TxtRateRam.Text);
-        _working.Rates.Disk = ParseNullableInt(TxtRateDisk.Text);
-        _working.Rates.Net = ParseNullableInt(TxtRateNet.Text);
-        _working.Rates.CpuTemp = ParseNullableInt(TxtRateCpuTemp.Text);
-        _working.Rates.GpuTemp = ParseNullableInt(TxtRateGpuTemp.Text);
-        _working.Rates.GpuDedicated = ParseNullableInt(TxtRateGpuDedicated.Text);
-        _working.Rates.GpuShared = ParseNullableInt(TxtRateGpuShared.Text);
+    // ---------------------------------------------------------------------
+    // Generic toggle / slider / combobox / textbox handlers
+    // ---------------------------------------------------------------------
 
-        _working.Visibility.ShowCpu = ChkCpu.IsChecked == true;
-        _working.Visibility.ShowRam = ChkRam.IsChecked == true;
-        _working.Visibility.ShowDisk = ChkDisk.IsChecked == true;
-        _working.Visibility.ShowNet = ChkNet.IsChecked == true;
-        _working.Visibility.ShowCpuTemp = ChkCpuTemp.IsChecked == true;
-        _working.Visibility.ShowGpuTemp = ChkGpuTemp.IsChecked == true;
-        _working.Visibility.ShowHardwareLoad = ChkHardwareLoad.IsChecked == true;
-        _working.Visibility.ShowGpuDedicated = ChkGpuDedicated.IsChecked == true;
-        _working.Visibility.ShowGpuShared = ChkGpuShared.IsChecked == true;
-        _working.General.CombineLogicalCores = ChkCombineCpu.IsChecked == true;
-        _working.Visibility.ShowTime = ChkTime.IsChecked == true;
-        _working.General.Time24H = ChkTime24H.IsChecked == true;
+    private void GenericToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not WnControls.CheckBox cb || cb.Tag is not string tag) return;
+        bool value = cb.IsChecked == true;
 
-        if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
+        switch (tag)
         {
-            var newOrder = new List<string>();
-            foreach (var item in list)
-            {
-                if (item.Key == "H/W Temps")
-                {
-                    newOrder.Add("CpuTemp");
-                    newOrder.Add("GpuTemp");
-                }
-                else
-                {
-                    newOrder.Add(item.Key);
-                }
-            }
-            _working.General.MeterOrder = newOrder;
+            case "LockPosition":         _working.Window.LockPosition = value; break;
+            case "SnapToTaskbar":        _working.Window.StickToTaskbar = value; break;
+            case "HideInFullscreen":     _working.General.HideInFullscreen = value; break;
+            case "KeepOnTop":            _working.General.KeepOnTop = value; break;
+            case "Time24H":              _working.General.Time24H = value; break;
+            case "CombineLogicalCores":  _working.General.CombineLogicalCores = value; break;
+            case "ShowCpu":              _working.Visibility.ShowCpu = value; break;
+            case "ShowRam":              _working.Visibility.ShowRam = value; break;
+            case "ShowDisk":             _working.Visibility.ShowDisk = value; break;
+            case "ShowNet":              _working.Visibility.ShowNet = value; break;
+            case "ShowGpuDedicated":     _working.Visibility.ShowGpuDedicated = value; break;
+            case "ShowGpuShared":        _working.Visibility.ShowGpuShared = value; break;
+            case "ShowCpuTemp":          _working.Visibility.ShowCpuTemp = value; break;
+            case "ShowGpuTemp":          _working.Visibility.ShowGpuTemp = value; break;
+            case "ShowHardwareLoad":     _working.Visibility.ShowHardwareLoad = value; break;
+            case "ShowTime":             _working.Visibility.ShowTime = value; break;
         }
+        TriggerLiveUpdate();
+    }
+
+    private void ComboRefreshRate_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ComboRefreshRate.SelectedItem is WnControls.ComboBoxItem item &&
+            item.Tag is string tag &&
+            int.TryParse(tag, out int ms))
+        {
+            _working.General.RefreshRateMs = ms;
+            TriggerLiveUpdate();
+        }
+    }
+
+    private void ComboDisk_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ComboDisk.SelectedItem is string sel)
+        {
+            _working.General.DiskInstanceName = sel;
+            TriggerLiveUpdate();
+        }
+    }
+
+    private void ComboNetwork_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ComboNetwork.SelectedItem is string sel)
+        {
+            _working.General.NetworkInterfaceName = (sel == "(All Interfaces)") ? null : sel;
+            TriggerLiveUpdate();
+        }
+    }
+
+    private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        _working.General.Scale = e.NewValue;
+        TriggerLiveUpdate();
+    }
+
+    private void SliderOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        _working.General.Opacity = e.NewValue;
+        TriggerLiveUpdate();
+    }
+
+    private void RateTextBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (sender is not WnControls.TextBox tb || tb.Tag is not string tag) return;
+        if (!ValidateRate(tb, GetErrorBlock(tag))) return;
+
+        int? parsed = ParseNullableInt(tb.Text);
+        switch (tag)
+        {
+            case "Cpu":          _working.Rates.Cpu = parsed; break;
+            case "Ram":          _working.Rates.Ram = parsed; break;
+            case "Disk":         _working.Rates.Disk = parsed; break;
+            case "Net":          _working.Rates.Net = parsed; break;
+            case "CpuTemp":      _working.Rates.CpuTemp = parsed; break;
+            case "GpuTemp":      _working.Rates.GpuTemp = parsed; break;
+            case "GpuDedicated": _working.Rates.GpuDedicated = parsed; break;
+            case "GpuShared":    _working.Rates.GpuShared = parsed; break;
+        }
+        TriggerLiveUpdate();
+    }
+
+    private TextBlock? GetErrorBlock(string tag) => tag switch
+    {
+        "Cpu"          => ErrRateCpu,
+        "Ram"          => ErrRateRam,
+        "Disk"         => ErrRateDisk,
+        "Net"          => ErrRateNet,
+        "CpuTemp"      => ErrRateCpuTemp,
+        "GpuTemp"      => ErrRateGpuTemp,
+        "GpuDedicated" => ErrRateGpuDedicated,
+        "GpuShared"    => ErrRateGpuShared,
+        _              => null
+    };
+
+    private bool ValidateRate(WnControls.TextBox tb, TextBlock? err)
+    {
+        string s = tb.Text?.Trim() ?? string.Empty;
+        if (string.IsNullOrEmpty(s))
+        {
+            ClearError(tb, err);
+            return true;
+        }
+        if (!int.TryParse(s, out int v))
+        {
+            ShowError(tb, err, "Invalid number");
+            return false;
+        }
+        if (v < Constants.Timing.MinValidationRateMs)
+        {
+            ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms");
+            return false;
+        }
+        ClearError(tb, err);
+        return true;
+    }
+
+    private void ShowError(WnControls.TextBox tb, TextBlock? err, string msg)
+    {
+        if (err is not null) { err.Text = msg; err.Visibility = Visibility.Visible; }
+        tb.BorderBrush = (System.Windows.Media.Brush?)FindResource("ThemeDangerBrush");
+        tb.ToolTip = msg;
+    }
+
+    private void ClearError(WnControls.TextBox tb, TextBlock? err)
+    {
+        if (err is not null) { err.Text = string.Empty; err.Visibility = Visibility.Collapsed; }
+        tb.ClearValue(BorderBrushProperty);
+        tb.ToolTip = null;
     }
 
     private static int? ParseNullableInt(string? s)
@@ -563,71 +489,280 @@ public partial class SettingsWindow : Window
         return int.TryParse(s, out var v) ? v : null;
     }
 
-    private bool ValidateRate(WnControls.TextBox tb, TextBlock? err)
+    // ---------------------------------------------------------------------
+    // ListBox reorder + colour picker + hyperlink
+    // ---------------------------------------------------------------------
+
+    private void ListMeterOrder_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var s = tb.Text?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrEmpty(s))
-        {
-            ClearError(tb, err);
-            return true;
-        }
-
-        if (!int.TryParse(s, out var v))
-        {
-            ShowError(tb, err, "Invalid number");
-            return false;
-        }
-
-        if (v < Constants.Timing.MinValidationRateMs)
-        {
-            ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms");
-            return false;
-        }
-
-        ClearError(tb, err);
-        return true;
+        BtnMoveUp.IsEnabled   = ListMeterOrder.SelectedIndex > 0;
+        BtnMoveDown.IsEnabled = ListMeterOrder.SelectedIndex >= 0
+                             && ListMeterOrder.SelectedIndex < ListMeterOrder.Items.Count - 1;
     }
 
-    private bool ValidateAll()
+    private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
     {
-        return
-            ValidateRate(TxtRateCpu, ErrRateCpu) &&
-            ValidateRate(TxtRateRam, ErrRateRam) &&
-            ValidateRate(TxtRateDisk, ErrRateDisk) &&
-            ValidateRate(TxtRateNet, ErrRateNet) &&
-            ValidateRate(TxtRateCpuTemp, ErrRateCpuTemp) &&
-            ValidateRate(TxtRateGpuTemp, ErrRateGpuTemp) &&
-            ValidateRate(TxtRateGpuDedicated, ErrRateGpuDedicated) &&
-            ValidateRate(TxtRateGpuShared, ErrRateGpuShared);
+        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
+        int idx = ListMeterOrder.SelectedIndex;
+        if (idx > 0)
+        {
+            list.Move(idx, idx - 1);
+            ListMeterOrder.SelectedIndex = idx - 1;
+            TriggerLiveUpdate();
+        }
     }
 
-    private void ShowError(WnControls.TextBox tb, TextBlock? err, string message)
+    private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
     {
-        if (err is not null) err.Text = message;
-        if (err is not null) err.Visibility = Visibility.Visible;
-        tb.BorderBrush = System.Windows.Media.Brushes.Red;
-        tb.ToolTip = message;
+        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
+        int idx = ListMeterOrder.SelectedIndex;
+        if (idx >= 0 && idx < list.Count - 1)
+        {
+            list.Move(idx, idx + 1);
+            ListMeterOrder.SelectedIndex = idx + 1;
+            TriggerLiveUpdate();
+        }
     }
 
-    private void ClearError(WnControls.TextBox tb, TextBlock? err)
+    private void ColorButton_Click(object sender, RoutedEventArgs e)
     {
-        if (err is not null) err.Text = string.Empty;
-        if (err is not null) err.Visibility = Visibility.Collapsed;
-        tb.ClearValue(BorderBrushProperty);
-        tb.ToolTip = null;
+        if (sender is not WnControls.Button btn || btn.Tag is not string tag) return;
+
+        string currentHex = ResolveColorByTag(tag);
+        Border? swatch = ResolveSwatchByTag(tag);
+        if (swatch is null && tag != "Accent" && tag != "Background" && tag != "Border")
+        {
+            // Unknown tag, ignore.
+            return;
+        }
+
+#if !DESIGN_TIME
+        try
+        {
+            using var dlg = new WnForms.ColorDialog
+            {
+                FullOpen = true,
+                Color = ColorHelper.ToDrawingColor(currentHex)
+            };
+            if (dlg.ShowDialog() != WnForms.DialogResult.OK) return;
+
+            // Preserve the alpha byte from the existing hex if it had one (8-digit
+            // ARGB), else default to opaque. The Background field normally carries
+            // translucency so we keep the alpha explicit for background-only.
+            string alpha = "FF";
+            if (currentHex.Length == 9) alpha = currentHex.Substring(1, 2);
+            else if (tag == "Background") alpha = "B4";
+
+            string hex = $"#{alpha}{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
+
+            ApplyColorByTag(tag, hex);
+            if (swatch is not null) SetSwatch(swatch, hex);
+            TriggerLiveUpdate();
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow.ColorButton_Click: {ex}");
+        }
+#endif
+    }
+
+    private string ResolveColorByTag(string tag) => tag switch
+    {
+        "Accent"          => _working.Colors.Accent,
+        "Background"      => _working.Colors.Background,
+        "Border"          => _working.Colors.Border,
+        "CpuSys"          => _working.Colors.CpuSys,
+        "CpuUser"         => _working.Colors.CpuUser,
+        "RamPie"          => _working.Colors.RamPie,
+        "RamBorder"       => _working.Colors.RamBorder,
+        "GpuDedicatedPie" => _working.Colors.GpuDedicatedPie,
+        "GpuSharedPie"    => _working.Colors.GpuSharedPie,
+        "CpuTemp"         => _working.Colors.CpuTemp,
+        "GpuTemp"         => _working.Colors.GpuTemp,
+        "DiskRead"        => _working.Colors.DiskRead,
+        "DiskWrite"       => _working.Colors.DiskWrite,
+        "NetDown"         => _working.Colors.NetDown,
+        "NetUp"           => _working.Colors.NetUp,
+        "TimeText"        => _working.Colors.TimeText,
+        "Separator"       => _working.Colors.Separator,
+        _                 => "#FFFFFF"
+    };
+
+    private Border? ResolveSwatchByTag(string tag) => tag switch
+    {
+        "Accent"          => SwatchAccent,
+        "Background"      => SwatchBackground,
+        "Border"          => SwatchBorder,
+        "CpuSys"          => SwatchCpuSys,
+        "CpuUser"         => SwatchCpuUser,
+        "RamPie"          => SwatchRamPie,
+        "RamBorder"       => SwatchRamBorder,
+        "GpuDedicatedPie" => SwatchGpuDedicatedPie,
+        "GpuSharedPie"    => SwatchGpuSharedPie,
+        "CpuTemp"         => SwatchCpuTemp,
+        "GpuTemp"         => SwatchGpuTemp,
+        "DiskRead"        => SwatchDiskRead,
+        "DiskWrite"       => SwatchDiskWrite,
+        "NetDown"         => SwatchNetDown,
+        "NetUp"           => SwatchNetUp,
+        "TimeText"        => SwatchTimeText,
+        "Separator"       => SwatchSeparator,
+        _                 => null
+    };
+
+    private void ApplyColorByTag(string tag, string hex)
+    {
+        switch (tag)
+        {
+            case "Accent":          _working.Colors.Accent = hex; break;
+            case "Background":      _working.Colors.Background = hex; break;
+            case "Border":          _working.Colors.Border = hex; break;
+            case "CpuSys":          _working.Colors.CpuSys = hex; break;
+            case "CpuUser":         _working.Colors.CpuUser = hex; break;
+            case "RamPie":          _working.Colors.RamPie = hex; break;
+            case "RamBorder":       _working.Colors.RamBorder = hex; break;
+            case "GpuDedicatedPie": _working.Colors.GpuDedicatedPie = hex; break;
+            case "GpuSharedPie":    _working.Colors.GpuSharedPie = hex; break;
+            case "CpuTemp":         _working.Colors.CpuTemp = hex; break;
+            case "GpuTemp":         _working.Colors.GpuTemp = hex; break;
+            case "DiskRead":        _working.Colors.DiskRead = hex; break;
+            case "DiskWrite":       _working.Colors.DiskWrite = hex; break;
+            case "NetDown":         _working.Colors.NetDown = hex; break;
+            case "NetUp":           _working.Colors.NetUp = hex; break;
+            case "TimeText":        _working.Colors.TimeText = hex; break;
+            case "Separator":       _working.Colors.Separator = hex; break;
+        }
+    }
+
+    private void HyperlinkButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is WnControls.Button btn && btn.Tag is string url)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.D($"HyperlinkButton_Click: {ex}");
+            }
+        }
+    }
+
+    // ---------------------------------------------------------------------
+    // Footer handlers: Save, Reset, Quit
+    // ---------------------------------------------------------------------
+
+    private void BtnSave_Click(object sender, RoutedEventArgs e)
+    {
+        // Surface validation errors before committing.
+        if (GetErrorBlock("Cpu")?.Visibility == Visibility.Visible
+         || GetErrorBlock("Ram")?.Visibility == Visibility.Visible
+         || GetErrorBlock("Disk")?.Visibility == Visibility.Visible
+         || GetErrorBlock("Net")?.Visibility == Visibility.Visible
+         || GetErrorBlock("CpuTemp")?.Visibility == Visibility.Visible
+         || GetErrorBlock("GpuTemp")?.Visibility == Visibility.Visible
+         || GetErrorBlock("GpuDedicated")?.Visibility == Visibility.Visible
+         || GetErrorBlock("GpuShared")?.Visibility == Visibility.Visible)
+        {System.Windows.MessageBox.Show(this,
+                $"One or more refresh rates are invalid. Minimum is {Constants.Timing.MinValidationRateMs} ms; fix the highlighted values before saving.",
+                "Validation Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            return;
+        }
+
+        ApplyMeterOrderToWorking();
+        CopyWorkingToOriginal();
+        _original.Save();
+        DialogResult = true;
+        Close();
+    }
+
+    private void BtnResetAll_Click(object sender, RoutedEventArgs e)
+    {
+        var result = System.Windows.MessageBox.Show(
+            this,
+            "Reset all settings to factory defaults?\n\nThis will revert general, monitoring, appearance, color, and rate preferences. The action cannot be undone.",
+            "Reset All Settings",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        var defaults = new AppSettings();
+        // Fold every category from defaults into _working.
+        _working.General    = defaults.General;
+        _working.Window     = defaults.Window;
+        _working.Colors     = defaults.Colors;
+        _working.Visibility = defaults.Visibility;
+        _working.Rates      = defaults.Rates;
+
+        PopulateUi();
+        TriggerLiveUpdate();
+    }
+
+    private void BtnQuit_Click(object sender, RoutedEventArgs e)
+    {
+        BtnSave_Click(sender, e); // persist first
+        System.Windows.Application.Current.Shutdown();
+    }
+
+    private void SettingsWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        // If the user clicked the X (no Save), revert any live-preview state so a
+        // follow-up OK doesn't see mutated values. DialogResult is set to false
+        // here so the consumer can distinguish "saved" vs "cancelled".
+        if (DialogResult == true) return;
+
+        // Cancel / close without saving -> restore from snapshot.
+        try
+        {
+            var restored = JsonSerializer.Deserialize<AppSettings>(
+                JsonSerializer.Serialize(_snapshotBeforeEdit)) ?? new AppSettings();
+            _original.General    = restored.General;
+            _original.Window     = restored.Window;
+            _original.Colors     = restored.Colors;
+            _original.Visibility = restored.Visibility;
+            _original.Rates      = restored.Rates;
+            if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow cancel-revert: {ex}");
+        }
+    }
+
+    private void ApplyMeterOrderToWorking()
+    {
+        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
+        var newOrder = new List<string>();
+        foreach (var item in list) newOrder.Add(item.Key);
+        _working.General.MeterOrder = newOrder;
     }
 
     private void CopyWorkingToOriginal()
     {
-        _original.General = _working.General;
-        _original.Window = _working.Window;
-        _original.Colors = _working.Colors;
+        _original.General    = _working.General;
+        _original.Window     = _working.Window;
+        _original.Colors     = _working.Colors;
         _original.Visibility = _working.Visibility;
-        _original.Rates = _working.Rates;
+        _original.Rates      = _working.Rates;
     }
 
-    // Helper class for meter order display
+    private void TriggerLiveUpdate()
+    {
+        _liveUpdateTimer.Stop();
+        _liveUpdateTimer.Start();
+    }
+
+    private void ApplyChangesLive()
+    {
+        if (!IsLoaded) return;
+        // Push the working clone into the live state and let MainWindow apply.
+        CopyWorkingToOriginal();
+        if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
+    }
+
     private class MeterOrderItem
     {
         public string Key { get; set; } = string.Empty;
