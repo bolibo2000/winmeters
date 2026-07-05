@@ -12,7 +12,7 @@ public class AppSettings
     public VisibilitySettings Visibility { get; set; } = new();
     public RateSettings Rates { get; set; } = new();
     public MaxValueSettings MaxValues { get; set; } = new();
-    // Kil0bit-style per-meter section color. One swatch per meter (driven
+    // WinMeters-style per-meter section color. One swatch per meter (driven
     // by the new MetricCard on the Monitoring page) replaces the legacy
     // 14 swatches that lived on the Appearance page. Defaults were chosen
     // for maximum hue separation on a dark ThemeBgBrush background.
@@ -237,15 +237,15 @@ public class AppSettings
         public double Opacity { get; set; } = 1.0;
         public double Scale { get; set; } = 1.0;
         /// <summary>
-        /// Kil0bit-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
-        /// Kil0bit-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
+        /// WinMeters-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
+        /// WinMeters-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
         /// WPF Window and gates the float-mode EnforceZOrder timer. Mirrors kil0bit's
         /// <c>_config.Config.AlwaysOnTop</c>; default true to preserve WinMeters's
         /// pre-toggle behaviour (TOPMOST + periodic re-assertion).
         /// </summary>
         public bool KeepOnTop { get; set; } = true;
         /// <summary>
-        /// Kil0bit-style “Hide in Fullscreen” toggle. When true and a fullscreen app
+        /// WinMeters-style “Hide in Fullscreen” toggle. When true and a fullscreen app
         /// is the foreground, the bar is collapsed. Mirror kil0bit's
         /// <c>_config.Config.HideOnFullscreen</c>. Dock-mode fullscreen detection
         /// rides on the existing AppBarService ABN_FULLSCREENAPP handler; floating

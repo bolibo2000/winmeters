@@ -36,28 +36,28 @@
     <SolidColorBrush x:Key="ThemeToggleThumb"     Color="White"/>
 
     <!--
-        Kil0bit primary body text style: Segoe UI, semibold body weight. Used for
+        WinMeters primary body text style: Segoe UI, semibold body weight. Used for
         section titles and toggle row labels. Falls back to Segoe UI when the
         user installed fonts do not carry the Display variant.
     -->
-    <Style x:Key="Kil0bitTextHeading" TargetType="TextBlock">
+    <Style x:Key="WinMetersTextHeading" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
     </Style>
 
-    <Style x:Key="Kil0bitTextBody" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+    <Style x:Key="WinMetersTextBody" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Opacity" Value="0.85"/>
     </Style>
 
-    <Style x:Key="Kil0bitTextSub" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+    <Style x:Key="WinMetersTextSub" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
         <Setter Property="FontSize" Value="12.5"/>
     </Style>
 
-    <Style x:Key="Kil0bitTextHint" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+    <Style x:Key="WinMetersTextHint" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeMutedTextBrush}"/>
         <Setter Property="FontSize" Value="11"/>
@@ -69,7 +69,7 @@
         across Appearance, Monitoring, and the Home cards. Margin is left to the
         consumer so the same card can be tiled in different layouts.
     -->
-    <Style x:Key="Kil0bitCard" TargetType="Border">
+    <Style x:Key="WinMetersCard" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
@@ -77,7 +77,7 @@
         <Setter Property="Padding" Value="20,16"/>
     </Style>
 
-    <Style x:Key="Kil0bitCardCompact" TargetType="Border" BasedOn="{StaticResource Kil0bitCard}">
+    <Style x:Key="WinMetersCardCompact" TargetType="Border" BasedOn="{StaticResource WinMetersCard}">
         <Setter Property="Padding" Value="16"/>
         <Setter Property="CornerRadius" Value="8"/>
     </Style>
@@ -86,7 +86,7 @@
         Section header: kil0bit General / Monitoring / About titles
         (FontSize 28 Semibold, Margin 0 0 0 24). Reused in each Settings page.
     -->
-    <Style x:Key="Kil0bitSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+    <Style x:Key="WinMetersSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontSize" Value="28"/>
         <Setter Property="Margin" Value="0,0,0,24"/>
     </Style>
@@ -96,7 +96,7 @@
         Monitoring card, for example). Smaller, butting tight against the
         first toggle.
     -->
-    <Style x:Key="Kil0bitSubHeader" TargetType="TextBlock" BasedOn="{StaticResource Kil0bitTextHeading}">
+    <Style x:Key="WinMetersSubHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Margin" Value="0,0,0,12"/>
     </Style>
@@ -107,7 +107,7 @@
         accent colour when IsChecked is true. Matches the kil0bit NavigationView
         selected item visual.
     -->
-    <Style x:Key="Kil0bitNavItem" TargetType="RadioButton">
+    <Style x:Key="WinMetersNavItem" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
@@ -144,13 +144,13 @@
     </Style>
 
     <!--
-        Kil0bit toggle switch look alike. Plain CheckBox with a 40x20 rounded
+        WinMeters toggle switch look alike. Plain CheckBox with a 40x20 rounded
         Border (the track) plus a 12x12 Thumb Border inside it. The Thumb is
         reachable through Setter TargetName because descendant names in the
         template root namescope are findable. No animation; Margin setter on
         IsChecked snaps the thumb to the right edge.
     -->
-    <Style x:Key="Kil0bitToggleSwitch" TargetType="CheckBox">
+    <Style x:Key="WinMetersToggleSwitch" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -191,11 +191,11 @@
     </Style>
 
     <!--
-        Kil0bit primary action button. Flat surface, white foreground, subtle
+        WinMeters primary action button. Flat surface, white foreground, subtle
         accent border on hover. Used for the Save & Close button in the
         settings footer.
     -->
-    <Style x:Key="Kil0bitPrimaryButton" TargetType="Button">
+    <Style x:Key="WinMetersPrimaryButton" TargetType="Button">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -233,12 +233,12 @@
     <!--
         Secondary button: muted, used for Quit / Reset / Cancel actions.
     -->
-    <Style x:Key="Kil0bitSecondaryButton" TargetType="Button" BasedOn="{StaticResource Kil0bitPrimaryButton}">
+    <Style x:Key="WinMetersSecondaryButton" TargetType="Button" BasedOn="{StaticResource WinMetersPrimaryButton}">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
     </Style>
 
-    <Style x:Key="Kil0bitDangerButton" TargetType="Button" BasedOn="{StaticResource Kil0bitPrimaryButton}">
+    <Style x:Key="WinMetersDangerButton" TargetType="Button" BasedOn="{StaticResource WinMetersPrimaryButton}">
         <Setter Property="Background" Value="{DynamicResource ThemeDangerBrush}"/>
         <Setter Property="Foreground" Value="White"/>
     </Style>
@@ -257,7 +257,7 @@
         the system default chrome; we accept that and rely on the card
         surface for the inline feel.
     -->
-    <Style x:Key="Kil0bitComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
+    <Style x:Key="WinMetersComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -275,7 +275,7 @@
         without BasedOn would strip those and NRE the first time a
         styled TextBox is instantiated.
     -->
-    <Style x:Key="Kil0bitTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+    <Style x:Key="WinMetersTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -294,7 +294,7 @@
         walk; without BasedOn those are null and PointerPressed on the
         track throws NullReferenceException.
     -->
-    <Style x:Key="Kil0bitSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+    <Style x:Key="WinMetersSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -304,7 +304,7 @@
 
     <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
          inline color picker swatch inside each Appearance card row. -->
-    <Style x:Key="Kil0bitColorSwatch" TargetType="Border">
+    <Style x:Key="WinMetersColorSwatch" TargetType="Border">
         <Setter Property="Width" Value="20"/>
         <Setter Property="Height" Value="20"/>
         <Setter Property="CornerRadius" Value="3"/>
@@ -315,12 +315,12 @@
     </Style>
 
     <!--
-        Kil0bit horizontal rule: 1px semi transparent white divider used at the
+        WinMeters horizontal rule: 1px semi transparent white divider used at the
         Settings dialog About / Project Links section boundaries. Lives in the
         theme so any future window that wants the same divider inherits it
         without re declaring.
     -->
-    <Style x:Key="Kil0bitHorizontalRule" TargetType="Border">
+    <Style x:Key="WinMetersHorizontalRule" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
         <Setter Property="Height" Value="1"/>
         <Setter Property="Margin" Value="0,8,0,16"/>
@@ -331,7 +331,7 @@
         border tinted surface. Used on the Home page to advertise the active
         monitor.
     -->
-    <Style x:Key="Kil0bitInfoBar" TargetType="Border">
+    <Style x:Key="WinMetersInfoBar" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="BorderThickness" Value="4,0,0,0"/>

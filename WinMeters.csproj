@@ -42,7 +42,7 @@
   </ItemGroup>
 
   <!--
-    <Page Update> for the hand-built kil0bit theme, NOT <Page Include>.
+    <Page Update> for the hand-built WinMeters theme, NOT <Page Include>.
     The SDK's <UseWPF>true</UseWPF> auto-default globs cover `**\*.xaml`
     so the file is already included as a Page item. <Page Include> would
     collide with the auto-included one and trigger NETSDK1022. <Page
@@ -53,7 +53,7 @@
     permutations.
   -->
   <ItemGroup>
-    <Page Update="Themes\Kil0bitTheme.xaml">
+    <Page Update="Themes\WinMetersTheme.xaml">
       <Generator>MSBuild:Compile</Generator>
       <XamlRuntime>Wpf</XamlRuntime>
       <SubType>Designer</SubType>

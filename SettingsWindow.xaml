@@ -28,19 +28,19 @@
                            Foreground="{DynamicResource ThemeAccentBrush}"/>
                 <RadioButton x:Name="NavHome"       Content="Home"        Tag="Home"
                              GroupName="NavRail" IsChecked="True"
-                             Click="NavRail_Click" Style="{StaticResource Kil0bitNavItem}"/>
+                             Click="NavRail_Click" Style="{StaticResource WinMetersNavItem}"/>
                 <RadioButton x:Name="NavGeneral"    Content="General"     Tag="General"
                              GroupName="NavRail" Click="NavRail_Click"
-                             Style="{StaticResource Kil0bitNavItem}"/>
+                             Style="{StaticResource WinMetersNavItem}"/>
                 <RadioButton x:Name="NavMonitoring" Content="Monitoring"  Tag="Monitoring"
                              GroupName="NavRail" Click="NavRail_Click"
-                             Style="{StaticResource Kil0bitNavItem}"/>
+                             Style="{StaticResource WinMetersNavItem}"/>
                 <RadioButton x:Name="NavAppearance" Content="Appearance"  Tag="Appearance"
                              GroupName="NavRail" Click="NavRail_Click"
-                             Style="{StaticResource Kil0bitNavItem}"/>
+                             Style="{StaticResource WinMetersNavItem}"/>
                 <RadioButton x:Name="NavAbout"      Content="About"       Tag="About"
                              GroupName="NavRail" Click="NavRail_Click"
-                             Style="{StaticResource Kil0bitNavItem}"/>
+                             Style="{StaticResource WinMetersNavItem}"/>
             </StackPanel>
         </Border>
 
@@ -52,15 +52,15 @@
 
                 <!-- HOME -->
                 <StackPanel x:Name="SectionHome">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Welcome"/>
-                    <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Welcome"/>
+                    <TextBlock Style="{StaticResource WinMetersTextSub}"
                                Text="WinMeters is active and tracking your hardware performance with near-zero overhead."
                                TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,20"/>
 
                     <UniformGrid Columns="2" HorizontalAlignment="Left" Margin="0,0,0,12">
                         <Button Click="HomeCard_Click" Tag="General" Width="320" Height="100" Margin="0,0,12,12"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource Kil0bitCard}">
+                            <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -70,8 +70,8 @@
                                                Foreground="{DynamicResource ThemeAccentBrush}"
                                                VerticalAlignment="Top" Margin="0,0,16,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="General" FontSize="15" Margin="0,0,0,2"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                        <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="General" FontSize="15" Margin="0,0,0,2"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}"
                                                    Text="Lock position, hide in fullscreen, snap to taskbar, refresh rate."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -80,7 +80,7 @@
                         </Button>
                         <Button Click="HomeCard_Click" Tag="Monitoring" Width="320" Height="100" Margin="0,0,0,12"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource Kil0bitCard}">
+                            <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -90,8 +90,8 @@
                                                Foreground="{DynamicResource ThemeAccentBrush}"
                                                VerticalAlignment="Top" Margin="0,0,16,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Monitoring" FontSize="15" Margin="0,0,0,2"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                        <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Monitoring" FontSize="15" Margin="0,0,0,2"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}"
                                                    Text="Per-meter show / max-value / refresh-rate / colour cards."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -100,7 +100,7 @@
                         </Button>
                         <Button Click="HomeCard_Click" Tag="Appearance" Width="320" Height="100" Margin="0,0,12,0"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource Kil0bitCard}">
+                            <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -110,8 +110,8 @@
                                                Foreground="{DynamicResource ThemeAccentBrush}"
                                                VerticalAlignment="Top" Margin="0,0,16,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Appearance" FontSize="15" Margin="0,0,0,2"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                        <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Appearance" FontSize="15" Margin="0,0,0,2"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}"
                                                    Text="Scale, opacity, theme accent, background, border."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -120,7 +120,7 @@
                         </Button>
                         <Button Click="HomeCard_Click" Tag="About" Width="320" Height="100"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource Kil0bitCard}">
+                            <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -130,8 +130,8 @@
                                                Foreground="{DynamicResource ThemeAccentBrush}"
                                                VerticalAlignment="Top" Margin="0,0,16,0"/>
                                     <StackPanel Grid.Column="1">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="About" FontSize="15" Margin="0,0,0,2"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                        <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="About" FontSize="15" Margin="0,0,0,2"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}"
                                                    Text="Version info and project links."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
@@ -140,7 +140,7 @@
                         </Button>
                     </UniformGrid>
 
-                    <Border Style="{StaticResource Kil0bitInfoBar}" Margin="0,16,0,0">
+                    <Border Style="{StaticResource WinMetersInfoBar}" Margin="0,16,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -150,8 +150,8 @@
                                        Foreground="{DynamicResource ThemeAccentBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Performance Note" FontSize="13"/>
-                                <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Performance Note" FontSize="13"/>
+                                <TextBlock Style="{StaticResource WinMetersTextSub}"
                                            Text="Hardware metrics are read through low-level Win32 APIs. CPU usage resumes from the existing AppBar / Taskbar integration."
                                            TextWrapping="Wrap"/>
                             </StackPanel>
@@ -161,7 +161,7 @@
 
                 <!-- GENERAL -->
                 <StackPanel x:Name="SectionGeneral" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="General"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="General"/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -176,7 +176,7 @@
                             <RowDefinition Height="Auto"/>
                         </Grid.RowDefinitions>
 
-                        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -187,14 +187,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Lock Position" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Prevent accidental dragging." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Lock Position" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Prevent accidental dragging." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="LockPosition" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="LockPosition" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -205,14 +205,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Hide in Fullscreen" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Hide during games / movies." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Hide in Fullscreen" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Hide during games / movies." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="HideInFullscreen" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="HideInFullscreen" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="1" Grid.Column="0" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -223,14 +223,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Snap to Taskbar" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Dock to the taskbar area." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Snap to Taskbar" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Dock to the taskbar area." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="SnapToTaskbar" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="SnapToTaskbar" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="1" Grid.Column="2" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -241,14 +241,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Keep on Top" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Stay above other windows." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Keep on Top" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Stay above other windows." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="KeepOnTop" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="KeepOnTop" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -259,14 +259,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="24-Hour Time" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Display time in 24h format." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="24-Hour Time" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Display time in 24h format." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="Time24H" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="Time24H" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource Kil0bitCard}" Margin="0,0,0,10">
+                        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -277,14 +277,14 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Combine Logical Cores" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Show one bar per physical core pair." TextWrapping="Wrap"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Combine Logical Cores" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Show one bar per physical core pair." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="CombineLogicalCores" Click="GenericToggle_Click"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="CombineLogicalCores" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource Kil0bitCard}">
+                        <Border Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource WinMetersCard}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
@@ -295,15 +295,15 @@
                                            Foreground="{DynamicResource ThemeAccentBrush}"
                                            VerticalAlignment="Center" Margin="0,0,16,0"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Refresh Rate" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Refresh Rate" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}"
                                                Text="How often the meters update. Per-meter overrides are on the Monitoring page."
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ComboBox x:Name="ComboRefreshRate" Grid.Column="2"
                                           VerticalAlignment="Center"
                                           SelectionChanged="ComboRefreshRate_SelectionChanged"
-                                          Style="{StaticResource Kil0bitComboBox}">
+                                          Style="{StaticResource WinMetersComboBox}">
                                     <ComboBoxItem Content="500 ms (High)"   Tag="500"/>
                                     <ComboBoxItem Content="1000 ms (Default)" Tag="1000"/>
                                     <ComboBoxItem Content="2000 ms (Relaxed)"  Tag="2000"/>
@@ -313,7 +313,7 @@
                         </Border>
                     </Grid>
 
-                    <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Hardware Selection" Margin="0,20,0,10"/>
+                    <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Hardware Selection" Margin="0,20,0,10"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -321,43 +321,43 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" Style="{StaticResource Kil0bitCard}">
+                        <Border Grid.Column="0" Style="{StaticResource WinMetersCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Network Adapter" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="ComboNetwork" Style="{StaticResource Kil0bitComboBox}"
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Network Adapter" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ComboNetwork" Style="{StaticResource WinMetersComboBox}"
                                           HorizontalAlignment="Stretch"
                                           SelectionChanged="ComboNetwork_SelectionChanged"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Column="2" Style="{StaticResource Kil0bitCard}">
+                        <Border Grid.Column="2" Style="{StaticResource WinMetersCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Disk Instance" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="ComboDisk" Style="{StaticResource Kil0bitComboBox}"
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Disk Instance" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ComboDisk" Style="{StaticResource WinMetersComboBox}"
                                           HorizontalAlignment="Stretch"
                                           SelectionChanged="ComboDisk_SelectionChanged"/>
                             </StackPanel>
                         </Border>
                     </Grid>
 
-                    <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Sub-Meter Toggles" Margin="0,20,0,10"/>
-                    <Border Style="{StaticResource Kil0bitCard}">
+                    <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Sub-Meter Toggles" Margin="0,20,0,10"/>
+                    <Border Style="{StaticResource WinMetersCard}">
                         <UniformGrid Columns="4">
                             <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU Temp" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowCpuTemp" Click="GenericToggle_Click"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="CPU Temp" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowCpuTemp" Click="GenericToggle_Click"/>
                             </StackPanel>
                             <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="GPU Temp" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowGpuTemp" Click="GenericToggle_Click"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="GPU Temp" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowGpuTemp" Click="GenericToggle_Click"/>
                             </StackPanel>
                             <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="H/W Load" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowHardwareLoad" Click="GenericToggle_Click"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="H/W Load" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowHardwareLoad" Click="GenericToggle_Click"/>
                             </StackPanel>
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Time" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowTime" Click="GenericToggle_Click"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Time" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowTime" Click="GenericToggle_Click"/>
                             </StackPanel>
                         </UniformGrid>
                     </Border>
@@ -365,8 +365,8 @@
 
                 <!-- MONITORING: 5 MetricCards -->
                 <StackPanel x:Name="SectionMonitoring" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Monitoring"/>
-                    <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Monitoring"/>
+                    <TextBlock Style="{StaticResource WinMetersTextSub}"
                                Text="Each meter keeps its visibility toggle, max-value, refresh rate, and section colour in one card. Adding or reordering a meter is a one-line edit in code-behind."
                                TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,16"/>
 
@@ -388,7 +388,7 @@
                                          Glyph="&#xEDA2;" MetricKey="Disk"/>
                     </StackPanel>
 
-                    <Border Style="{StaticResource Kil0bitInfoBar}" Margin="0,16,0,0">
+                    <Border Style="{StaticResource WinMetersInfoBar}" Margin="0,16,0,0">
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
@@ -398,8 +398,8 @@
                                        Foreground="{DynamicResource ThemeAccentBrush}"
                                        VerticalAlignment="Center" Margin="0,0,16,0"/>
                             <StackPanel Grid.Column="1">
-                                <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Tip" FontSize="13"/>
-                                <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Tip" FontSize="13"/>
+                                <TextBlock Style="{StaticResource WinMetersTextSub}"
                                            Text="Show must be on for a meter to render in the bar. Max-value scales the meter (Net/Disk default to 0 so the bar adapts to your hardware)."
                                            TextWrapping="Wrap"/>
                             </StackPanel>
@@ -409,7 +409,7 @@
 
                 <!-- APPEARANCE -->
                 <StackPanel x:Name="SectionAppearance" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Appearance"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Appearance"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -417,47 +417,47 @@
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
-                        <Border Grid.Column="0" Style="{StaticResource Kil0bitCard}">
+                        <Border Grid.Column="0" Style="{StaticResource WinMetersCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Layout"/>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Scale" Margin="0,0,0,4"/>
+                                <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Layout"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Scale" Margin="0,0,0,4"/>
                                 <DockPanel Margin="0,0,0,12">
-                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Kil0bitTextSub}"
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource WinMetersTextSub}"
                                                Text="{Binding ElementName=SliderScale, Path=Value, StringFormat=F2}"/>
                                     <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0"
                                             TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource Kil0bitSlider}"/>
+                                            Style="{StaticResource WinMetersSlider}"/>
                                 </DockPanel>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Opacity" Margin="0,0,0,4"/>
+                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Opacity" Margin="0,0,0,4"/>
                                 <DockPanel Margin="0,0,0,4">
-                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource Kil0bitTextSub}"
+                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource WinMetersTextSub}"
                                                Text="{Binding ElementName=SliderOpacity, Path=Value, StringFormat=F2}"/>
                                     <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0"
                                             TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource Kil0bitSlider}"/>
+                                            Style="{StaticResource WinMetersSlider}"/>
                                 </DockPanel>
-                                <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                <TextBlock Style="{StaticResource WinMetersTextSub}"
                                            Text="Tip: opacity is ignored when the bar is docked to the taskbar. Edit the alpha byte of Background instead."
                                            TextWrapping="Wrap" FontSize="10" Margin="0,0,0,8"/>
                             </StackPanel>
                         </Border>
 
-                        <Border Grid.Column="2" Style="{StaticResource Kil0bitCard}">
+                        <Border Grid.Column="2" Style="{StaticResource WinMetersCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Theme Tokens"/>
+                                <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Theme Tokens"/>
                                 <Grid Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchAccent"/>
+                                    <Border Style="{StaticResource WinMetersColorSwatch}" x:Name="SwatchAccent"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Accent"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Toggles, active nav, button accents."/>
+                                        <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Accent"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Toggles, active nav, button accents."/>
                                     </StackPanel>
                                     <Button Grid.Column="2" Content="Pick..." Click="ColorButton_Click" Tag="Accent"
-                                            Style="{StaticResource Kil0bitSecondaryButton}"/>
+                                            Style="{StaticResource WinMetersSecondaryButton}"/>
                                 </Grid>
                                 <Grid Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
@@ -465,13 +465,13 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchBackground"/>
+                                    <Border Style="{StaticResource WinMetersColorSwatch}" x:Name="SwatchBackground"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Background"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Bar fill (alpha controls translucency)."/>
+                                        <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Background"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Bar fill (alpha controls translucency)."/>
                                     </StackPanel>
                                     <Button Grid.Column="2" Content="Pick..." Click="ColorButton_Click" Tag="Background"
-                                            Style="{StaticResource Kil0bitSecondaryButton}"/>
+                                            Style="{StaticResource WinMetersSecondaryButton}"/>
                                 </Grid>
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -479,21 +479,21 @@
                                         <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchBorder"/>
+                                    <Border Style="{StaticResource WinMetersColorSwatch}" x:Name="SwatchBorder"/>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Border"/>
-                                        <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Bar outline."/>
+                                        <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Border"/>
+                                        <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Bar outline."/>
                                     </StackPanel>
                                     <Button Grid.Column="2" Content="Pick..." Click="ColorButton_Click" Tag="Border"
-                                            Style="{StaticResource Kil0bitSecondaryButton}"/>
+                                            Style="{StaticResource WinMetersSecondaryButton}"/>
                                 </Grid>
                             </StackPanel>
                         </Border>
                     </Grid>
 
-                    <Border Style="{StaticResource Kil0bitCard}" Margin="0,16,0,0">
+                    <Border Style="{StaticResource WinMetersCard}" Margin="0,16,0,0">
                         <StackPanel>
-                            <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Meter Display Order"/>
+                            <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Meter Display Order"/>
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
@@ -507,10 +507,10 @@
                                          SelectionChanged="ListMeterOrder_SelectionChanged"/>
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                     <Button x:Name="BtnMoveUp" Content="&#xE74A;" FontFamily="Segoe MDL2 Assets"
-                                            Click="BtnMoveUp_Click" Style="{StaticResource Kil0bitSecondaryButton}"
+                                            Click="BtnMoveUp_Click" Style="{StaticResource WinMetersSecondaryButton}"
                                             Width="34" Height="34" Margin="0,0,0,4" ToolTip="Move Up"/>
                                     <Button x:Name="BtnMoveDown" Content="&#xE74B;" FontFamily="Segoe MDL2 Assets"
-                                            Click="BtnMoveDown_Click" Style="{StaticResource Kil0bitSecondaryButton}"
+                                            Click="BtnMoveDown_Click" Style="{StaticResource WinMetersSecondaryButton}"
                                             Width="34" Height="34" ToolTip="Move Down"/>
                                 </StackPanel>
                             </Grid>
@@ -520,25 +520,25 @@
 
                 <!-- ABOUT -->
                 <StackPanel x:Name="SectionAbout" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="About"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="About"/>
                     <StackPanel Margin="0,0,0,16">
-                        <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="WinMeters" FontSize="20"/>
-                        <TextBlock x:Name="AboutVersion" Style="{StaticResource Kil0bitTextSub}" Text="v2.4"/>
-                        <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                        <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="WinMeters" FontSize="20"/>
+                        <TextBlock x:Name="AboutVersion" Style="{StaticResource WinMetersTextSub}" Text="v2.4"/>
+                        <TextBlock Style="{StaticResource WinMetersTextSub}"
                                    Text="A lightweight, high-performance system monitoring overlay designed for power users."
                                    TextWrapping="Wrap" MaxWidth="640" Margin="0,6,0,0"/>
                     </StackPanel>
-                    <Border Style="{StaticResource Kil0bitHorizontalRule}"/>
-                    <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Project Links" FontSize="16" Margin="0,8,0,12"/>
+                    <Border Style="{StaticResource WinMetersHorizontalRule}"/>
+                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Project Links" FontSize="16" Margin="0,8,0,12"/>
                     <StackPanel Orientation="Horizontal">
                         <Button Click="HyperlinkButton_Click" Tag="https://github.com/your-repo/winmeters"
-                                Content="Repository" Style="{StaticResource Kil0bitSecondaryButton}" Margin="0,0,8,0"/>
+                                Content="Repository" Style="{StaticResource WinMetersSecondaryButton}" Margin="0,0,8,0"/>
                         <Button Click="HyperlinkButton_Click" Tag="https://github.com/your-repo/winmeters/issues"
-                                Content="Report Issue" Style="{StaticResource Kil0bitSecondaryButton}"/>
+                                Content="Report Issue" Style="{StaticResource WinMetersSecondaryButton}"/>
                     </StackPanel>
-                    <Border Style="{StaticResource Kil0bitHorizontalRule}" Margin="0,16,0,0"/>
-                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Hotkey: Ctrl+Alt+Shift+M" Margin="0,12,0,0"/>
-                    <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Right-click the bar for live toggles." Margin="0,2,0,0"/>
+                    <Border Style="{StaticResource WinMetersHorizontalRule}" Margin="0,16,0,0"/>
+                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Hotkey: Ctrl+Alt+Shift+M" Margin="0,12,0,0"/>
+                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Right-click the bar for live toggles." Margin="0,2,0,0"/>
                 </StackPanel>
 
             </StackPanel>
@@ -557,14 +557,14 @@
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Button x:Name="BtnQuit" Grid.Column="0" Content="Quit Application"
-                        Click="BtnQuit_Click" Style="{StaticResource Kil0bitDangerButton}"
+                        Click="BtnQuit_Click" Style="{StaticResource WinMetersDangerButton}"
                         HorizontalAlignment="Left"/>
                 <Button x:Name="BtnResetAll" Grid.Column="1" Content="Reset All Settings"
                         Click="BtnResetAll_Click"
                         Foreground="#FF6666" Background="Transparent"
                         HorizontalAlignment="Center" Padding="20,8"/>
                 <Button x:Name="BtnSave" Grid.Column="2" Content="Save &amp; Close"
-                        Click="BtnSave_Click" Style="{StaticResource Kil0bitPrimaryButton}"
+                        Click="BtnSave_Click" Style="{StaticResource WinMetersPrimaryButton}"
                         HorizontalAlignment="Right"/>
             </Grid>
         </Border>

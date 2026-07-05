@@ -22,7 +22,7 @@ namespace WinMeters;
 /// toggles, sub-meter toggles, theme-token color pickers, and the
 /// meter-display-order list keep their individual x:Names -- they're not
 /// per-meter controls and don't fit the MetricCard pattern. Every toggle is
-/// a plain CheckBox + the hand-built Kil0bitToggleSwitch style.
+/// a plain CheckBox + the hand-built WinMetersToggleSwitch style.
 /// </summary>
 public partial class SettingsWindow : Window
 {

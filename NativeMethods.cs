@@ -112,7 +112,7 @@ namespace WinMeters
 
         /// <summary>
         /// Returns the HMONITOR that the window lies on (or, with
-        /// <see cref="MONITOR_DEFAULTTONEAREST"/>, the closest one). Kil0bit-style
+        /// <see cref="MONITOR_DEFAULTTONEAREST"/>, the closest one). WinMeters-style
         /// replacement for <c>System.Windows.Forms.Screen.AllScreens</c> — resolves the
         /// monitor an HWND is currently on without depending on WinForms.
         /// </summary>

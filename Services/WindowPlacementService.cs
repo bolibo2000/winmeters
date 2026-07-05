@@ -4,7 +4,7 @@ using System.Windows.Interop;
 namespace WinMeters.Services;
 
 /// <summary>
-/// Kil0bit-style window placement shim. Compared to the legacy WinMeters
+/// WinMeters-style window placement shim. Compared to the legacy WinMeters
 /// <c>WindowPlacementService</c> this service is intentionally thin: it owns
 /// <see cref="AppSettings.WindowSettings.PositionX"/> / <c>PositionY</c> as the
 /// single source of truth for the saved window rect, and it can resolve the

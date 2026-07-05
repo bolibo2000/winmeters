@@ -15,8 +15,8 @@ namespace WinMeters.Controls;
 /// flat UniformGrids that previously scattered the same four affordances
 /// across the Monitoring, General, and Appearance pages. Adding a new
 /// meter means wiring one new card here on the Monitoring page -- not
-/// three pages of switch statements. Kil0bit-style dark surface; the
-/// in-card Show toggle uses the hand-built Kil0bitToggleSwitch style
+/// three pages of switch statements. WinMeters-style dark surface; the
+/// in-card Show toggle uses the hand-built WinMetersToggleSwitch style
 /// (a CheckBox retemplated into a 40x20 rounded track + sliding thumb).
 ///
 /// Type-name disambiguation: the WinMeters project has both UseWPF=true

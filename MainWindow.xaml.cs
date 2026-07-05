@@ -222,7 +222,7 @@ namespace WinMeters
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
             // The legacy InitializeHeight() helper (which sized the window to the
-            // system taskbar's height on first launch) is gone in the Kil0bit-style
+            // system taskbar's height on first launch) is gone in the WinMeters-style
             // rewrite — the bar height is now derived dynamically from DPI + ScaleFactor
             // inside AppBarService.ComputeBarHeightPx(). Nothing to do here.
             SetupCpuBars();
@@ -407,7 +407,7 @@ namespace WinMeters
         /// </summary>
         public void ApplyWindowMode()
         {
-            // Kil0bit-style split: StickToTaskbar=true -> shell owns positioning and z-order;
+            // WinMeters-style split: StickToTaskbar=true -> shell owns positioning and z-order;
             // otherwise we treat the bar as a free-floating window whose X/Y come straight
             // from settings (verbatically, with a one-time SetWindowPos on first launch to
             // sit above normal windows before the 500ms keepalive kicks in).
@@ -451,7 +451,7 @@ namespace WinMeters
         private void StopZOrderTimer() => _zOrderTimer?.Stop();
 
         /// <summary>
-        /// Kil0bit's <c>_config.Config.AlwaysOnTop</c> toggle semantics. When
+        /// WinMeters's <c>_config.Config.AlwaysOnTop</c> toggle semantics. When
         /// <paramref name="keepOnTop"/> is <c>true</c>: install WPF Topmost=true
         /// and start the EnforceZOrder timer (so we keep re-asserting
         /// HWND_TOPMOST in floating mode). When <c>false</c>: stop the timer
@@ -602,7 +602,7 @@ namespace WinMeters
 
         #region Menu Event Handlers
 
-        // Kil0bit-order RMB menu, mirroring .Kilobit/OverlayWindow.cs WndProc
+        // WinMeters-order RMB menu, mirroring .Kilobit/OverlayWindow.cs WndProc
         // WM_RBUTTONUP handler:
         //   1. Utility actions: Settings (opens SettingsWindow, identical to legacy).
         //   2. View toggles: Keep on Top, Hide in Fullscreen, Lock Position,
@@ -660,7 +660,7 @@ namespace WinMeters
 
         private void MenuItem_TaskManager_Click(object sender, RoutedEventArgs e)
         {
-            // Kil0bit's "Task Manager" entry launches taskmgr.exe verbatim —
+            // WinMeters's "Task Manager" entry launches taskmgr.exe verbatim —
             // no flags, no arguments, no pre-check. Windows deduplicates at
             // the OS layer if one is already running.
             try
@@ -709,7 +709,7 @@ namespace WinMeters
 
         private void MenuItem_SnapToTaskbar_Click(object sender, RoutedEventArgs e)
         {
-            // Kil0bit has a single "Snap to Taskbar" boolean. ApplyWindowMode
+            // WinMeters has a single "Snap to Taskbar" boolean. ApplyWindowMode
             // routes the change through the AppBar service (attach / detach
             // + saved X/Y restore) so we don't duplicate any logic here.
             _settings.Window.StickToTaskbar = MenuSnapToTaskbar.IsChecked;
@@ -877,7 +877,7 @@ namespace WinMeters
                 // WPF invalidate cycle (CPU/RAM/Net/Disk text changes etc.) and
                 // along with it the taskbar surface behind any anti-aliased or
                 // rounded-corner regions. The user-visible symptom is the system
-                // taskbar fading / changing opacity every refresh tick. Kil0bit's
+                // taskbar fading / changing opacity every refresh tick. WinMeters's
                 // `UpdateLayeredWindow` path writes a pre-blended 32-bit ARGB
                 // bitmap in one pass; the per-pixel alpha in
                 // `_settings.Colors.Background` (e.g. the `CC` byte of `#CC202020`)

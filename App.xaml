@@ -5,9 +5,9 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <!--
-            Hand-built kil0bit visual theme merged globally. Kil0bitTheme.xaml
+            Hand-built WinMeters visual theme merged globally. WinMetersTheme.xaml
             provides token brushes (ThemeBg / ThemeAccent / ThemeText / ...),
-            the Kil0bitCard / Kil0bitNavItem / Kil0bitToggleSwitch styles, and
+            the WinMetersCard / WinMetersNavItem / WinMetersToggleSwitch styles, and
             template-based button / picker styles. Earlier iterations merged
             Wpf.Ui's Dark.xaml before this dictionary, but Wpf.Ui 3.4.2.7 ships
             only net451 assemblies so we cannot load it on .NET 10. We keep
@@ -16,7 +16,7 @@
         -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="Themes/Kil0bitTheme.xaml"/>
+                <ResourceDictionary Source="Themes/WinMetersTheme.xaml"/>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

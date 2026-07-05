@@ -354,7 +354,7 @@ internal sealed class AppBarService : IDisposable
 
                 case NativeMethods.ABN_FULLSCREENAPP:
                 {
-                    // Kil0bit-style "Hide in Fullscreen" toggle. Mirrors
+                    // WinMeters-style "Hide in Fullscreen" toggle. Mirrors
                     // _config.Config.HideOnFullscreen — when the flag is off the
                     // bar stays visible during fullscreen sessions (the user wants
                     // their meter always available). When on, fullscreen apps
