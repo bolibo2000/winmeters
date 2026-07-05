@@ -1,0 +1,70 @@
+## Build outputs (WinMeters at root)
+bin/
+obj/
+
+## Build outputs (test project)
+Tests/bin/
+Tests/obj/
+
+## Build outputs (kilobit reference implementation)
+.Kilobit/bin/
+.Kilobit/obj/
+
+## Kilobit publish artefacts (build outputs — never commit)
+.Kilobit/publish_output/
+.Kilobit/publish_self_contained/
+
+## WinUI / WiX debug artefacts
+*.wixpdb
+*.pdb
+
+## Build / runtime logs
+*.log
+build.log
+test.log
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.userprefs
+*.sln.docstates
+
+## Visual Studio Code / Roo CLI state
+.vscode/
+.roo/
+.history/
+.ionide/
+
+## WPF design-time temp projects
+*_wpftmp.csproj
+
+## Windows shell escapees
+Thumbs.db
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+## Stray Windows null-device artefacts
+$null
+
+## JetBrains Rider
+.idea/
+*.sln.iml
+
+## NuGet
+**/[Pp]ackages/
+*.nuget.props
+*.nuget.targets
+project.fragment.lock.json
+project.lock.json
+
+## Final-exclude Windows installer outputs
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp

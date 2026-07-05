@@ -1,0 +1,239 @@
+# LibreHardwareMonitorLib.v0.9.4.v0.9.4.dll Analysis
+
+## Assembly Information
+
+| Property | Value |
+|----------|-------|
+| **Name** | LibreHardwareMonitorLib.v0.9.4 |
+| **Version** | 0.9.5.0 |
+| **Target Framework** | .NET 10.0 (Windows) |
+| **File Size** | ~1.1 MB |
+
+---
+
+## Dependencies
+
+| Assembly | Version | Purpose |
+|----------|---------|---------|
+| HidSharp | 2.6.4.0 | USB HID device communication |
+| DiskInfoToolkit | 1.1.1.0 | Disk/storage information |
+| RAMSPDToolkit-NDD | 1.4.2.0 | RAM SPD reading |
+| BlackSharp.Core | 1.0.7.0 | Core utilities |
+| System.IO.Ports | 10.0.0.1 | Serial port access |
+| System.Management | 10.0.0.1 | WMI access |
+
+---
+
+## Core Architecture
+
+### Computer Class (Entry Point)
+
+```csharp
+public class Computer : IComputer
+{
+    // Constructors
+    public Computer();
+    public Computer(ISettings settings);
+    
+    // Hardware enable flags
+    public bool IsCpuEnabled { get; set; }
+    public bool IsGpuEnabled { get; set; }
+    public bool IsMemoryEnabled { get; set; }
+    public bool IsMotherboardEnabled { get; set; }
+    public bool IsStorageEnabled { get; set; }
+    public bool IsNetworkEnabled { get; set; }
+    public bool IsBatteryEnabled { get; set; }
+    public bool IsControllerEnabled { get; set; }
+    public bool IsPsuEnabled { get; set; }
+    
+    // Main collection
+    public IList<IHardware> Hardware { get; }
+    
+    // Lifecycle
+    public void Open();
+    public void Close();
+    public string GetReport();
+    
+    // Events
+    public event HardwareEventHandler HardwareAdded;
+    public event HardwareEventHandler HardwareRemoved;
+}
+```
+
+---
+
+### IHardware Interface
+
+```csharp
+public interface IHardware : IElement
+{
+    HardwareType HardwareType { get; }
+    Identifier Identifier { get; }
+    string Name { get; set; }
+    IHardware Parent { get; }
+    ISensor[] Sensors { get; }
+    IHardware[] SubHardware { get; }
+    IDictionary<string, string> Properties { get; }
+    
+    void Update();
+    string GetReport();
+    
+    event SensorEventHandler SensorAdded;
+    event SensorEventHandler SensorRemoved;
+}
+```
+
+---
+
+### ISensor Interface
+
+```csharp
+public interface ISensor : IElement
+{
+    IHardware Hardware { get; }
+    SensorType SensorType { get; }
+    string Name { get; set; }
+    int Index { get; }
+    Identifier Identifier { get; }
+    
+    float? Value { get; }          // Current reading
+    float? Min { get; }            // Minimum recorded
+    float? Max { get; }            // Maximum recorded
+    
+    IEnumerable<SensorValue> Values { get; }
+    TimeSpan ValuesTimeWindow { get; set; }
+    
+    IControl Control { get; }
+    IReadOnlyList<IParameter> Parameters { get; }
+    bool IsDefaultHidden { get; }
+    
+    void ResetMin();
+    void ResetMax();
+    void ClearValues();
+}
+```
+
+---
+
+## Enumerations
+
+### HardwareType
+
+| Value | Description |
+|-------|-------------|
+| `Motherboard` | Main system board |
+| `SuperIO` | Super I/O chip (sensors hub) |
+| `Cpu` | Central processor |
+| `Memory` | RAM modules |
+| `GpuNvidia` | NVIDIA graphics card |
+| `GpuAmd` | AMD graphics card |
+| `GpuIntel` | Intel integrated graphics |
+| `Storage` | HDD/SSD/NVMe drives |
+| `Network` | Network adapters |
+| `Cooler` | Cooling devices |
+| `EmbeddedController` | EC chip |
+| `Psu` | Power supply unit |
+| `Battery` | Laptop battery |
+
+### SensorType
+
+| Value | Unit | Description |
+|-------|------|-------------|
+| `Voltage` | V | Voltage readings |
+| `Current` | A | Current (amperage) |
+| `Power` | W | Power consumption |
+| `Clock` | MHz | Clock frequencies |
+| `Temperature` | °C | Temperature readings |
+| `Load` | % | Utilization percentage |
+| `Frequency` | Hz | General frequency |
+| `Fan` | RPM | Fan speed |
+| `Flow` | L/h | Liquid flow rate |
+| `Control` | % | Fan/pump control level |
+| `Level` | % | Battery/capacity level |
+| `Factor` | 1 | Dimensionless factor |
+| `Data` | GB | Data amount (2³⁰ bytes) |
+| `SmallData` | MB | Data amount (2²⁰ bytes) |
+| `Throughput` | B/s | Data transfer rate |
+| `TimeSpan` | sec | Time duration |
+| `Timing` | ns | Nanosecond timing |
+| `Energy` | mWh | Energy consumption |
+| `Noise` | dBA | Noise level |
+| `Conductivity` | µS/cm | Electrical conductivity |
+| `Humidity` | % | Humidity level |
+
+---
+
+## Additional Interfaces
+
+| Interface | Purpose |
+|-----------|---------|
+| `IControl` | Programmatic fan speed control |
+| `IParameter` | Configurable sensor parameters |
+| `ISettings` | Persist settings across sessions |
+| `IVisitor` | Visitor pattern for hardware tree traversal |
+| `ISmart` | S.M.A.R.T. data for storage devices |
+
+---
+
+## Usage Example
+
+```csharp
+using LibreHardwareMonitor.Hardware;
+
+// Create and configure
+var computer = new Computer
+{
+    IsCpuEnabled = true,
+    IsGpuEnabled = true,
+    IsMemoryEnabled = true,
+    IsMotherboardEnabled = true,
+    IsStorageEnabled = true
+};
+
+// Start monitoring
+computer.Open();
+
+// Iterate hardware
+foreach (IHardware hardware in computer.Hardware)
+{
+    hardware.Update();  // Refresh readings
+    
+    Console.WriteLine($"{hardware.Name} ({hardware.HardwareType})");
+    
+    foreach (ISensor sensor in hardware.Sensors)
+    {
+        Console.WriteLine($"  {sensor.Name}: {sensor.Value} ({sensor.SensorType})");
+    }
+    
+    // Check sub-hardware (e.g., SuperIO under Motherboard)
+    foreach (IHardware sub in hardware.SubHardware)
+    {
+        sub.Update();
+        foreach (ISensor sensor in sub.Sensors)
+        {
+            Console.WriteLine($"    {sensor.Name}: {sensor.Value}");
+        }
+    }
+}
+
+// Cleanup
+computer.Close();
+```
+
+---
+
+## Important Notes
+
+1. **Administrator Required** - Most hardware access requires elevated privileges
+2. **Call Update()** - Sensor values only refresh when `Update()` is called on hardware
+3. **SubHardware** - Motherboard sensors are typically under SuperIO child hardware
+4. **Thread Safety** - Library is not thread-safe; use locks for multi-threaded access
+5. **Dispose Pattern** - Always call `Close()` when done to release resources
+
+---
+
+## Resources
+
+- **GitHub**: https://github.com/LibreHardwareMonitor/LibreHardwareMonitor
+- **NuGet**: LibreHardwareMonitorLib.v0.9.4
+- **License**: Mozilla Public License 2.0

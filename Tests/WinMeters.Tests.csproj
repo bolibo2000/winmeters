@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- Intentionally NOT setting <UseWPF> or <UseWindowsForms>: those flags also enable
+         WPF's design-time wpftmp project generation, which conflicts with the test
+         project itself and produced a flood of CS0579 "Duplicate AssemblyXxxAttribute"
+         errors at build time. Microsoft.WindowsDesktop.App gives us the WPF + WinForms
+         assembly references ColorHelper.cs needs without the design-time side effects. -->
+    <SkipCompilerExecutionForDesignTimeBuild>true</SkipCompilerExecutionForDesignTimeBuild>
+    <EnableDefaultPageItems>false</EnableDefaultPageItems>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsPublishable>false</IsPublishable>
+    <RootNamespace>WinMeters.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!-- Single comprehensive Desktop reference. Brings in WPF assemblies (PresentationCore,
+       PresentationFramework, WindowsBase) AND System.Drawing.Common — covers everything
+       ColorHelper.cs and PieChartRenderer.cs touch, without the UseWPF/UseWindowsForms
+       side effects. -->
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.WindowsDesktop.App" />
+  </ItemGroup>
+
+  <!-- Pull in the pure-helper sources from WinMeters via Compile Include. We deliberately
+       do not add a ProjectReference to WinMeters.csproj because that assembly is a WinExe
+       targeting requireAdministrator; the linker would barf if it tried to use it. -->
+  <ItemGroup>
+    <Compile Include="..\AppSettings.cs" Link="Sources\AppSettings.cs" />
+    <Compile Include="..\ColorHelper.cs" Link="Sources\ColorHelper.cs" />
+    <Compile Include="..\Constants.cs" Link="Sources\Constants.cs" />
+    <Compile Include="..\Utils\Log.cs" Link="Sources\Log.cs" />
+    <Compile Include="..\Utils\PieChartRenderer.cs" Link="Sources\PieChartRenderer.cs" />
+  </ItemGroup>
+
+</Project>
