@@ -351,7 +351,15 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            string assemblyPath = Environment.ProcessPath
+            // Compose the path from two nullable sources: Environment.ProcessPath
+            // is nullable on its own, and Process.GetCurrentProcess().MainModule
+            // is nullable too, with .FileName a third nullable layer. The
+            // resulting expression is therefore string?, but the downstream
+            // `string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath)`
+            // check already short-circuits to skip work on null, so we just
+            // type the local as nullable instead of suppressing the warning
+            // with `!` (which would mislead future readers).
+            string? assemblyPath = Environment.ProcessPath
                 ?? Process.GetCurrentProcess().MainModule?.FileName;
             if (!string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath))
             {
