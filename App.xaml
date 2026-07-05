@@ -5,21 +5,14 @@
              StartupUri="MainWindow.xaml">
     <Application.Resources>
         <!--
-            Hand-built kil0bit visual theme merged globally. Provides:
-              * Token brushes (ThemeBg / ThemeCardBg / ThemeAccent / ThemeText /
-                ThemeSubtext / ThemeDanger / ThemeToggleTrackOn/Off).
-              * Kil0bitCard / Kil0bitSectionHeader / Kil0bitSubHeader text styles.
-              * Kil0bitNavItem (RadioButton look-alike for left-rail navigation).
-              * Kil0bitToggleSwitch (CheckBox look-alike for on/off toggles).
-              * Kil0bitPrimaryButton / Kil0bitSecondaryButton / Kil0bitDangerButton
-                (template-based button styles).
-              * Kil0bitComboBox / Kil0bitTextBox / Kil0bitSlider / Kil0bitColorSwatch
-                / Kil0bitInfoBar (per-control affordance styles).
-
-            Merging into Application.Resources means every window's content can
-            reference these by StaticResource / DynamicResource without
-            re-declaring. Theme tokens are DynamicResources (where applicable) so
-            that future updates to _settings.Colors.Accent propagate live.
+            Hand-built kil0bit visual theme merged globally. Kil0bitTheme.xaml
+            provides token brushes (ThemeBg / ThemeAccent / ThemeText / ...),
+            the Kil0bitCard / Kil0bitNavItem / Kil0bitToggleSwitch styles, and
+            template-based button / picker styles. Earlier iterations merged
+            Wpf.Ui's Dark.xaml before this dictionary, but Wpf.Ui 3.4.2.7 ships
+            only net451 assemblies so we cannot load it on .NET 10. We keep
+            the hand-built styles and revisit if/when a Wpf.Ui release
+            publishes net8.0/net10.0 assemblies.
         -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

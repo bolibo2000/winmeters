@@ -1,0 +1,315 @@
+using System.Globalization;
+using System.Windows;
+using WpfCtrl = System.Windows.Controls;
+using WpfMedia = System.Windows.Media;
+using System.Windows.Input;
+#if !DESIGN_TIME
+using WnForms = System.Windows.Forms;
+#endif
+
+namespace WinMeters.Controls;
+
+/// <summary>
+/// One themed per-meter card with four controls: Show toggle, Section
+/// colour swatch, Max-value textbox, Refresh-rate textbox. Replaces the
+/// flat UniformGrids that previously scattered the same four affordances
+/// across the Monitoring, General, and Appearance pages. Adding a new
+/// meter means wiring one new card here on the Monitoring page -- not
+/// three pages of switch statements. Kil0bit-style dark surface; the
+/// in-card Show toggle uses the hand-built Kil0bitToggleSwitch style
+/// (a CheckBox retemplated into a 40x20 rounded track + sliding thumb).
+///
+/// Type-name disambiguation: the WinMeters project has both UseWPF=true
+/// and UseWindowsForms=true so the SDK auto-imports both
+/// System.Windows.Controls and System.Windows.Forms namespace prefixes.
+/// Type names shared between the two (UserControl, TextBox, Brush,
+/// TextBlock) would otherwise be CS0104-ambiguous. We resolve by routing
+/// through WpfCtrl / WpfMedia aliases below; native WinForms types stay
+/// behind the WnForms prefix alias where needed.
+/// </summary>
+public partial class MetricCard : WpfCtrl.UserControl
+{
+    public MetricCard()
+    {
+        InitializeComponent();
+
+        // Idempotent PreviewTextInput attach for both numeric text boxes.
+        // Detach-then-attach avoids double-subscribing if PopulateUi uses
+        // the same card instance twice (BIND-77x family of regressions).
+        TxtMax.PreviewTextInput   -= Numeric_PreviewTextInput;
+        TxtMax.PreviewTextInput   += Numeric_PreviewTextInput;
+        TxtRate.PreviewTextInput  -= Numeric_PreviewTextInput;
+        TxtRate.PreviewTextInput  += Numeric_PreviewTextInput;
+    }
+
+    // ---- DependencyProperties ---------------------------------------------------
+
+    public static readonly DependencyProperty TitleProperty =
+        DependencyProperty.Register(nameof(Title), typeof(string), typeof(MetricCard),
+            new PropertyMetadata(string.Empty));
+
+    public string Title
+    {
+        get => (string)GetValue(TitleProperty);
+        set => SetValue(TitleProperty, value);
+    }
+
+    public static readonly DependencyProperty SubtitleProperty =
+        DependencyProperty.Register(nameof(Subtitle), typeof(string), typeof(MetricCard),
+            new PropertyMetadata(string.Empty));
+
+    public string Subtitle
+    {
+        get => (string)GetValue(SubtitleProperty);
+        set => SetValue(SubtitleProperty, value);
+    }
+
+    public static readonly DependencyProperty GlyphProperty =
+        DependencyProperty.Register(nameof(Glyph), typeof(string), typeof(MetricCard),
+            new PropertyMetadata(string.Empty));
+
+    public string Glyph
+    {
+        get => (string)GetValue(GlyphProperty);
+        set => SetValue(GlyphProperty, value);
+    }
+
+    /// <summary>Canonical short key (Cpu / Ram / Gpu / Net / Disk).</summary>
+    public static readonly DependencyProperty MetricKeyProperty =
+        DependencyProperty.Register(nameof(MetricKey), typeof(string), typeof(MetricCard),
+            new PropertyMetadata(string.Empty));
+
+    public string MetricKey
+    {
+        get => (string)GetValue(MetricKeyProperty);
+        set => SetValue(MetricKeyProperty, value);
+    }
+
+    public static readonly DependencyProperty IsShownProperty =
+        DependencyProperty.Register(nameof(IsShown), typeof(bool), typeof(MetricCard),
+            new PropertyMetadata(true, OnIsShownChanged));
+
+    public bool IsShown
+    {
+        get => (bool)GetValue(IsShownProperty);
+        set => SetValue(IsShownProperty, value);
+    }
+
+    public static readonly DependencyProperty MaxValueTextProperty =
+        DependencyProperty.Register(nameof(MaxValueText), typeof(string), typeof(MetricCard),
+            new PropertyMetadata("100", OnNumericTextChanged));
+
+    public string MaxValueText
+    {
+        get => (string)GetValue(MaxValueTextProperty);
+        set => SetValue(MaxValueTextProperty, value);
+    }
+
+    public static readonly DependencyProperty RefreshRateTextProperty =
+        DependencyProperty.Register(nameof(RefreshRateText), typeof(string), typeof(MetricCard),
+            new PropertyMetadata("1000", OnNumericTextChanged));
+
+    public string RefreshRateText
+    {
+        get => (string)GetValue(RefreshRateTextProperty);
+        set => SetValue(RefreshRateTextProperty, value);
+    }
+
+    public static readonly DependencyProperty SectionColorHexProperty =
+        DependencyProperty.Register(nameof(SectionColorHex), typeof(string), typeof(MetricCard),
+            new PropertyMetadata("#FF00CCFF", OnSectionColorChanged));
+
+    public string SectionColorHex
+    {
+        get => (string)GetValue(SectionColorHexProperty);
+        set => SetValue(SectionColorHexProperty, value);
+    }
+
+    /// <summary>
+    /// Resolved brush from <see cref="SectionColorHex"/>. Bound by the Swatch
+    /// element as a fallback if the consumer didn't bind SectionColorHex
+    /// directly to a parsed brush.
+    /// </summary>
+    public WpfMedia.Brush SectionColorBrush
+    {
+        get
+        {
+            try
+            {
+                return ColorHelper.ParseBrush(SectionColorHex) ?? WpfMedia.Brushes.Gray;
+            }
+            catch
+            {
+                return WpfMedia.Brushes.Gray;
+            }
+        }
+    }
+
+    // ---- Public events raised when the user changes a value --------------------
+
+    public event EventHandler? IsShownChanged;
+    public event EventHandler<MaxValueChangedEventArgs>? MaxValueChanged;
+    public event EventHandler<RefreshRateChangedEventArgs>? RefreshRateChanged;
+    public event EventHandler<SectionColorChangedEventArgs>? SectionColorChanged;
+    public event EventHandler<ValidationFailedEventArgs>? ValidationFailed;
+
+    // ---- Property changed callbacks -------------------------------------------
+
+    private static void OnIsShownChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MetricCard c) c.IsShownChanged?.Invoke(c, EventArgs.Empty);
+    }
+
+    private static void OnNumericTextChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MetricCard c) c.ValidateAndFire();
+    }
+
+    private static void OnSectionColorChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    {
+        if (d is MetricCard c)
+        {
+            // SectionColorBrush is a CLR computed property; XAML binding to it
+            // does not re-fire on hex changes. We write the swatch background
+            // directly here. The SectionColorChanged event still fires so
+            // SettingsWindow can persist the new hex to AppSettings.
+            c.Swatch.Background = ColorHelper.ParseBrush(c.SectionColorHex) ?? WpfMedia.Brushes.Gray;
+            c.SectionColorChanged?.Invoke(c, new SectionColorChangedEventArgs(c.SectionColorHex));
+        }
+    }
+
+    // ---- Validation ----------------------------------------------------------
+
+    private void ValidateAndFire()
+    {
+        bool maxOk = TryParseDouble(MaxValueText, out double maxValue, out string? maxErr);
+        bool rateOk = TryParseInt(RefreshRateText, out int rateValue, out string? rateErr);
+        // 0 is a valid maxvalue (means "stay at zero baseline when no traffic").
+        if (maxErr is not null)
+        {
+            ShowError(ErrMax, TxtMax, maxErr);
+        }
+        else
+        {
+            ClearError(ErrMax, TxtMax);
+            MaxValueChanged?.Invoke(this, new MaxValueChangedEventArgs(MetricKey, maxValue));
+        }
+        if (rateErr is not null)
+        {
+            ShowError(ErrRate, TxtRate, rateErr);
+        }
+        else
+        {
+            ClearError(ErrRate, TxtRate);
+            RefreshRateChanged?.Invoke(this, new RefreshRateChangedEventArgs(MetricKey, rateValue));
+        }
+        if (!maxOk || !rateOk)
+        {
+            ValidationFailed?.Invoke(this, new ValidationFailedEventArgs(MetricKey, maxErr, rateErr));
+        }
+    }
+
+    private void ShowError(WpfCtrl.TextBlock err, WpfCtrl.TextBox tb, string msg)
+    {
+        err.Text = msg;
+        err.Visibility = Visibility.Visible;
+        tb.BorderBrush = (WpfMedia.Brush?)FindResource("ThemeDangerBrush");
+        tb.ToolTip = msg;
+    }
+
+    private void ClearError(WpfCtrl.TextBlock err, WpfCtrl.TextBox tb)
+    {
+        err.Text = string.Empty;
+        err.Visibility = Visibility.Collapsed;
+        tb.ClearValue(BorderBrushProperty);
+        tb.ToolTip = null;
+    }
+
+    private static bool TryParseDouble(string? s, out double value, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(s)) { value = 0; error = "Empty"; return false; }
+        if (!double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+        { error = "Invalid number"; return false; }
+        if (value < 0) { error = "Must be >= 0"; return false; }
+        error = null;
+        return true;
+    }
+
+    private static bool TryParseInt(string? s, out int value, out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(s)) { value = 0; error = "Empty"; return false; }
+        if (!int.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
+        { error = "Invalid number"; return false; }
+        if (value < 50) { error = "Minimum 50 ms"; return false; }
+        error = null;
+        return true;
+    }
+
+    private void Numeric_PreviewTextInput(object sender, TextCompositionEventArgs e)
+    {
+        // Digit + decimal-point filter. Match the legacy single-page dialog
+        // filter so users can type "1.5" for MaxValue and "1000" for refresh
+        // rate without pasting in a unit suffix. We accept "." only (not ",")
+        // because the validator parses with InvariantCulture; accepting "1,5"
+        // only to have the validator reject it would be confusing.
+        e.Handled = !string.IsNullOrEmpty(e.Text) &&
+                    !e.Text.All(ch => char.IsDigit(ch) || ch == '.');
+    }
+
+    private void ColorButton_Click(object sender, RoutedEventArgs e)
+    {
+#if !DESIGN_TIME
+        try
+        {
+            using var dlg = new WnForms.ColorDialog
+            {
+                FullOpen = true,
+                Color = ColorHelper.ToDrawingColor(SectionColorHex)
+            };
+            if (dlg.ShowDialog() != WnForms.DialogResult.OK) return;
+
+            string alpha = "FF";
+            if (SectionColorHex is { Length: 9 } hex9) alpha = hex9.Substring(1, 2);
+            string next = $"#{alpha}{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
+            // DP setter will fire OnSectionColorChanged, which writes the Swatch
+            // brush and raises SectionColorChanged for the parent to persist.
+            SectionColorHex = next;
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"MetricCard.ColorButton_Click: {ex.Message}");
+        }
+#endif
+    }
+}
+
+public class MaxValueChangedEventArgs : EventArgs
+{
+    public string MetricKey { get; }
+    public double Value { get; }
+    public MaxValueChangedEventArgs(string key, double value) { MetricKey = key; Value = value; }
+}
+
+public class RefreshRateChangedEventArgs : EventArgs
+{
+    public string MetricKey { get; }
+    public int Value { get; }
+    public RefreshRateChangedEventArgs(string key, int value) { MetricKey = key; Value = value; }
+}
+
+public class SectionColorChangedEventArgs : EventArgs
+{
+    public string Hex { get; }
+    public SectionColorChangedEventArgs(string hex) { Hex = hex; }
+}
+
+public class ValidationFailedEventArgs : EventArgs
+{
+    public string MetricKey { get; }
+    public string? MaxError { get; }
+    public string? RateError { get; }
+    public ValidationFailedEventArgs(string key, string? maxErr, string? rateErr)
+    {
+        MetricKey = key; MaxError = maxErr; RateError = rateErr;
+    }
+}

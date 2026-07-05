@@ -144,17 +144,11 @@
     </Style>
 
     <!--
-        Kil0bit toggle switch look alike. A CheckBox with a 40x20 rounded Border
-        (the track) plus a 12x12 Thumb Border inside it. No animation: the thumb
-        snaps to the right edge via a Margin setter on IsChecked=True. The Thumb
-        is reachable through Setter TargetName because descendant names in the
-        template root namescope are findable.
-
-        Note: a previous version used a TranslateTransform sibling named
-        ThumbTransform nested inside Ellipse.RenderTransform, which the XAML
-        parser rejects (Setter TargetName references must point to direct
-        template children). Margin animation on the Thumb Border sidesteps the
-        constraint with the same visual effect.
+        Kil0bit toggle switch look alike. Plain CheckBox with a 40x20 rounded
+        Border (the track) plus a 12x12 Thumb Border inside it. The Thumb is
+        reachable through Setter TargetName because descendant names in the
+        template root namescope are findable. No animation; Margin setter on
+        IsChecked snaps the thumb to the right edge.
     -->
     <Style x:Key="Kil0bitToggleSwitch" TargetType="CheckBox">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>

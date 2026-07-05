@@ -11,6 +11,19 @@ public class AppSettings
     public ColorSettings Colors { get; set; } = new();
     public VisibilitySettings Visibility { get; set; } = new();
     public RateSettings Rates { get; set; } = new();
+    public MaxValueSettings MaxValues { get; set; } = new();
+    // Kil0bit-style per-meter section color. One swatch per meter (driven
+    // by the new MetricCard on the Monitoring page) replaces the legacy
+    // 14 swatches that lived on the Appearance page. Defaults were chosen
+    // for maximum hue separation on a dark ThemeBgBrush background.
+    public Dictionary<string, string> SectionColors { get; set; } = new(StringComparer.Ordinal)
+    {
+        ["Cpu"]  = "#FFFF6B6B",
+        ["Ram"]  = "#FF4ECDC4",
+        ["Gpu"]  = "#FF95E1D3",
+        ["Net"]  = "#FF6C5CE7",
+        ["Disk"] = "#FFFFEAA7",
+    };
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly string BaseDir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty) ?? AppDomain.CurrentDomain.BaseDirectory;
@@ -57,6 +70,26 @@ public class AppSettings
 
     private static void MigrateSettings(AppSettings settings, string rawJson)
     {
+        // New MaxValues / SectionColors keys introduced with the MetricCard
+        // refactor. Older settings.json files lack these tokens so they keep
+        // their existing defaults. Visibility/Rate/Color legacy fields are
+        // untouched — MeterCard reads from them backward-compatibly.
+        if (!Has(rawJson, "MaxValues"))
+        {
+            settings.MaxValues = new MaxValueSettings();
+        }
+        if (!Has(rawJson, "SectionColors"))
+        {
+            settings.SectionColors = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["Cpu"]  = "#FFFF6B6B",
+                ["Ram"]  = "#FF4ECDC4",
+                ["Gpu"]  = "#FF95E1D3",
+                ["Net"]  = "#FF6C5CE7",
+                ["Disk"] = "#FFFFEAA7",
+            };
+        }
+
         // Migrate legacy MeterOrder keys (older versions used human-readable labels)
         // to the canonical short keys the rest of the app uses.
         var legacyKey = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -307,5 +340,21 @@ public class AppSettings
         public int? GpuTemp { get; set; }
         public int? GpuDedicated { get; set; }
         public int? GpuShared { get; set; }
+    }
+
+    /// <summary>
+    /// Per-meter max-value pairs (one per logical meter) that normalise the
+    /// bar's normalised fill. CPU/RAM/GPU are percentage-bounded (default
+    /// 100); Net and Disk are absolute (KB/s) and start at zero so the user
+    /// can grow them via the new MetricCard MaxValue textbox on the
+    /// Monitoring page.
+    /// </summary>
+    public class MaxValueSettings
+    {
+        public double Cpu { get; set; } = 100;
+        public double Ram { get; set; } = 100;
+        public double Gpu { get; set; } = 100;
+        public double Net { get; set; } = 0;
+        public double Disk { get; set; } = 0;
     }
 }

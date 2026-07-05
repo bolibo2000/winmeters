@@ -4,33 +4,81 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using WnControls = System.Windows.Controls;
 #if !DESIGN_TIME
 using WnForms = System.Windows.Forms;
 #endif
+using WinMeters.Controls;
 
 namespace WinMeters;
 
 /// <summary>
-/// Kil0bit-style Settings dialog. Five-section NavigationView (Home / General /
-/// Monitoring / Appearance / About) over a 720x900 dark window. The structure is
-/// hand-built in plain WPF -- no ModernWfp NuGet. Theme brushes and templates
-/// come from Kil0bitTheme.xaml (merged in App.xaml).
-///
-/// The data flow is the same as the legacy single-page settings: a deep clone
-/// of the caller's <see cref="AppSettings"/> is held in <c>_working</c>; on
-/// Save, <c>_working</c> is copied back to <c>_original</c> and <c>_original</c>
-/// is persisted. On cancel (window close without save), <c>_original</c> is
-/// restored from <c>_snapshotBeforeEdit</c> so live-preview state can't leak
-/// across an OK-then-Edit-again cycle. On Quit, both are persisted and the
-/// application shuts down.
+/// Settings dialog rewritten to consume the new MetricCard UserControl. The
+/// 5 main meters (CPU / RAM / GPU / Net / Disk) live as 5 instances of
+/// MetricCard on the Monitoring page, each holding its Show toggle,
+/// Max-value, Refresh-rate, and Section color in one place. Lock-position
+/// toggles, sub-meter toggles, theme-token color pickers, and the
+/// meter-display-order list keep their individual x:Names -- they're not
+/// per-meter controls and don't fit the MetricCard pattern. Every toggle is
+/// a plain CheckBox + the hand-built Kil0bitToggleSwitch style.
 /// </summary>
 public partial class SettingsWindow : Window
 {
     private readonly AppSettings _original;
     private readonly AppSettings _working;
     private readonly AppSettings _snapshotBeforeEdit;
+
+    /// <summary>
+    /// Static metric-key -> AppSettings wiring helper. Each entry tells the
+    /// populate / save loops which sub-object holds the meter state. Adding
+    /// a new meter means adding one entry here + one &lt;ctrl:MetricCard&gt;
+    /// x:Name to the XAML.
+    /// </summary>
+    private static readonly MetricBinding[] MetricBindings =
+    {
+        new("Cpu",  "Cpu",      // MetricKey, Rate-binding key in AppSettings.Rates
+            (s, v) => s.Visibility.ShowCpu = v,
+            (s) => s.Visibility.ShowCpu,
+            (s, v) => s.Rates.Cpu = v,
+            (s) => s.Rates.Cpu,
+            (s, v) => s.MaxValues.Cpu = v,
+            (s) => s.MaxValues.Cpu),
+        new("Ram",  "Ram",
+            (s, v) => s.Visibility.ShowRam = v,
+            (s) => s.Visibility.ShowRam,
+            (s, v) => s.Rates.Ram = v,
+            (s) => s.Rates.Ram,
+            (s, v) => s.MaxValues.Ram = v,
+            (s) => s.MaxValues.Ram),
+        // Gpu card aggregates ShowGpuDedicated + ShowGpuShared into one
+        // toggle. The MetricCard's IsShown boolean reflects "any GPU pie
+        // shown"; we OR the two on save.
+        new("Gpu",  "GpuDedicated",
+            (s, v) => { if (v) { s.Visibility.ShowGpuDedicated = true; s.Visibility.ShowGpuShared = true; } else { s.Visibility.ShowGpuDedicated = false; s.Visibility.ShowGpuShared = false; } },
+            (s) => s.Visibility.ShowGpuDedicated && s.Visibility.ShowGpuShared,
+            (s, v) => s.Rates.GpuDedicated = v,
+            (s) => s.Rates.GpuDedicated,
+            (s, v) => s.MaxValues.Gpu = v,
+            (s) => s.MaxValues.Gpu),
+        new("Net",  "Net",
+            (s, v) => s.Visibility.ShowNet = v,
+            (s) => s.Visibility.ShowNet,
+            (s, v) => s.Rates.Net = v,
+            (s) => s.Rates.Net,
+            (s, v) => s.MaxValues.Net = v,
+            (s) => s.MaxValues.Net),
+        new("Disk", "Disk",
+            (s, v) => s.Visibility.ShowDisk = v,
+            (s) => s.Visibility.ShowDisk,
+            (s, v) => s.Rates.Disk = v,
+            (s) => s.Rates.Disk,
+            (s, v) => s.MaxValues.Disk = v,
+            (s) => s.MaxValues.Disk),
+    };
+
+    private static readonly Dictionary<string, MetricCard> MetricCardsByKey = new();
 
     private static readonly Dictionary<string, string> MeterDisplayNames = new()
     {
@@ -47,8 +95,12 @@ public partial class SettingsWindow : Window
 
     private readonly DispatcherTimer _liveUpdateTimer;
     private const int LiveUpdateDebounceMs = 120;
-
     private bool _isNavigating;
+    // Sticky flag flipped by Card_ValidationFailed. Reset at start of every
+    // PopulateUi to clear stale errors from a prior session. SettingsWindow
+    // blocks save while this is true -- inline errors on the MetricCard
+    // already call out which input is bad.
+    private bool _hasValidationError;
 
     public SettingsWindow(AppSettings original)
     {
@@ -114,7 +166,6 @@ public partial class SettingsWindow : Window
                 case "About":      SectionAbout.Visibility      = Visibility.Visible; break;
             }
 
-            // Sync the rail radio-button to the section we just rendered.
             WnControls.RadioButton? match = sectionName switch
             {
                 "Home"       => NavHome,
@@ -139,27 +190,45 @@ public partial class SettingsWindow : Window
 
     private void PopulateUi()
     {
+        _hasValidationError = false;
         PopulateGeneralToggles();
-        PopulateMonitoringToggles();
         PopulateAppearance();
         PopulateDisks();
         PopulateNetworkInterfaces();
         PopulateMeterOrder();
         PopulateAbout();
+        PopulateMetrics();
     }
 
     private void PopulateGeneralToggles()
     {
-        ToggleLockPosition.IsChecked       = _working.Window.LockPosition;
-        ToggleSnapToTaskbar.IsChecked      = _working.Window.StickToTaskbar;
-        ToggleHideInFullscreen.IsChecked   = _working.General.HideInFullscreen;
-        ToggleKeepOnTop.IsChecked          = _working.General.KeepOnTop;
-        ToggleTime24H.IsChecked            = _working.General.Time24H;
-        ToggleCombineLogicalCores.IsChecked = _working.General.CombineLogicalCores;
+        var card = new[]
+        {
+            ("LockPosition",         _working.Window.LockPosition),
+            ("HideInFullscreen",     _working.General.HideInFullscreen),
+            ("SnapToTaskbar",        _working.Window.StickToTaskbar),
+            ("KeepOnTop",            _working.General.KeepOnTop),
+            ("Time24H",              _working.General.Time24H),
+            ("CombineLogicalCores",  _working.General.CombineLogicalCores),
+        };
+        foreach (var (tag, value) in card)
+        {
+            if (FindToggleByTag(tag) is { } ts) ts.IsChecked = value;
+        }
 
-        // Refresh-rate combo: select the entry whose Tag matches the current
-        // GlobalRefreshRateMs, falling back to the closest default for stale
-        // values that pre-date the kil0bit-style preset list.
+        // Sub-meter toggles (CpuTemp / GpuTemp / HardwareLoad / Time)
+        var subs = new (string tag, bool value)[]
+        {
+            ("ShowCpuTemp",       _working.Visibility.ShowCpuTemp),
+            ("ShowGpuTemp",       _working.Visibility.ShowGpuTemp),
+            ("ShowHardwareLoad",  _working.Visibility.ShowHardwareLoad),
+            ("ShowTime",          _working.Visibility.ShowTime),
+        };
+        foreach (var (tag, value) in subs)
+        {
+            if (FindToggleByTag(tag) is { } ts) ts.IsChecked = value;
+        }
+
         int currentRate = _working.General.RefreshRateMs;
         int[] rateSteps = { 500, 1000, 2000, 5000 };
         int closest = rateSteps.OrderBy(v => Math.Abs(v - currentRate)).First();
@@ -173,54 +242,30 @@ public partial class SettingsWindow : Window
                 break;
             }
         }
-
-        // Per-meter rates. SetRateText also wires the PreviewTextInput digit-only
-        // filter (legacy behaviour) so the user can't paste non-digit characters
-        // before ValidateRate catches them with an inline error.
-        SetRateText(TxtRateCpu,          _working.Rates.Cpu);
-        SetRateText(TxtRateRam,          _working.Rates.Ram);
-        SetRateText(TxtRateDisk,         _working.Rates.Disk);
-        SetRateText(TxtRateNet,          _working.Rates.Net);
-        SetRateText(TxtRateCpuTemp,      _working.Rates.CpuTemp);
-        SetRateText(TxtRateGpuTemp,      _working.Rates.GpuTemp);
-        SetRateText(TxtRateGpuDedicated, _working.Rates.GpuDedicated);
-        SetRateText(TxtRateGpuShared,    _working.Rates.GpuShared);
     }
 
-    private void SetRateText(WnControls.TextBox tb, int? value)
+    /// <summary>
+    /// Walks the visual tree to find a ui:ToggleSwitch with the given Tag.
+    /// Toggles on the General / Sub-Meter pages are tagged by their
+    /// canonical short key (LockPosition, ShowCpuTemp, etc.); we scan
+    /// descendants of the SettingsWindow so we don't have to enumerate
+    /// each card positionally.
+    /// </summary>
+    private WnControls.CheckBox? FindToggleByTag(string tag)
     {
-        tb.Text = (value ?? _working.General.RefreshRateMs).ToString();
-        // Idempotent subscribe: detach-then-attach. CLR events cannot be
-        // compared for nullness via == (CS0079); the cleanest "wire once" is
-        // -= then += which is a no-op when the handler is absent. SetRateText
-        // runs every PopulateUi (initial open + Reset All re-init or future
-        // reload paths) so we MUSTN'T double-subscribe — two handlers on the
-        // same TextBox would fire twice per keystroke and re-set e.Handled
-        // twice (harmless but work doubling that compounds).
-        tb.PreviewTextInput -= RateTextBox_PreviewTextInput;
-        tb.PreviewTextInput += RateTextBox_PreviewTextInput;
+        return FindVisualChildren<WnControls.CheckBox>(this)
+            .FirstOrDefault(t => (t.Tag as string) == tag);
     }
 
-    private void RateTextBox_PreviewTextInput(object sender, System.Windows.Input.TextCompositionEventArgs e)
+    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
     {
-        // Digit-only filter -- prevents accidental unit suffixes, signs, etc.
-        // from landing in the TextBox before our ValidateRate catches them.
-        // Matches the legacy single-page dialog filter exactly.
-        e.Handled = !string.IsNullOrEmpty(e.Text) && !e.Text.All(char.IsDigit);
-    }
-
-    private void PopulateMonitoringToggles()
-    {
-        ToggleShowCpu.IsChecked          = _working.Visibility.ShowCpu;
-        ToggleShowRam.IsChecked          = _working.Visibility.ShowRam;
-        ToggleShowDisk.IsChecked         = _working.Visibility.ShowDisk;
-        ToggleShowNet.IsChecked          = _working.Visibility.ShowNet;
-        ToggleShowGpuDedicated.IsChecked = _working.Visibility.ShowGpuDedicated;
-        ToggleShowGpuShared.IsChecked    = _working.Visibility.ShowGpuShared;
-        ToggleShowCpuTemp.IsChecked      = _working.Visibility.ShowCpuTemp;
-        ToggleShowGpuTemp.IsChecked      = _working.Visibility.ShowGpuTemp;
-        ToggleShowHardwareLoad.IsChecked = _working.Visibility.ShowHardwareLoad;
-        ToggleShowTime.IsChecked         = _working.Visibility.ShowTime;
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int i = 0; i < count; i++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match) yield return match;
+            foreach (var grand in FindVisualChildren<T>(child)) yield return grand;
+        }
     }
 
     private void PopulateAppearance()
@@ -228,26 +273,9 @@ public partial class SettingsWindow : Window
         SliderScale.Value   = _working.General.Scale;
         SliderOpacity.Value = _working.General.Opacity;
 
-        // Each color swatch is a 20x20 Border. Brush is set in code so the swatch
-        // can update in-place when the user picks a new colour (refreshes only
-        // this single border; the wallpaper / dialog stays put).
-        SetSwatch(SwatchAccent,         _working.Colors.Accent);
-        SetSwatch(SwatchBackground,     _working.Colors.Background);
-        SetSwatch(SwatchBorder,         _working.Colors.Border);
-        SetSwatch(SwatchCpuSys,         _working.Colors.CpuSys);
-        SetSwatch(SwatchCpuUser,        _working.Colors.CpuUser);
-        SetSwatch(SwatchRamPie,         _working.Colors.RamPie);
-        SetSwatch(SwatchRamBorder,      _working.Colors.RamBorder);
-        SetSwatch(SwatchGpuDedicatedPie, _working.Colors.GpuDedicatedPie);
-        SetSwatch(SwatchGpuSharedPie,   _working.Colors.GpuSharedPie);
-        SetSwatch(SwatchCpuTemp,        _working.Colors.CpuTemp);
-        SetSwatch(SwatchGpuTemp,        _working.Colors.GpuTemp);
-        SetSwatch(SwatchDiskRead,       _working.Colors.DiskRead);
-        SetSwatch(SwatchDiskWrite,      _working.Colors.DiskWrite);
-        SetSwatch(SwatchNetDown,        _working.Colors.NetDown);
-        SetSwatch(SwatchNetUp,          _working.Colors.NetUp);
-        SetSwatch(SwatchTimeText,       _working.Colors.TimeText);
-        SetSwatch(SwatchSeparator,      _working.Colors.Separator);
+        SetSwatch(SwatchAccent,     _working.Colors.Accent);
+        SetSwatch(SwatchBackground, _working.Colors.Background);
+        SetSwatch(SwatchBorder,     _working.Colors.Border);
     }
 
     private void PopulateDisks()
@@ -337,19 +365,60 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Bind the 5 MetricCard instances to their corresponding settings
+    /// rows (IsShown, MaxValue, RefreshRate, SectionColor). One card per
+    /// binding entry above; the dictionary keeps x:Name lookups out of
+    /// the loop so adding a new meter stays one line.
+    /// </summary>
+    private void PopulateMetrics()
+    {
+        MetricCardsByKey.Clear();
+        MetricCardsByKey["Cpu"]  = CardCpu;
+        MetricCardsByKey["Ram"]  = CardRam;
+        MetricCardsByKey["Gpu"]  = CardGpu;
+        MetricCardsByKey["Net"]  = CardNet;
+        MetricCardsByKey["Disk"] = CardDisk;
+
+        foreach (var binding in MetricBindings)
+        {
+            if (!MetricCardsByKey.TryGetValue(binding.MetricKey, out var card)) continue;
+            card.IsShown         = binding.ReadIsShown(_working);
+            card.MaxValueText    = binding.ReadMaxValue(_working).ToString(System.Globalization.CultureInfo.InvariantCulture);
+            card.RefreshRateText = (binding.ReadRefreshRate(_working) ?? _working.General.RefreshRateMs).ToString();
+
+            if (_working.SectionColors.TryGetValue(binding.MetricKey, out var hex))
+                card.SectionColorHex = hex;
+
+            // Idempotent event attach. unsubscribe-then-subscribe - never
+            // double-tap on subsequent PopulateUi calls (BIND-77x redo).
+            card.IsShownChanged       -= Card_IsShownChanged;
+            card.MaxValueChanged      -= Card_MaxValueChanged;
+            card.RefreshRateChanged   -= Card_RefreshRateChanged;
+            card.SectionColorChanged  -= Card_SectionColorChanged;
+            card.ValidationFailed     -= Card_ValidationFailed;
+
+            card.IsShownChanged       += Card_IsShownChanged;
+            card.MaxValueChanged      += Card_MaxValueChanged;
+            card.RefreshRateChanged   += Card_RefreshRateChanged;
+            card.SectionColorChanged  += Card_SectionColorChanged;
+            card.ValidationFailed     += Card_ValidationFailed;
+        }
+    }
+
     private static void SetSwatch(Border swatch, string hex)
     {
         swatch.Background = ColorHelper.ParseBrush(hex);
     }
 
     // ---------------------------------------------------------------------
-    // Generic toggle / slider / combobox / textbox handlers
+    // Generic toggle / slider / combobox handlers
     // ---------------------------------------------------------------------
 
     private void GenericToggle_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not WnControls.CheckBox cb || cb.Tag is not string tag) return;
-        bool value = cb.IsChecked == true;
+        if (sender is not WnControls.CheckBox ts || ts.Tag is not string tag) return;
+        bool value = ts.IsChecked == true;
 
         switch (tag)
         {
@@ -359,12 +428,6 @@ public partial class SettingsWindow : Window
             case "KeepOnTop":            _working.General.KeepOnTop = value; break;
             case "Time24H":              _working.General.Time24H = value; break;
             case "CombineLogicalCores":  _working.General.CombineLogicalCores = value; break;
-            case "ShowCpu":              _working.Visibility.ShowCpu = value; break;
-            case "ShowRam":              _working.Visibility.ShowRam = value; break;
-            case "ShowDisk":             _working.Visibility.ShowDisk = value; break;
-            case "ShowNet":              _working.Visibility.ShowNet = value; break;
-            case "ShowGpuDedicated":     _working.Visibility.ShowGpuDedicated = value; break;
-            case "ShowGpuShared":        _working.Visibility.ShowGpuShared = value; break;
             case "ShowCpuTemp":          _working.Visibility.ShowCpuTemp = value; break;
             case "ShowGpuTemp":          _working.Visibility.ShowGpuTemp = value; break;
             case "ShowHardwareLoad":     _working.Visibility.ShowHardwareLoad = value; break;
@@ -414,80 +477,54 @@ public partial class SettingsWindow : Window
         TriggerLiveUpdate();
     }
 
-    private void RateTextBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (sender is not WnControls.TextBox tb || tb.Tag is not string tag) return;
-        if (!ValidateRate(tb, GetErrorBlock(tag))) return;
+    // ---------------------------------------------------------------------
+    // MetricCard event handlers - one per DP, with binding lookup
+    // ---------------------------------------------------------------------
 
-        int? parsed = ParseNullableInt(tb.Text);
-        switch (tag)
-        {
-            case "Cpu":          _working.Rates.Cpu = parsed; break;
-            case "Ram":          _working.Rates.Ram = parsed; break;
-            case "Disk":         _working.Rates.Disk = parsed; break;
-            case "Net":          _working.Rates.Net = parsed; break;
-            case "CpuTemp":      _working.Rates.CpuTemp = parsed; break;
-            case "GpuTemp":      _working.Rates.GpuTemp = parsed; break;
-            case "GpuDedicated": _working.Rates.GpuDedicated = parsed; break;
-            case "GpuShared":    _working.Rates.GpuShared = parsed; break;
-        }
+    private void Card_IsShownChanged(object? sender, EventArgs e)
+    {
+        if (sender is not MetricCard card) return;
+        var binding = FindBinding(card.MetricKey);
+        if (binding is null) return;
+        binding.WriteIsShown(_working, card.IsShown);
         TriggerLiveUpdate();
     }
 
-    private TextBlock? GetErrorBlock(string tag) => tag switch
+    private void Card_MaxValueChanged(object? sender, MaxValueChangedEventArgs e)
     {
-        "Cpu"          => ErrRateCpu,
-        "Ram"          => ErrRateRam,
-        "Disk"         => ErrRateDisk,
-        "Net"          => ErrRateNet,
-        "CpuTemp"      => ErrRateCpuTemp,
-        "GpuTemp"      => ErrRateGpuTemp,
-        "GpuDedicated" => ErrRateGpuDedicated,
-        "GpuShared"    => ErrRateGpuShared,
-        _              => null
-    };
-
-    private bool ValidateRate(WnControls.TextBox tb, TextBlock? err)
-    {
-        string s = tb.Text?.Trim() ?? string.Empty;
-        if (string.IsNullOrEmpty(s))
-        {
-            ClearError(tb, err);
-            return true;
-        }
-        if (!int.TryParse(s, out int v))
-        {
-            ShowError(tb, err, "Invalid number");
-            return false;
-        }
-        if (v < Constants.Timing.MinValidationRateMs)
-        {
-            ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms");
-            return false;
-        }
-        ClearError(tb, err);
-        return true;
+        var binding = FindBinding(e.MetricKey);
+        if (binding is null) return;
+        binding.WriteMaxValue(_working, e.Value);
+        TriggerLiveUpdate();
     }
 
-    private void ShowError(WnControls.TextBox tb, TextBlock? err, string msg)
+    private void Card_RefreshRateChanged(object? sender, RefreshRateChangedEventArgs e)
     {
-        if (err is not null) { err.Text = msg; err.Visibility = Visibility.Visible; }
-        tb.BorderBrush = (System.Windows.Media.Brush?)FindResource("ThemeDangerBrush");
-        tb.ToolTip = msg;
+        var binding = FindBinding(e.MetricKey);
+        if (binding is null) return;
+        binding.WriteRefreshRate(_working, e.Value);
+        TriggerLiveUpdate();
     }
 
-    private void ClearError(WnControls.TextBox tb, TextBlock? err)
+    private void Card_SectionColorChanged(object? sender, SectionColorChangedEventArgs e)
     {
-        if (err is not null) { err.Text = string.Empty; err.Visibility = Visibility.Collapsed; }
-        tb.ClearValue(BorderBrushProperty);
-        tb.ToolTip = null;
+        if (sender is not MetricCard card) return;
+        _working.SectionColors[card.MetricKey] = e.Hex;
+        TriggerLiveUpdate();
     }
 
-    private static int? ParseNullableInt(string? s)
+    private void Card_ValidationFailed(object? sender, ValidationFailedEventArgs e)
     {
-        if (string.IsNullOrEmpty(s)) return null;
-        return int.TryParse(s, out var v) ? v : null;
+        // MetricCard already shows inline errors next to the offending textbox.
+        // We mirror that into a sticky flag so the Save button refuses to
+        // commit until the user fixes the value (clicked twice + blob
+        // submitted by Enter triggers Unsubscribe-on-empty-value too).
+        _hasValidationError = true;
+        TriggerLiveUpdate();
     }
+
+    private static MetricBinding? FindBinding(string metricKey) =>
+        MetricBindings.FirstOrDefault(b => b.MetricKey == metricKey);
 
     // ---------------------------------------------------------------------
     // ListBox reorder + colour picker + hyperlink
@@ -524,17 +561,29 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>
+    /// Single colour-picker used by the 3 theme-token (Accent / Background /
+    /// Border) rows on the Appearance page. MetricCard handles its own
+    /// SectionColours internally; the legacy 14 per-meter colour rows are
+    /// gone -- SectionColors takes their place.
+    /// </summary>
     private void ColorButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not WnControls.Button btn || btn.Tag is not string tag) return;
-
-        string currentHex = ResolveColorByTag(tag);
-        Border? swatch = ResolveSwatchByTag(tag);
-        if (swatch is null && tag != "Accent" && tag != "Background" && tag != "Border")
+        string currentHex = tag switch
         {
-            // Unknown tag, ignore.
-            return;
-        }
+            "Accent"     => _working.Colors.Accent,
+            "Background" => _working.Colors.Background,
+            "Border"     => _working.Colors.Border,
+            _            => "#FFFFFF"
+        };
+        Border? swatch = tag switch
+        {
+            "Accent"     => SwatchAccent,
+            "Background" => SwatchBackground,
+            "Border"     => SwatchBorder,
+            _            => null
+        };
 
 #if !DESIGN_TIME
         try
@@ -546,16 +595,18 @@ public partial class SettingsWindow : Window
             };
             if (dlg.ShowDialog() != WnForms.DialogResult.OK) return;
 
-            // Preserve the alpha byte from the existing hex if it had one (8-digit
-            // ARGB), else default to opaque. The Background field normally carries
-            // translucency so we keep the alpha explicit for background-only.
             string alpha = "FF";
             if (currentHex.Length == 9) alpha = currentHex.Substring(1, 2);
             else if (tag == "Background") alpha = "B4";
 
             string hex = $"#{alpha}{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
 
-            ApplyColorByTag(tag, hex);
+            switch (tag)
+            {
+                case "Accent":     _working.Colors.Accent = hex; break;
+                case "Background": _working.Colors.Background = hex; break;
+                case "Border":     _working.Colors.Border = hex; break;
+            }
             if (swatch is not null) SetSwatch(swatch, hex);
             TriggerLiveUpdate();
         }
@@ -564,74 +615,6 @@ public partial class SettingsWindow : Window
             WinMeters.Log.D($"SettingsWindow.ColorButton_Click: {ex}");
         }
 #endif
-    }
-
-    private string ResolveColorByTag(string tag) => tag switch
-    {
-        "Accent"          => _working.Colors.Accent,
-        "Background"      => _working.Colors.Background,
-        "Border"          => _working.Colors.Border,
-        "CpuSys"          => _working.Colors.CpuSys,
-        "CpuUser"         => _working.Colors.CpuUser,
-        "RamPie"          => _working.Colors.RamPie,
-        "RamBorder"       => _working.Colors.RamBorder,
-        "GpuDedicatedPie" => _working.Colors.GpuDedicatedPie,
-        "GpuSharedPie"    => _working.Colors.GpuSharedPie,
-        "CpuTemp"         => _working.Colors.CpuTemp,
-        "GpuTemp"         => _working.Colors.GpuTemp,
-        "DiskRead"        => _working.Colors.DiskRead,
-        "DiskWrite"       => _working.Colors.DiskWrite,
-        "NetDown"         => _working.Colors.NetDown,
-        "NetUp"           => _working.Colors.NetUp,
-        "TimeText"        => _working.Colors.TimeText,
-        "Separator"       => _working.Colors.Separator,
-        _                 => "#FFFFFF"
-    };
-
-    private Border? ResolveSwatchByTag(string tag) => tag switch
-    {
-        "Accent"          => SwatchAccent,
-        "Background"      => SwatchBackground,
-        "Border"          => SwatchBorder,
-        "CpuSys"          => SwatchCpuSys,
-        "CpuUser"         => SwatchCpuUser,
-        "RamPie"          => SwatchRamPie,
-        "RamBorder"       => SwatchRamBorder,
-        "GpuDedicatedPie" => SwatchGpuDedicatedPie,
-        "GpuSharedPie"    => SwatchGpuSharedPie,
-        "CpuTemp"         => SwatchCpuTemp,
-        "GpuTemp"         => SwatchGpuTemp,
-        "DiskRead"        => SwatchDiskRead,
-        "DiskWrite"       => SwatchDiskWrite,
-        "NetDown"         => SwatchNetDown,
-        "NetUp"           => SwatchNetUp,
-        "TimeText"        => SwatchTimeText,
-        "Separator"       => SwatchSeparator,
-        _                 => null
-    };
-
-    private void ApplyColorByTag(string tag, string hex)
-    {
-        switch (tag)
-        {
-            case "Accent":          _working.Colors.Accent = hex; break;
-            case "Background":      _working.Colors.Background = hex; break;
-            case "Border":          _working.Colors.Border = hex; break;
-            case "CpuSys":          _working.Colors.CpuSys = hex; break;
-            case "CpuUser":         _working.Colors.CpuUser = hex; break;
-            case "RamPie":          _working.Colors.RamPie = hex; break;
-            case "RamBorder":       _working.Colors.RamBorder = hex; break;
-            case "GpuDedicatedPie": _working.Colors.GpuDedicatedPie = hex; break;
-            case "GpuSharedPie":    _working.Colors.GpuSharedPie = hex; break;
-            case "CpuTemp":         _working.Colors.CpuTemp = hex; break;
-            case "GpuTemp":         _working.Colors.GpuTemp = hex; break;
-            case "DiskRead":        _working.Colors.DiskRead = hex; break;
-            case "DiskWrite":       _working.Colors.DiskWrite = hex; break;
-            case "NetDown":         _working.Colors.NetDown = hex; break;
-            case "NetUp":           _working.Colors.NetUp = hex; break;
-            case "TimeText":        _working.Colors.TimeText = hex; break;
-            case "Separator":       _working.Colors.Separator = hex; break;
-        }
     }
 
     private void HyperlinkButton_Click(object sender, RoutedEventArgs e)
@@ -655,20 +638,18 @@ public partial class SettingsWindow : Window
 
     private void BtnSave_Click(object sender, RoutedEventArgs e)
     {
-        // Surface validation errors before committing.
-        if (GetErrorBlock("Cpu")?.Visibility == Visibility.Visible
-         || GetErrorBlock("Ram")?.Visibility == Visibility.Visible
-         || GetErrorBlock("Disk")?.Visibility == Visibility.Visible
-         || GetErrorBlock("Net")?.Visibility == Visibility.Visible
-         || GetErrorBlock("CpuTemp")?.Visibility == Visibility.Visible
-         || GetErrorBlock("GpuTemp")?.Visibility == Visibility.Visible
-         || GetErrorBlock("GpuDedicated")?.Visibility == Visibility.Visible
-         || GetErrorBlock("GpuShared")?.Visibility == Visibility.Visible)
-        {System.Windows.MessageBox.Show(this,
-                $"One or more refresh rates are invalid. Minimum is {Constants.Timing.MinValidationRateMs} ms; fix the highlighted values before saving.",
+        // Block save while any MetricCard has an unresolved validation
+        // error. The corresponding inline error messages are already
+        // visible next to the offending input; jumping to Monitoring so
+        // the user lands on the broken card.
+        if (_hasValidationError)
+        {
+            System.Windows.MessageBox.Show(this,
+                "One or more per-meter values are invalid. Fix the highlighted inputs before saving.",
                 "Validation Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
+            SelectSection("Monitoring");
             return;
         }
 
@@ -690,12 +671,13 @@ public partial class SettingsWindow : Window
         if (result != MessageBoxResult.Yes) return;
 
         var defaults = new AppSettings();
-        // Fold every category from defaults into _working.
-        _working.General    = defaults.General;
-        _working.Window     = defaults.Window;
-        _working.Colors     = defaults.Colors;
-        _working.Visibility = defaults.Visibility;
-        _working.Rates      = defaults.Rates;
+        _working.General      = defaults.General;
+        _working.Window       = defaults.Window;
+        _working.Colors       = defaults.Colors;
+        _working.Visibility   = defaults.Visibility;
+        _working.Rates        = defaults.Rates;
+        _working.MaxValues    = defaults.MaxValues;
+        _working.SectionColors = defaults.SectionColors;
 
         PopulateUi();
         TriggerLiveUpdate();
@@ -709,21 +691,19 @@ public partial class SettingsWindow : Window
 
     private void SettingsWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        // If the user clicked the X (no Save), revert any live-preview state so a
-        // follow-up OK doesn't see mutated values. DialogResult is set to false
-        // here so the consumer can distinguish "saved" vs "cancelled".
         if (DialogResult == true) return;
 
-        // Cancel / close without saving -> restore from snapshot.
         try
         {
             var restored = JsonSerializer.Deserialize<AppSettings>(
                 JsonSerializer.Serialize(_snapshotBeforeEdit)) ?? new AppSettings();
-            _original.General    = restored.General;
-            _original.Window     = restored.Window;
-            _original.Colors     = restored.Colors;
-            _original.Visibility = restored.Visibility;
-            _original.Rates      = restored.Rates;
+            _original.General      = restored.General;
+            _original.Window       = restored.Window;
+            _original.Colors       = restored.Colors;
+            _original.Visibility   = restored.Visibility;
+            _original.Rates        = restored.Rates;
+            _original.MaxValues    = restored.MaxValues;
+            _original.SectionColors = restored.SectionColors;
             if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
         }
         catch (Exception ex)
@@ -742,11 +722,13 @@ public partial class SettingsWindow : Window
 
     private void CopyWorkingToOriginal()
     {
-        _original.General    = _working.General;
-        _original.Window     = _working.Window;
-        _original.Colors     = _working.Colors;
-        _original.Visibility = _working.Visibility;
-        _original.Rates      = _working.Rates;
+        _original.General      = _working.General;
+        _original.Window       = _working.Window;
+        _original.Colors       = _working.Colors;
+        _original.Visibility   = _working.Visibility;
+        _original.Rates        = _working.Rates;
+        _original.MaxValues    = _working.MaxValues;
+        _original.SectionColors = _working.SectionColors;
     }
 
     private void TriggerLiveUpdate()
@@ -758,7 +740,6 @@ public partial class SettingsWindow : Window
     private void ApplyChangesLive()
     {
         if (!IsLoaded) return;
-        // Push the working clone into the live state and let MainWindow apply.
         CopyWorkingToOriginal();
         if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
     }
@@ -768,4 +749,21 @@ public partial class SettingsWindow : Window
         public string Key { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// Per-meter wiring record. Holds lambdas that read/write the four
+    /// settings sub-objects (Visibility.X / Rates.X / MaxValues.X /
+    /// MetricCard.SectionColorHex). Keeps PopulateMetrics / card-event
+    /// handlers one-liners. Adding a new meter = one MetricBinding entry
+    /// + one &lt;ctrl:MetricCard&gt; XAML element.
+    /// </summary>
+    private sealed record MetricBinding(
+        string MetricKey,
+        string RateKey,
+        Action<AppSettings, bool>  WriteIsShown,
+        Func<AppSettings, bool>    ReadIsShown,
+        Action<AppSettings, int?>  WriteRefreshRate,
+        Func<AppSettings, int?>    ReadRefreshRate,
+        Action<AppSettings, double> WriteMaxValue,
+        Func<AppSettings, double>  ReadMaxValue);
 }

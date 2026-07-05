@@ -12,6 +12,13 @@ namespace WinMeters
         {
             base.OnStartup(e);
 
+            // Theme is built in plain WPF: Kil0bitTheme.xaml merged globally by
+            // App.xaml. We intentionally do NOT depend on Wpf.Ui (its 3.x line
+            // only ships net451 assemblies; cannot be used on net10.0-windows).
+            // Re-evaluated periodically: when Wpf.Ui publishes a real
+            // net8.0/net10.0 build we can switch the ToggleSwitch to a native
+            // Fluent control without touching the rest of the dialog.
+
             // Single-instance enforcement
             bool createdNew;
             _singleInstanceMutex = new Mutex(true, Constants.Process.SingleInstanceMutexName, out createdNew);

@@ -1,6 +1,7 @@
 <Window x:Class="WinMeters.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="clr-namespace:WinMeters.Controls"
         Title="WinMeters Settings" Height="720" Width="900"
         MinHeight="540" MinWidth="720"
         ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
@@ -91,7 +92,7 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Monitoring" FontSize="15" Margin="0,0,0,2"/>
                                         <TextBlock Style="{StaticResource Kil0bitTextSub}"
-                                                   Text="Toggle which meters are shown and pick disk / network adapters."
+                                                   Text="Per-meter show / max-value / refresh-rate / colour cards."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Grid>
@@ -111,7 +112,7 @@
                                     <StackPanel Grid.Column="1">
                                         <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Appearance" FontSize="15" Margin="0,0,0,2"/>
                                         <TextBlock Style="{StaticResource Kil0bitTextSub}"
-                                                   Text="Scale, opacity, accent colour, and per-meter colours."
+                                                   Text="Scale, opacity, theme accent, background, border."
                                                    TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </Grid>
@@ -189,8 +190,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Lock Position" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Prevent accidental dragging." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleLockPosition" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="LockPosition"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="LockPosition" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -208,8 +208,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Hide in Fullscreen" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Hide during games / movies." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleHideInFullscreen" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="HideInFullscreen"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="HideInFullscreen" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -227,8 +226,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Snap to Taskbar" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Dock to the taskbar area." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleSnapToTaskbar" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="SnapToTaskbar"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="SnapToTaskbar" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -246,8 +244,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Keep on Top" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Stay above other windows." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleKeepOnTop" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="KeepOnTop"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="KeepOnTop" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -265,8 +262,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="24-Hour Time" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Display time in 24h format." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleTime24H" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="Time24H"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="Time24H" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -284,8 +280,7 @@
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Combine Logical Cores" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}" Text="Show one bar per physical core pair." TextWrapping="Wrap"/>
                                 </StackPanel>
-                                <CheckBox x:Name="ToggleCombineLogicalCores" Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}"
-                                          Click="GenericToggle_Click" Tag="CombineLogicalCores"/>
+                                <CheckBox Grid.Column="2" Style="{StaticResource Kil0bitToggleSwitch}" Tag="CombineLogicalCores" Click="GenericToggle_Click"/>
                             </Grid>
                         </Border>
 
@@ -302,7 +297,7 @@
                                 <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
                                     <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Refresh Rate" FontSize="14"/>
                                     <TextBlock Style="{StaticResource Kil0bitTextSub}"
-                                               Text="How often the meters update. Per-meter overrides below."
+                                               Text="How often the meters update. Per-meter overrides are on the Monitoring page."
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
                                 <ComboBox x:Name="ComboRefreshRate" Grid.Column="2"
@@ -318,153 +313,98 @@
                         </Border>
                     </Grid>
 
-                    <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Per-Meter Rates (ms)" Margin="0,20,0,10"/>
-                    <Border Style="{StaticResource Kil0bitCard}">
-                        <UniformGrid Columns="4">
-                            <StackPanel Margin="0,0,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU"/>
-                                <TextBox x:Name="TxtRateCpu" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="Cpu"/>
-                                <TextBlock x:Name="ErrRateCpu" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="RAM"/>
-                                <TextBox x:Name="TxtRateRam" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="Ram"/>
-                                <TextBlock x:Name="ErrRateRam" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Disk"/>
-                                <TextBox x:Name="TxtRateDisk" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="Disk"/>
-                                <TextBlock x:Name="ErrRateDisk" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Net"/>
-                                <TextBox x:Name="TxtRateNet" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="Net"/>
-                                <TextBlock x:Name="ErrRateNet" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,12,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU Temp"/>
-                                <TextBox x:Name="TxtRateCpuTemp" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="CpuTemp"/>
-                                <TextBlock x:Name="ErrRateCpuTemp" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,12,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="GPU Temp"/>
-                                <TextBox x:Name="TxtRateGpuTemp" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="GpuTemp"/>
-                                <TextBlock x:Name="ErrRateGpuTemp" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,12,12,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="VRAM"/>
-                                <TextBox x:Name="TxtRateGpuDedicated" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="GpuDedicated"/>
-                                <TextBlock x:Name="ErrRateGpuDedicated" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,12,0,0">
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="SRAM"/>
-                                <TextBox x:Name="TxtRateGpuShared" Style="{StaticResource Kil0bitTextBox}"
-                                         TextChanged="RateTextBox_TextChanged" Tag="GpuShared"/>
-                                <TextBlock x:Name="ErrRateGpuShared" Style="{StaticResource Kil0bitTextSub}"
-                                           Foreground="{DynamicResource ThemeDangerBrush}" Visibility="Collapsed" FontSize="10"/>
-                            </StackPanel>
-                        </UniformGrid>
-                    </Border>
-                </StackPanel>
-
-                <!-- MONITORING -->
-                <StackPanel x:Name="SectionMonitoring" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Monitoring"/>
+                    <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Hardware Selection" Margin="0,20,0,10"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="1.4*"/>
-                            <ColumnDefinition Width="16"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
                             <ColumnDefinition Width="*"/>
                         </Grid.ColumnDefinitions>
 
                         <Border Grid.Column="0" Style="{StaticResource Kil0bitCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Hardware Telemetry"/>
-                                <UniformGrid Columns="2">
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU Usage" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowCpu" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowCpu"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="RAM Usage" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowRam" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowRam"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Disk" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowDisk" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowDisk"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Network" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowNet" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowNet"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="VRAM" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowGpuDedicated" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowGpuDedicated"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="SRAM" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowGpuShared" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowGpuShared"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU Temp" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowCpuTemp" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowCpuTemp"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="GPU Temp" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowGpuTemp" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowGpuTemp"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,8,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="H/W Load" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowHardwareLoad" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowHardwareLoad"/>
-                                    </StackPanel>
-                                    <StackPanel Margin="0,0,0,8">
-                                        <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Time" Margin="0,0,0,4"/>
-                                        <CheckBox x:Name="ToggleShowTime" Style="{StaticResource Kil0bitToggleSwitch}"
-                                                  Click="GenericToggle_Click" Tag="ShowTime"/>
-                                    </StackPanel>
-                                </UniformGrid>
+                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Network Adapter" Margin="0,0,0,6"/>
+                                <ComboBox x:Name="ComboNetwork" Style="{StaticResource Kil0bitComboBox}"
+                                          HorizontalAlignment="Stretch"
+                                          SelectionChanged="ComboNetwork_SelectionChanged"/>
                             </StackPanel>
                         </Border>
 
                         <Border Grid.Column="2" Style="{StaticResource Kil0bitCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Hardware Selection"/>
-                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Network Adapter" Margin="0,0,0,6"/>
-                                <ComboBox x:Name="ComboNetwork" Style="{StaticResource Kil0bitComboBox}"
-                                          HorizontalAlignment="Stretch"
-                                          SelectionChanged="ComboNetwork_SelectionChanged"
-                                          Margin="0,0,0,12"/>
                                 <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Disk Instance" Margin="0,0,0,6"/>
                                 <ComboBox x:Name="ComboDisk" Style="{StaticResource Kil0bitComboBox}"
                                           HorizontalAlignment="Stretch"
-                                          SelectionChanged="ComboDisk_SelectionChanged"
-                                          Margin="0,0,0,12"/>
+                                          SelectionChanged="ComboDisk_SelectionChanged"/>
                             </StackPanel>
                         </Border>
                     </Grid>
+
+                    <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Sub-Meter Toggles" Margin="0,20,0,10"/>
+                    <Border Style="{StaticResource Kil0bitCard}">
+                        <UniformGrid Columns="4">
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="CPU Temp" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowCpuTemp" Click="GenericToggle_Click"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="GPU Temp" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowGpuTemp" Click="GenericToggle_Click"/>
+                            </StackPanel>
+                            <StackPanel Margin="0,0,8,0">
+                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="H/W Load" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowHardwareLoad" Click="GenericToggle_Click"/>
+                            </StackPanel>
+                            <StackPanel>
+                                <TextBlock Style="{StaticResource Kil0bitTextHint}" Text="Time" Margin="0,0,0,4"/>
+                                <CheckBox Style="{StaticResource Kil0bitToggleSwitch}" Tag="ShowTime" Click="GenericToggle_Click"/>
+                            </StackPanel>
+                        </UniformGrid>
+                    </Border>
+                </StackPanel>
+
+                <!-- MONITORING: 5 MetricCards -->
+                <StackPanel x:Name="SectionMonitoring" Visibility="Collapsed">
+                    <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Monitoring"/>
+                    <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                               Text="Each meter keeps its visibility toggle, max-value, refresh rate, and section colour in one card. Adding or reordering a meter is a one-line edit in code-behind."
+                               TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,16"/>
+
+                    <StackPanel x:Name="MetricsPanel">
+                        <ctrl:MetricCard x:Name="CardCpu"
+                                         Title="CPU" Subtitle="Combined system + user core usage."
+                                         Glyph="&#xE950;" MetricKey="Cpu"/>
+                        <ctrl:MetricCard x:Name="CardRam"
+                                         Title="Memory" Subtitle="Physical RAM usage."
+                                         Glyph="&#xE7F4;" MetricKey="Ram"/>
+                        <ctrl:MetricCard x:Name="CardGpu"
+                                         Title="GPU" Subtitle="VRAM + SRAM pie charts."
+                                         Glyph="&#xE9A3;" MetricKey="Gpu"/>
+                        <ctrl:MetricCard x:Name="CardNet"
+                                         Title="Network" Subtitle="Adapter down/up throughput in KB/s."
+                                         Glyph="&#xE839;" MetricKey="Net"/>
+                        <ctrl:MetricCard x:Name="CardDisk"
+                                         Title="Disk" Subtitle="Disk instance read/write throughput."
+                                         Glyph="&#xEDA2;" MetricKey="Disk"/>
+                    </StackPanel>
+
+                    <Border Style="{StaticResource Kil0bitInfoBar}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE71D;"
+                                       Foreground="{DynamicResource ThemeAccentBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="Tip" FontSize="13"/>
+                                <TextBlock Style="{StaticResource Kil0bitTextSub}"
+                                           Text="Show must be on for a meter to render in the bar. Max-value scales the meter (Net/Disk default to 0 so the bar adapts to your hardware)."
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Grid>
+                    </Border>
                 </StackPanel>
 
                 <!-- APPEARANCE -->
@@ -472,8 +412,6 @@
                     <TextBlock Style="{StaticResource Kil0bitSectionHeader}" Text="Appearance"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
                             <ColumnDefinition Width="16"/>
                             <ColumnDefinition Width="*"/>
@@ -508,7 +446,7 @@
 
                         <Border Grid.Column="2" Style="{StaticResource Kil0bitCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Theme Colours"/>
+                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Theme Tokens"/>
                                 <Grid Margin="0,0,0,12">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -553,112 +491,6 @@
                                 </Grid>
                             </StackPanel>
                         </Border>
-
-                        <Border Grid.Column="4" Style="{StaticResource Kil0bitCard}">
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource Kil0bitSubHeader}" Text="Per-Meter Colours"/>
-                                <UniformGrid Columns="2">
-                                    <Button Click="ColorButton_Click" Tag="CpuSys" Margin="0,0,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchCpuSys"/>
-                                            <TextBlock Text="CPU Sys" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="CpuUser" Margin="4,0,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchCpuUser"/>
-                                            <TextBlock Text="CPU User" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="RamPie" Margin="0,4,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchRamPie"/>
-                                            <TextBlock Text="RAM Pie" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="RamBorder" Margin="4,4,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchRamBorder"/>
-                                            <TextBlock Text="RAM Border" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="GpuDedicatedPie" Margin="0,4,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchGpuDedicatedPie"/>
-                                            <TextBlock Text="VRAM" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="GpuSharedPie" Margin="4,4,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchGpuSharedPie"/>
-                                            <TextBlock Text="SRAM" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="CpuTemp" Margin="0,4,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchCpuTemp"/>
-                                            <TextBlock Text="CPU Temp" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="GpuTemp" Margin="4,4,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchGpuTemp"/>
-                                            <TextBlock Text="GPU Temp" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="DiskRead" Margin="0,4,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchDiskRead"/>
-                                            <TextBlock Text="Disk Read" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="DiskWrite" Margin="4,4,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchDiskWrite"/>
-                                            <TextBlock Text="Disk Write" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="NetDown" Margin="0,4,4,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchNetDown"/>
-                                            <TextBlock Text="Net Down" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="NetUp" Margin="4,4,0,4"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchNetUp"/>
-                                            <TextBlock Text="Net Up" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="TimeText" Margin="0,4,4,0"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchTimeText"/>
-                                            <TextBlock Text="Time" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                    <Button Click="ColorButton_Click" Tag="Separator" Margin="4,4,0,0"
-                                            Style="{StaticResource Kil0bitSecondaryButton}" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Border Style="{StaticResource Kil0bitColorSwatch}" x:Name="SwatchSeparator"/>
-                                            <TextBlock Text="Separator" VerticalAlignment="Center"/>
-                                        </StackPanel>
-                                    </Button>
-                                </UniformGrid>
-                            </StackPanel>
-                        </Border>
                     </Grid>
 
                     <Border Style="{StaticResource Kil0bitCard}" Margin="0,16,0,0">
@@ -695,7 +527,7 @@
                         <TextBlock Style="{StaticResource Kil0bitTextHeading}" Text="WinMeters" FontSize="20"/>
                         <TextBlock x:Name="AboutVersion" Style="{StaticResource Kil0bitTextSub}" Text="v2.4"/>
                         <TextBlock Style="{StaticResource Kil0bitTextSub}"
-                                   Text="A lightweight, high-performance system monitoring overlay designed for power users. Built with WPF and GDI+ rendering."
+                                   Text="A lightweight, high-performance system monitoring overlay designed for power users."
                                    TextWrapping="Wrap" MaxWidth="640" Margin="0,6,0,0"/>
                     </StackPanel>
                     <Border Style="{StaticResource Kil0bitHorizontalRule}"/>
