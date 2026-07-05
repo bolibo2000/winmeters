@@ -291,6 +291,20 @@
                         <Setter Property="FontFamily" Value="Segoe UI"/>
                         <Setter Property="FontSize" Value="12"/>
                         <Setter Property="Padding" Value="10,5"/>
+                        <!--
+                            Override the framework default MenuItem ControlTemplate
+                            with WinMetersMenuItemTemplate so the checkmark gutter
+                            (GlyphPanel) uses a Transparent fill, letting the
+                            ContextMenu's ThemeCardBgBrush show through. Without
+                            this, the default AeroLite template paints GlyphPanel
+                            with the system HighlightBrush (near-white on Win11
+                            light) which reads as a white strip on the left of
+                            every menu item. The BasedOn chain above still
+                            inherits the rest of the default MenuItem style
+                            (Background / Foreground / Padding DPs and all
+                            trigger properties).
+                        -->
+                        <Setter Property="Template" Value="{StaticResource WinMetersMenuItemTemplate}"/>
                     </Style>
                 </ContextMenu.ItemContainerStyle>
                 <ContextMenu.Resources>
