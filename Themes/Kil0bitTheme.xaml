@@ -244,12 +244,20 @@
     </Style>
 
     <!--
-        ComboBox: dark surface, accent selection. Plain WPF ComboBox accepts our
-        brush overrides via setters. On Windows 11 the dropdown popup paints with
-        the system default chrome; we accept that and rely on the card surface
-        for the inline feel.
+        ComboBox: dark surface, accent selection. Layered on the framework
+        ComboBox theme default via BasedOn so WPF's required template parts
+        (PART_Popup, PART_EditableTextBox, drop-down arrow, focus visuals)
+        remain in scope. Without BasedOn an implicit-key setter-only style
+        suppresses the WPF default ControlTemplate, and a styled ComboBox
+        throws NullReferenceException on part lookups the moment it is
+        instantiated. Adding BasedOn is the same shape of fix that resolved
+        the ContextMenu ItemContainerStyle NRE earlier in this session:
+        keep the framework default chrome, override only the cosmetic
+        setters above. On Windows 11 the dropdown popup still paints with
+        the system default chrome; we accept that and rely on the card
+        surface for the inline feel.
     -->
-    <Style x:Key="Kil0bitComboBox" TargetType="ComboBox">
+    <Style x:Key="Kil0bitComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -259,7 +267,15 @@
         <Setter Property="MinHeight" Value="28"/>
     </Style>
 
-    <Style x:Key="Kil0bitTextBox" TargetType="TextBox">
+    <!--
+        TextBox: dark surface, accent caret. Same BasedOn pattern as the
+        ComboBox style above — WPF's default TextBox ControlTemplate
+        contains the required PART_ScrollViewer / PART_ContentHost parts
+        the editor relies on, and an implicit-key setter-only style
+        without BasedOn would strip those and NRE the first time a
+        styled TextBox is instantiated.
+    -->
+    <Style x:Key="Kil0bitTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -271,7 +287,14 @@
         <Setter Property="SelectionBrush" Value="{DynamicResource ThemeAccentDimBrush}"/>
     </Style>
 
-    <Style x:Key="Kil0bitSlider" TargetType="Slider">
+    <!--
+        Slider: accent track on dark surface. Same BasedOn pattern as the
+        ComboBox style above — WPF's default Slider ControlTemplate has
+        the Thumb, Track, and RepeatButton parts the gesture handlers
+        walk; without BasedOn those are null and PointerPressed on the
+        track throws NullReferenceException.
+    -->
+    <Style x:Key="Kil0bitSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
