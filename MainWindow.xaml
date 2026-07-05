@@ -273,7 +273,19 @@
                          Foreground="{DynamicResource ThemeTextBrush}"
                          Padding="4">
                 <ContextMenu.ItemContainerStyle>
-                    <Style TargetType="MenuItem">
+                    <!--
+                        BasedOn the implicit MenuItem default style. Without this,
+                        ContextMenu.ItemContainerStyle REPLACES (not extends) the
+                        WPF default style tree, so the generic ControlTemplate that
+                        every WPF MenuItem depends on for chrome and checkmark state
+                        is gone. When an IsCheckable item is rendered open or its
+                        IsChecked is mutated, the OnapplyTemplate / template
+                        visual-state evaluation NREs because the expected template
+                        parts (Glyph, CheckmarkLayer, etc.) are null. Adding BasedOn
+                        preserves the default template and only overrides the
+                        cosmetic setters we actually want to change.
+                    -->
+                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
                         <Setter Property="Background" Value="Transparent"/>
                         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
                         <Setter Property="FontFamily" Value="Segoe UI"/>
@@ -282,7 +294,7 @@
                     </Style>
                 </ContextMenu.ItemContainerStyle>
                 <ContextMenu.Resources>
-                    <Style TargetType="Separator">
+                    <Style TargetType="Separator" BasedOn="{StaticResource {x:Type Separator}}">
                         <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
                         <Setter Property="Height" Value="1"/>
                         <Setter Property="Margin" Value="4,4"/>
