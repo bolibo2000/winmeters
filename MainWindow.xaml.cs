@@ -3,7 +3,6 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Shapes;
 using System.Windows.Interop;
 using Microsoft.Win32;
@@ -67,7 +66,6 @@ namespace WinMeters
 
         // Foreground window tracking for Alt+Tab lowering mechanism
         private IntPtr _lastForegroundHwnd = IntPtr.Zero;
-
 
         // AppBar registration so the shell treats us as part of the taskbar surface and
         // the work area is shrunk to exclude us. Eliminates the WS_EX_TOPMOST family of
@@ -396,6 +394,15 @@ namespace WinMeters
             // own HwndHook deliberately does NOT react to WM_DISPLAYCHANGE.
             source.AddHook(MonitorChangeHook);
 
+            // WM_RBUTTONUP hook for the native HMENU-based popup menu. Fires when
+            // the user right-clicks anywhere on the bar; replaces the WPF ContextMenu
+            // (removed from MainWindow.xaml in this commit) with a native Win32
+            // HMENU driven by CreatePopupMenu / AppendMenu / TrackPopupMenuEx, matching
+            // .Kilobit/OverlayWindow.cs WndProc. The menu is drawn by the OS, forced
+            // dark via uxtheme calls; the WPF handler simply consumes WM_RBUTTONUP
+            // and returns IntPtr.Zero.
+            source.AddHook(WmRButtonUp);
+
             // Activate the mode requested by settings.
             ApplyWindowMode();
         }
@@ -435,8 +442,6 @@ namespace WinMeters
                 WinMeters.Log.D("MainWindow: Float mode active.");
             }
         }
-
-
 
         private void StartZOrderTimer()
         {
@@ -600,23 +605,333 @@ namespace WinMeters
 
         #endregion
 
-        #region Menu Event Handlers
+        #region Popup Menu (WM_RBUTTONUP, native HMENU)
 
-        // WinMeters-order RMB menu, mirroring .Kilobit/OverlayWindow.cs WndProc
-        // WM_RBUTTONUP handler:
-        //   1. Utility actions: Settings (opens SettingsWindow, identical to legacy).
-        //   2. View toggles: Keep on Top, Hide in Fullscreen, Lock Position,
-        //      Snap to Taskbar — each gated on _settings and applied immediately
-        //      so the toggle takes effect without a restart.
-        //   3. About + Exit (separated by their own dividers in the XAML).
+        // Native Win32 popup menu driven by WM_RBUTTONUP, mirroring
+        // .Kilobit/OverlayWindow.cs WndProc verbatim: 10 items + 3
+        // separators, command IDs 1001-1009 in the same order, MF_CHECKED
+        // for the four live toggles, MF_SEPARATOR for the dividers, and
+        // the menu chrome forced dark via uxtheme calls (SetPreferredAppMode
+        // / AllowDarkModeForWindow / FlushMenuThemes) right before
+        // TrackPopupMenuEx. Replaces the previous WPF <ContextMenu> in
+        // MainWindow.xaml (and its 4 WPF MenuItem Click handlers + the
+        // custom WinMetersMenuItemTemplate / MenuDivider / ItemContainerStyle)
+        // with a single OS-drawn HMENU.
 
-        private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
+        /// <summary>Win32 WM_RBUTTONUP message id - fires when the user releases the right mouse button.</summary>
+        private const int WM_RBUTTONUP = 0x0205;
+
+        /// <summary>
+        /// Cached <see cref="NativeMethods.MONITORINFO.cbSize"/> value. The struct is
+        /// fixed-size (40 bytes on x64), so we evaluate Marshal.SizeOf once at type
+        /// init instead of on every WM_RBUTTONUP. The shell reads cbSize on entry to
+        /// <see cref="NativeMethods.GetMonitorInfo"/>; passing 0 makes the call fail
+        /// silently with ERROR_INVALID_PARAMETER.
+        /// </summary>
+        private static readonly uint MonitorInfoCbSize =
+            (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>();
+
+        /// <summary>
+        /// HwndSource hook for WM_RBUTTONUP. Builds the native HMENU,
+        /// forces dark chrome via uxtheme, positions it above/below the
+        /// bar based on the bar's screen quadrant, runs
+        /// <see cref="NativeMethods.TrackPopupMenuEx"/> (which blocks
+        /// until the user picks an item or dismisses), tears the menu
+        /// down, and routes the chosen command to
+        /// <see cref="DispatchMenuCommand"/>. Returns IntPtr.Zero
+        /// unconditionally - WPF's default right-click -> ContextMenu
+        /// behaviour has nothing to act on (we removed the WPF
+        /// ContextMenu from MainWindow.xaml) so letting the message
+        /// bubble costs nothing.
+        /// </summary>
+        private IntPtr WmRButtonUp(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // Delegates to OpenSettingsAndNavigateTo(null) so the single-instance
-            // gate, the cache + Closed subscriber, and the apply-on-save logic
-            // live in exactly one place (also used by MenuItem_About_Click, which
-            // additionally navigates to the "About" section).
-            OpenSettingsAndNavigateTo(null);
+            if (msg != WM_RBUTTONUP) return IntPtr.Zero;
+
+            // Skip only when the bar is Collapsed (no hit-testing; can't
+            // receive WM_RBUTTONUP anyway). Visibility.Hidden still
+            // hit-tests, so the user can still right-click an invisible
+            // bar (rare, but possible if a future "peek" mode sets
+            // Hidden). The previous `!= Visible` gate was too aggressive:
+            // it would silently eat right-clicks on a Hidden bar and
+            // would also reject the transient states WPF goes through
+            // during Opacity animations.
+            if (this.Visibility == Visibility.Collapsed) return IntPtr.Zero;
+
+            // Get cursor position in virtual-screen pixels (Win32
+            // convention, same coordinate space as GetWindowRect / MONITORINFO).
+            if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return IntPtr.Zero;
+
+            // Force dark mode for the native menu chrome, matching the
+            // .Kilobit reference. Order matters: SetPreferredAppMode
+            // first, then AllowDarkModeForWindow for our HWND, then
+            // FlushMenuThemes to invalidate any cached theme so the
+            // next CreatePopupMenu picks up the dark mode. The OS
+            // ignores all three if dark mode is already the system
+            // default, so this is a no-op cost on Win11-dark machines.
+            NativeMethods.SetPreferredAppMode(2);
+            NativeMethods.AllowDarkModeForWindow(hwnd, true);
+            NativeMethods.FlushMenuThemes();
+
+            IntPtr hMenu = NativeMethods.CreatePopupMenu();
+            if (hMenu == IntPtr.Zero) return IntPtr.Zero;
+            try
+            {
+                BuildPopupMenu(hMenu);
+
+                // TrackPopupMenuEx requires the calling thread to be the
+                // foreground thread, otherwise the menu dismisses
+                // immediately. WPF's HwndSource hook fires on the UI
+                // thread, but right-clicking doesn't necessarily make
+                // us the foreground window - call SetForegroundWindow
+                // first so TrackPopupMenuEx retains focus until the
+                // user picks an item.
+                NativeMethods.SetForegroundWindow(hwnd);
+
+                // Mirror the kil0bit position math: cursor-X (with
+                // TPM_RIGHTALIGN so the menu's right edge meets the
+                // cursor's right side); barTop-vs-monitor-midpoint
+                // decides whether to pop the menu ABOVE (bottom half)
+                // or BELOW (top half) the bar with a 4-pixel gap.
+                int my;
+                uint alignFlag;
+                if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT wr) != 0)
+                {
+                    IntPtr hMon = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
+                    NativeMethods.MONITORINFO mi = new NativeMethods.MONITORINFO
+                    {
+                        cbSize = MonitorInfoCbSize
+                    };
+                    NativeMethods.GetMonitorInfo(hMon, ref mi);
+
+                    if (wr.Top > (mi.rcWork.Top + mi.rcWork.Bottom) / 2)
+                    {
+                        // Bar in bottom half -> pop menu UP (menu's bottom
+                        // edge sits 4 pixels above the bar's top edge)
+                        my = wr.Top - 4;
+                        alignFlag = NativeMethods.TPM_BOTTOMALIGN;
+                    }
+                    else
+                    {
+                        // Bar in top half -> pop menu DOWN (menu's top
+                        // edge sits 4 pixels below the bar's bottom edge)
+                        my = wr.Bottom + 4;
+                        alignFlag = NativeMethods.TPM_TOPALIGN;
+                    }
+                }
+                else
+                {
+                    // Fallback: anchor to the cursor's Y if we couldn't
+                    // read the bar rect for any reason. The menu still
+                    // pops somewhere reasonable.
+                    my = cursor.Y;
+                    alignFlag = NativeMethods.TPM_TOPALIGN;
+                }
+
+                // TPM_RETURNCMD: TrackPopupMenuEx returns the selected
+                // command id directly instead of sending WM_COMMAND.
+                // TPM_NONOTIFY: don't fire WM_MENUSELECT/INITMENUPOPUP
+                // notifications. Combined with the kil0bit 0x0002
+                // (TPM_RIGHTALIGN), the menu's right edge sits at
+                // cursor.X so a right-handed user clicking on the
+                // bar's right side gets a menu that doesn't overflow
+                // off the right of the monitor.
+                int ch = NativeMethods.TrackPopupMenuEx(
+                    hMenu,
+                    NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_NONOTIFY | NativeMethods.TPM_RIGHTALIGN | alignFlag,
+                    cursor.X,
+                    my,
+                    hwnd,
+                    IntPtr.Zero);
+
+                if (ch != 0)
+                {
+                    DispatchMenuCommand((uint)ch);
+                }
+            }
+            finally
+            {
+                // Always destroy the menu even if TrackPopupMenuEx
+                // threw - leaking HMENUs is one of the classic
+                // GDI/desktop-process handle leaks.
+                NativeMethods.DestroyMenu(hMenu);
+            }
+
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        /// <summary>
+        /// Populates <paramref name="hMenu"/> with the 10 menu items +
+        /// 3 separators in the same order and command-ID space as
+        /// .Kilobit/OverlayWindow.cs WM_RBUTTONUP. The four live
+        /// toggles are appended with <c>MF_CHECKED | MF_STRING</c>
+        /// (or just <c>MF_STRING</c> when off) so the user sees the
+        /// current state of each toggle directly in the menu chrome
+        /// - the kil0bit reference draws a checkmark next to enabled
+        /// toggles via the OS-rendered MF_CHECKED bit.
+        /// </summary>
+        private void BuildPopupMenu(IntPtr hMenu)
+        {
+            // 1. Utility actions
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_SETTINGS, "Settings");
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_TASKMGR, "Task Manager");
+
+            // 2. Separator
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
+
+            // 3. View toggles. MF_CHECKED (0x0008) is the OS-rendered
+            // checkmark glyph; mirrors kil0bit's
+            //   AppendMenu(hMenu, (_config.Config.AlwaysOnTop ? 0x0008U : 0), 1008, "Keep on Top")
+            // pattern exactly.
+            NativeMethods.AppendMenu(hMenu,
+                _settings.General.KeepOnTop ? NativeMethods.MF_CHECKED : 0,
+                NativeMethods.IDM_KEEPONTOP, "Keep on Top");
+            NativeMethods.AppendMenu(hMenu,
+                _settings.General.HideInFullscreen ? NativeMethods.MF_CHECKED : 0,
+                NativeMethods.IDM_HIDEFULLSCREEN, "Hide in Fullscreen");
+            NativeMethods.AppendMenu(hMenu,
+                _settings.Window.LockPosition ? NativeMethods.MF_CHECKED : 0,
+                NativeMethods.IDM_LOCK, "Lock Position");
+            NativeMethods.AppendMenu(hMenu,
+                _settings.Window.StickToTaskbar ? NativeMethods.MF_CHECKED : 0,
+                NativeMethods.IDM_SNAP, "Snap to Taskbar");
+
+            // 4. Separator
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
+
+            // 5. About (kil0bit cmd 1003 -> opens Settings + auto-navigates)
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_ABOUT, "About");
+
+            // 6. Separator
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
+
+            // 7. Exit
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_EXIT, "Exit");
+        }
+
+        /// <summary>
+        /// Dispatches the command id returned by
+        /// <see cref="NativeMethods.TrackPopupMenuEx"/> to the
+        /// equivalent action. Mirrors the kil0bit switch (cmd
+        /// 1001 = Settings, 1002 = Task Manager, 1003 = About ->
+        /// Settings, 1004 = Exit, 1006 = Lock toggle, 1007 = Snap
+        /// toggle, 1008 = Keep-on-top toggle, 1009 = Hide-in-fullscreen
+        /// toggle). Each toggle calls a self-contained Toggle* helper
+        /// so the toggle state, the side-effect, and the persist all
+        /// live in one place - no leftover WPF MenuItem.IsChecked
+        /// round-trips.
+        /// </summary>
+        private void DispatchMenuCommand(uint cmd)
+        {
+            switch (cmd)
+            {
+                case NativeMethods.IDM_SETTINGS:
+                    OpenSettingsAndNavigateTo(null);
+                    break;
+
+                case NativeMethods.IDM_TASKMGR:
+                    LaunchTaskManager();
+                    break;
+
+                case NativeMethods.IDM_ABOUT:
+                    // kil0bit parity: cmd 1003 opens Settings and
+                    // auto-navigates to the About section.
+                    OpenSettingsAndNavigateTo("About");
+                    break;
+
+                case NativeMethods.IDM_EXIT:
+                    MenuItem_Exit_Click(this, new RoutedEventArgs());
+                    break;
+
+                case NativeMethods.IDM_LOCK:
+                    ToggleLockPosition();
+                    break;
+
+                case NativeMethods.IDM_SNAP:
+                    ToggleSnapToTaskbar();
+                    break;
+
+                case NativeMethods.IDM_KEEPONTOP:
+                    ToggleKeepOnTop();
+                    break;
+
+                case NativeMethods.IDM_HIDEFULLSCREEN:
+                    ToggleHideInFullscreen();
+                    break;
+
+                default:
+                    WinMeters.Log.D($"DispatchMenuCommand: unknown cmd {cmd}");
+                    break;
+            }
+        }
+
+        /// <summary>Launches taskmgr.exe via the shell. Matches the kil0bit cmd-1002 handler.</summary>
+        private static void LaunchTaskManager()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "taskmgr",
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.D($"LaunchTaskManager: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Toggles <c>_settings.General.KeepOnTop</c> and re-applies
+        /// the WPF Topmost flag + ZOrder timer gate via
+        /// <see cref="ApplyKeepOnTop"/>. Mirrors kil0bit's
+        /// <c>cmd == 1008</c> branch (<c>AlwaysOnTop = !AlwaysOnTop</c>).
+        /// </summary>
+        private void ToggleKeepOnTop()
+        {
+            _settings.General.KeepOnTop = !_settings.General.KeepOnTop;
+            ApplyKeepOnTop(_settings.General.KeepOnTop);
+            _settings.Save();
+        }
+
+        /// <summary>
+        /// Toggles <c>_settings.General.HideInFullscreen</c>. The
+        /// AppBar service's ABN_FULLSCREENAPP handler reads this flag
+        /// on every fullscreen transition, so the change takes effect
+        /// the next time a fullscreen app activates. Mirrors kil0bit's
+        /// <c>cmd == 1009</c> branch.
+        /// </summary>
+        private void ToggleHideInFullscreen()
+        {
+            _settings.General.HideInFullscreen = !_settings.General.HideInFullscreen;
+            _settings.Save();
+        }
+
+        /// <summary>
+        /// Toggles <c>_settings.Window.LockPosition</c>. Persists the
+        /// change (and the current X/Y) via <see cref="SavePosition"/>.
+        /// Mirrors kil0bit's <c>cmd == 1006</c> branch.
+        /// </summary>
+        private void ToggleLockPosition()
+        {
+            _settings.Window.LockPosition = !_settings.Window.LockPosition;
+            SavePosition();
+        }
+
+        /// <summary>
+        /// Toggles <c>_settings.Window.StickToTaskbar</c> and routes
+        /// the change through <see cref="ApplyWindowMode"/> so the
+        /// AppBar service re-registers (or unregisters) and the bar
+        /// re-anchors to the taskbar (or returns to floating mode).
+        /// Mirrors kil0bit's <c>cmd == 1007</c> branch.
+        /// </summary>
+        private void ToggleSnapToTaskbar()
+        {
+            _settings.Window.StickToTaskbar = !_settings.Window.StickToTaskbar;
+            ApplyWindowMode();
+            _settings.Save();
         }
 
         /// <summary>
@@ -636,11 +951,11 @@ namespace WinMeters
         /// one's BtnSave_Click wins.
         ///
         /// Apply-on-save: the Closed subscriber fires after the dialog
-        /// closes. If DialogResult == true (BtnSave_Click path), we run the
-        /// full ApplySettings branch. If DialogResult != true (X-button or
-        /// Esc), SettingsWindow's own SettingsWindow_Closing handler already
-        /// restored the snapshot to _original before Closed even fires, so
-        /// we leave _settings alone.
+        /// closes. If DialogResult == true (BtnSave_Click path), we run
+        /// the full ApplySettings branch. If DialogResult != true
+        /// (X-button or Esc), SettingsWindow's own SettingsWindow_Closing
+        /// handler already restored the snapshot to _original before
+        /// Closed even fires, so we leave _settings alone.
         /// </summary>
         private void OpenSettingsAndNavigateTo(string? sectionName)
         {
@@ -684,125 +999,18 @@ namespace WinMeters
         }
 
         /// <summary>
-        /// Position-aware placement of the RMB ContextMenu, matching
-        /// .Kilobit/OverlayWindow.cs WM_RBUTTONUP: when the bar lives in
-        /// the bottom half of the screen (typical for a taskbar-docked
-        /// overlay), pop the menu UPWARD so it opens above the bar
-        /// instead of overlapping it; when the bar lives in the top half,
-        /// pop the menu DOWNWARD. WPF's ContextMenu.Placement=Top places
-        /// the menu above the placement target; =Bottom places it below.
-        /// VerticalOffset of +/- 4 leaves a 4-pixel gap between the menu
-        /// and the bar edge, matching the kil0bit `my = wr.Top - 4` /
-        /// `my = wr.Bottom + 4` constants in the popup-menu code.
+        /// Opens Settings (cmd 1001 from the popup menu; also called
+        /// from the tray icon's left-double-click handler). Kept as a
+        /// thin wrapper around <see cref="OpenSettingsAndNavigateTo"/>
+        /// so the tray icon's old RoutedEventArgs-style invocation
+        /// (<c>MenuItem_Settings_Click(this, new RoutedEventArgs())</c>)
+        /// keeps working.
         /// </summary>
-        private void MainWindow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not FrameworkElement fe) return;
-            var cm = fe.ContextMenu;
-            if (cm is null) return;
-
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd == IntPtr.Zero) return;
-
-            NativeMethods.RECT barRect;
-            // GetWindowRect returns 0 on failure, nonzero on success (Win32
-            // convention). Cannot be used as a bool — `!int` is a CS0023.
-            if (NativeMethods.GetWindowRect(hwnd, out barRect) == 0) return;
-
-            // Mirror the kil0bit check: barTop > midpoint of monitor working
-            // area = bar is in the bottom half. System.Windows.Forms.Screen
-            // is per-monitor DPI aware (returns the screen the HWND is on)
-            // so its WorkingArea is in the same coordinate space as the
-            // barRect from GetWindowRect -- direct comparison is safe.
-            var screen = WnForms.Screen.FromHandle(hwnd);
-            int midY = (screen.WorkingArea.Top + screen.WorkingArea.Bottom) / 2;
-
-            if (barRect.Top > midY)
-            {
-                // Bar in bottom half -> pop menu UP
-                cm.Placement = PlacementMode.Top;
-                cm.VerticalOffset = -4;
-            }
-            else
-            {
-                // Bar in top half -> pop menu DOWN
-                cm.Placement = PlacementMode.Bottom;
-                cm.VerticalOffset = 4;
-            }
+            OpenSettingsAndNavigateTo(null);
         }
 
-        private void MenuItem_TaskManager_Click(object sender, RoutedEventArgs e)
-        {
-            // WinMeters's "Task Manager" entry launches taskmgr.exe verbatim —
-            // no flags, no arguments, no pre-check. Windows deduplicates at
-            // the OS layer if one is already running.
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "taskmgr",
-                    UseShellExecute = true,
-                });
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"MenuItem_TaskManager_Click: {ex}");
-            }
-        }
-
-        private void MenuItem_KeepOnTop_Click(object sender, RoutedEventArgs e)
-        {
-            // Mirrors kil0bit's _config.Config.AlwaysOnTop toggle. Applied
-            // immediately (Topmost + ZOrderTimer gate) so the user sees the
-            // change without a restart, and persisted via _settings.Save()
-            // so the preference survives. ApplyKeepOnTop also runs from
-            // OnSourceInitialized → ApplyWindowMode so the saved flag is
-            // honoured at every boot.
-            _settings.General.KeepOnTop = MenuKeepOnTop.IsChecked;
-            ApplyKeepOnTop(_settings.General.KeepOnTop);
-            _settings.Save();
-        }
-
-        private void MenuItem_HideInFullscreen_Click(object sender, RoutedEventArgs e)
-        {
-            // Mirrors kil0bit's _config.Config.HideOnFullscreen toggle. The
-            // AppBar service's ABN_FULLSCREENAPP handler reads this flag
-            // every time a fullscreen app activates / deactivates, so no
-            // immediate visibility work is required here — the next
-            // fullscreen transition picks up the new value automatically.
-            _settings.General.HideInFullscreen = MenuHideInFullscreen.IsChecked;
-            _settings.Save();
-        }
-
-        private void MenuItem_Lock_Click(object sender, RoutedEventArgs e)
-        {
-            _settings.Window.LockPosition = MenuLock.IsChecked;
-            SavePosition();
-        }
-
-        private void MenuItem_SnapToTaskbar_Click(object sender, RoutedEventArgs e)
-        {
-            // WinMeters has a single "Snap to Taskbar" boolean. ApplyWindowMode
-            // routes the change through the AppBar service (attach / detach
-            // + saved X/Y restore) so we don't duplicate any logic here.
-            _settings.Window.StickToTaskbar = MenuSnapToTaskbar.IsChecked;
-            ApplyWindowMode();
-            _settings.Save();
-        }
-
-        private void MenuItem_About_Click(object sender, RoutedEventArgs e)
-        {
-            // kil0bit parity: the About entry (cmd 1003 in
-            // .Kilobit/OverlayWindow.cs WM_RBUTTONUP) opens Settings and
-            // auto-navigates to the About section instead of popping a
-            // transient MessageBox. The user gets a richer About view
-            // (version pulled from the assembly, GitHub repo link) inside
-            // the same UI surface as the rest of their settings, matching
-            // the upstream kil0bit reference port. OpenSettingsAndNavigateTo
-            // re-uses the single-instance gate and apply-on-save wiring so
-            // the cached reference is shared with the Settings entry.
-            OpenSettingsAndNavigateTo("About");
-        }
 
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
         {
@@ -884,7 +1092,6 @@ namespace WinMeters
             ApplyColors();
             ApplyScale();
             ApplyVisibility();
-            ApplyMenuState();
             ApplyMeterOrder();
             UpdateTooltips();
         }
@@ -1063,20 +1270,6 @@ namespace WinMeters
 
             CpuLoadText.Visibility = showLoad ? Visibility.Visible : Visibility.Collapsed;
             GpuLoadText.Visibility = showLoad ? Visibility.Visible : Visibility.Collapsed;
-        }
-
-        private void ApplyMenuState()
-        {
-            // Refresh the four checkable menu items from the live settings. The bar
-            // is re-bound to settings via BindSettings() after SettingsWindow.Save(),
-            // so this picks up both newly-loaded and freshly-edited values without
-            // re-applying the full InitializeComponent cycle. Legacy menu names
-            // (MenuDock / MenuStartup) were folded into the kil0bit-style 4-tuple:
-            // MenuLock, MenuSnapToTaskbar, MenuKeepOnTop, MenuHideInFullscreen.
-            MenuLock.IsChecked = _settings.Window.LockPosition;
-            MenuSnapToTaskbar.IsChecked = _settings.Window.StickToTaskbar;
-            MenuKeepOnTop.IsChecked = _settings.General.KeepOnTop;
-            MenuHideInFullscreen.IsChecked = _settings.General.HideInFullscreen;
         }
 
         private void ApplyMeterOrder()
@@ -1492,8 +1685,6 @@ namespace WinMeters
         }
 
         private const double GiB = 1024.0 * 1024.0 * 1024.0;
-
-
 
         #endregion
 

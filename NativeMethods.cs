@@ -392,6 +392,129 @@ namespace WinMeters
 
         #endregion
 
+        #region Popup Menu (HMENU)
+
+        /// <summary>
+        /// Creates a popup menu (a top-level menu not attached to a
+        /// menubar). The returned handle is owned by the caller; pair with
+        /// <see cref="DestroyMenu"/> when done. Mirrors
+        /// .Kilobit/OverlayWindow.cs CreatePopupMenu.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern IntPtr CreatePopupMenu();
+
+        /// <summary>
+        /// Appends a menu item to a menu bar, drop-down menu, or submenu.
+        /// Pass MF_STRING (0) for a text item, MF_SEPARATOR (0x0800) for a
+        /// divider, and combine MF_CHECKED (0x0008) for a checkable item
+        /// that's currently on. The <c>lpNewItem</c> string is allowed to
+        /// be null when the flags include MF_SEPARATOR. Matches
+        /// .Kilobit/OverlayWindow.cs AppendMenu verbatim, including the
+        /// Unicode charset.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AppendMenu(IntPtr hMenu, uint uFlags, uint uIDNewItem, string? lpNewItem);
+
+        /// <summary>
+        /// Displays a shortcut menu at the specified location and tracks
+        /// the selection. With TPM_RETURNCMD the function returns the
+        /// selected command ID instead of sending WM_COMMAND; with
+        /// TPM_NONOTIFY no WM_COMMAND / WM_MENUSELECT notifications are
+        /// sent to the owner either. The function runs its own message
+        /// pump and blocks the calling thread until the menu closes.
+        /// Matches .Kilobit/OverlayWindow.cs TrackPopupMenuEx.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern int TrackPopupMenuEx(IntPtr hMenu, uint uFlags, int x, int y, IntPtr hwnd, IntPtr lptpm);
+
+        /// <summary>
+        /// Destroys the specified menu and frees any memory the menu
+        /// occupied. Required for menus created with CreatePopupMenu.
+        /// Matches .Kilobit/OverlayWindow.cs DestroyMenu.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool DestroyMenu(IntPtr hMenu);
+
+        /// <summary>
+        /// Brings the thread that created the specified window into the
+        /// foreground and activates the window. Required before
+        /// TrackPopupMenuEx or the popup menu won't receive keyboard
+        /// focus and will be dismissed immediately. Matches
+        /// .Kilobit/OverlayWindow.cs SetForegroundWindow.
+        /// </summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetForegroundWindow(IntPtr hWnd);
+
+        // AppendMenu / TrackPopupMenuEx flag constants. Numeric values
+        // match Win32 (winuser.h). MF_UNCHECKED is 0 so omitted entirely
+        // (the kil0bit reference uses `... : 0` for unchecked items).
+        public const uint MF_STRING = 0x0000;
+        public const uint MF_SEPARATOR = 0x0800;
+        public const uint MF_CHECKED = 0x0008;
+
+        // TrackPopupMenuEx flag constants. Numeric values match Win32 (winuser.h).
+        public const uint TPM_LEFTALIGN = 0x0000;
+        public const uint TPM_TOPALIGN = 0x0000;
+        public const uint TPM_BOTTOMALIGN = 0x0020;
+        /// <summary>TPM_RIGHTALIGN — right-align the popup relative to the X coord. Matches the kil0bit reference's 0x0002 flag in its TrackPopupMenuEx call.</summary>
+        public const uint TPM_RIGHTALIGN = 0x0002;
+        public const uint TPM_RETURNCMD = 0x0100;
+        public const uint TPM_NONOTIFY = 0x0080;
+
+        /// <summary>
+        /// Command IDs for the popup menu items. Matches the kil0bit
+        /// reference port's WM_RBUTTONUP handler (cmd 1001-1009) so the
+        /// dispatch order / semantics are identical to .Kilobit.
+        /// </summary>
+        public const uint IDM_SETTINGS = 1001;
+        public const uint IDM_TASKMGR = 1002;
+        public const uint IDM_ABOUT = 1003;
+        public const uint IDM_EXIT = 1004;
+        public const uint IDM_LOCK = 1006;
+        public const uint IDM_SNAP = 1007;
+        public const uint IDM_KEEPONTOP = 1008;
+        public const uint IDM_HIDEFULLSCREEN = 1009;
+
+        #endregion
+
+        #region UXTheme (dark mode)
+
+        /// <summary>
+        /// uxtheme.dll ordinal #135: sets the preferred app mode for
+        /// subsequent window/menu creation. 2 = ForceDark. Used to make
+        /// the OS-themed native popup menu render in dark chrome
+        /// regardless of the user's system theme setting. Matches
+        /// .Kilobit/OverlayWindow.cs SetPreferredAppMode.
+        /// </summary>
+        [DllImport("uxtheme.dll", EntryPoint = "#135")]
+        public static extern int SetPreferredAppMode(int appMode);
+
+        /// <summary>
+        /// uxtheme.dll ordinal #133: toggles dark mode for the title bar /
+        /// menu chrome of a specific HWND. Combined with
+        /// SetPreferredAppMode(2) and FlushMenuThemes() the popup menu
+        /// chrome paints dark on systems where dark mode is not the
+        /// default. Matches .Kilobit/OverlayWindow.cs AllowDarkModeForWindow.
+        /// </summary>
+        [DllImport("uxtheme.dll", EntryPoint = "#133")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool AllowDarkModeForWindow(IntPtr hWnd, [MarshalAs(UnmanagedType.Bool)] bool allow);
+
+        /// <summary>
+        /// uxtheme.dll ordinal #136: flushes the menu theme cache so the
+        /// next menu creation picks up the dark mode setting. Must be
+        /// called AFTER SetPreferredAppMode / AllowDarkModeForWindow and
+        /// BEFORE TrackPopupMenuEx for the dark chrome to take effect.
+        /// Matches .Kilobit/OverlayWindow.cs FlushMenuThemes.
+        /// </summary>
+        [DllImport("uxtheme.dll", EntryPoint = "#136")]
+        public static extern void FlushMenuThemes();
+
+        #endregion
+
         #region Types
 
         /// <summary>

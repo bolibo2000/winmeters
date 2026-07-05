@@ -137,7 +137,7 @@
         </PathGeometry>
     </Window.Resources>
     <Grid x:Name="RootGrid">
-        <Border x:Name="MainBorder" Background="#CC202020" CornerRadius="5" BorderBrush="#44FFFFFF" BorderThickness="0" ContextMenuOpening="MainWindow_ContextMenuOpening">
+        <Border x:Name="MainBorder" Background="#CC202020" CornerRadius="5" BorderBrush="#44FFFFFF" BorderThickness="0">
             <Border.LayoutTransform>
                 <ScaleTransform x:Name="MainScale" ScaleX="1.0" ScaleY="1.0"/>
             </Border.LayoutTransform>
@@ -249,100 +249,6 @@
             </StackPanel>
 
         </StackPanel>
-        
-        <Border.ContextMenu>
-            <!--
-                Right-mouse-button menu, restructured to match .Kilobit/OverlayWindow.cs
-                WM_RBUTTONUP handler:
-                  1. Utility actions (Settings opens the dialog, Task Manager spawns taskmgr.exe).
-                  2. View toggles (Keep on Top + Hide in Fullscreen + Lock Position + Snap
-                     to Taskbar) gated by the runtime settings in AppSettings.
-                  3. About + Exit separated by their own dividers, kil0bit-style.
-
-                Visual styling (kil0bit parity): dark surface (ThemeCardBgBrush), white
-                foreground, accent-tinted highlight (ThemeAccentDimBrush) so hovering
-                an item lights up the same colour the Settings dialog uses for active
-                toggles. ItemContainerStyle derives from WPF's default MenuItem template
-                so we keep keyboard nav (alt-underscore mnemonics, IsChecked checkmark
-                rendering, arrow-key traversal) and only override Background / Padding.
-            -->
-            <ContextMenu x:Name="MainContextMenu"
-                         Background="{DynamicResource ThemeCardBgBrush}"
-                         BorderBrush="{DynamicResource ThemeCardBorderBrush}"
-                         BorderThickness="1"
-                         Foreground="{DynamicResource ThemeTextBrush}"
-                         Padding="4">
-                <ContextMenu.ItemContainerStyle>
-                    <!--
-                        BasedOn the implicit MenuItem default style. Without this,
-                        ContextMenu.ItemContainerStyle REPLACES (not extends) the
-                        WPF default style tree, so the generic ControlTemplate that
-                        every WPF MenuItem depends on for chrome and checkmark state
-                        is gone. When an IsCheckable item is rendered open or its
-                        IsChecked is mutated, the OnapplyTemplate / template
-                        visual-state evaluation NREs because the expected template
-                        parts (Glyph, CheckmarkLayer, etc.) are null. Adding BasedOn
-                        preserves the default template and only overrides the
-                        cosmetic setters we actually want to change.
-                    -->
-                    <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-                        <Setter Property="FontFamily" Value="Segoe UI"/>
-                        <Setter Property="FontSize" Value="12"/>
-                        <Setter Property="Padding" Value="10,5"/>
-                        <!--
-                            Override the framework default MenuItem ControlTemplate
-                            with WinMetersMenuItemTemplate so the checkmark gutter
-                            (GlyphPanel) uses a Transparent fill, letting the
-                            ContextMenu's ThemeCardBgBrush show through. Without
-                            this, the default AeroLite template paints GlyphPanel
-                            with the system HighlightBrush (near-white on Win11
-                            light) which reads as a white strip on the left of
-                            every menu item. The BasedOn chain above still
-                            inherits the rest of the default MenuItem style
-                            (Background / Foreground / Padding DPs and all
-                            trigger properties).
-                        -->
-                        <Setter Property="Template" Value="{StaticResource WinMetersMenuItemTemplate}"/>
-                    </Style>
-                </ContextMenu.ItemContainerStyle>
-                <ContextMenu.Resources>
-                    <!--
-                        Keyed Separator style for the menu's explicit dividers.
-                        Adding x:Key=MenuDivider pulls our dividers out of WPF's
-                        implicit-key style lookup path entirely — the runtime
-                        only enters our style chain when an opt-in
-                        Separator Style={StaticResource MenuDivider} says so.
-                        The framework default Separator chrome is used
-                        unmodified otherwise (e.g. by the WPF MenuItem chrome's
-                        internal sub-Separator parts), so we never trigger
-                        "A Style intended for type 'MenuItem' cannot be applied
-                        to type 'Separator'" while opening the menu. The 3
-                        cosmetic setters below layer onto the default chrome
-                        (no Template setter, so the implicit ControlTemplate is
-                        preserved) and only fire on dividers in the actual Items
-                        collection — not on WPF-internal template plumbing.
-                    -->
-                    <Style x:Key="MenuDivider" TargetType="Separator">
-                        <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
-                        <Setter Property="Height" Value="1"/>
-                        <Setter Property="Margin" Value="4,4"/>
-                    </Style>
-                </ContextMenu.Resources>
-                <MenuItem Header="Settings" x:Name="MenuSettings" Click="MenuItem_Settings_Click"/>
-                <MenuItem Header="Task Manager" x:Name="MenuTaskManager" Click="MenuItem_TaskManager_Click"/>
-                <Separator Style="{StaticResource MenuDivider}"/>
-                <MenuItem Header="Keep on Top" IsCheckable="True" x:Name="MenuKeepOnTop" Click="MenuItem_KeepOnTop_Click"/>
-                <MenuItem Header="Hide in Fullscreen" IsCheckable="True" x:Name="MenuHideInFullscreen" Click="MenuItem_HideInFullscreen_Click"/>
-                <MenuItem Header="Lock Position" IsCheckable="True" x:Name="MenuLock" Click="MenuItem_Lock_Click"/>
-                <MenuItem Header="Snap to Taskbar" IsCheckable="True" x:Name="MenuSnapToTaskbar" Click="MenuItem_SnapToTaskbar_Click"/>
-                <Separator Style="{StaticResource MenuDivider}"/>
-                <MenuItem Header="About" x:Name="MenuAbout" Click="MenuItem_About_Click"/>
-                <Separator Style="{StaticResource MenuDivider}"/>
-                <MenuItem Header="Exit" x:Name="MenuExit" Click="MenuItem_Exit_Click"/>
-            </ContextMenu>
-        </Border.ContextMenu>
     </Border>
 </Grid>
 </Window>
