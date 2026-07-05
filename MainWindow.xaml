@@ -294,7 +294,21 @@
                     </Style>
                 </ContextMenu.ItemContainerStyle>
                 <ContextMenu.Resources>
-                    <Style TargetType="Separator" BasedOn="{StaticResource {x:Type Separator}}">
+                    <!--
+                        Plain TargetType=Separator style (no BasedOn). WPF happily
+                        applies our cosmetic setters on top of the framework default
+                        chrome; the dividers render as 1-px themed lines without
+                        clobbering the implicit-keyed style that the MenuItem
+                        template's sub-Separators resolve to. Adding BasedOn here
+                        earlier collided with the implicit-key lookup (both the
+                        style's own TargetType=typeof(Separator) entry AND the
+                        BasedOn resource-key typeof(Separator) ended up resolving
+                        to the same style) and produced "A Style intended for type
+                        'MenuItem' cannot be applied to type 'Separator'" at
+                        opening time when WPF walked the container's template.
+                        Pre-fix approach below is therefore correct by design.
+                    -->
+                    <Style TargetType="Separator">
                         <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
                         <Setter Property="Height" Value="1"/>
                         <Setter Property="Margin" Value="4,4"/>
