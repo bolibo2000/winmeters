@@ -152,7 +152,16 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void SelectSection(string sectionName)
+    /// <summary>
+    /// Switches the visible section (Home / General / Monitoring / Appearance / About)
+    /// and mirrors the selection in the nav rail. Public so MainWindow's RMB-menu
+    /// About entry (and any future deep-link entry point) can call
+    /// OpenSettingsAndNavigateTo("About") and land on the right tab without
+    /// re-creating the dialog. Reentrancy-guarded by <c>_isNavigating</c> so the
+    /// nav-rail RadioButton SelectionChanged callbacks can't recurse into this
+    /// method while it's mid-flight.
+    /// </summary>
+    public void SelectSection(string sectionName)
     {
         if (string.IsNullOrEmpty(sectionName) || _isNavigating) return;
         _isNavigating = true;

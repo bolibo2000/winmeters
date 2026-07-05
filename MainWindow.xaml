@@ -137,7 +137,7 @@
         </PathGeometry>
     </Window.Resources>
     <Grid x:Name="RootGrid">
-        <Border x:Name="MainBorder" Background="#CC202020" CornerRadius="5" BorderBrush="#44FFFFFF" BorderThickness="0">
+        <Border x:Name="MainBorder" Background="#CC202020" CornerRadius="5" BorderBrush="#44FFFFFF" BorderThickness="0" ContextMenuOpening="MainWindow_ContextMenuOpening">
             <Border.LayoutTransform>
                 <ScaleTransform x:Name="MainScale" ScaleX="1.0" ScaleY="1.0"/>
             </Border.LayoutTransform>

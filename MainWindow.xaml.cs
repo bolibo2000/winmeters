@@ -3,12 +3,12 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Shapes;
 using System.Windows.Interop;
 using Microsoft.Win32;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 using WpfBrushes = System.Windows.Media.Brushes;
-using WpfMessageBox = System.Windows.MessageBox;
 using WpfBitmapSource = System.Windows.Media.Imaging.BitmapSource;
 using WnForms = System.Windows.Forms;
 using WinMeters.Utils;
@@ -612,30 +612,51 @@ namespace WinMeters
 
         private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
         {
-            // Single-instance gating: if Settings is already open, just bring
-            // it to the front. Without this gate, switching from modal
-            // ShowDialog to modeless Show lets an impatient user spawn N
-            // independent SettingsWindow instances, each holding a private
-            // clone of _settings (the JSON round-trip in their ctor) and
-            // competing on close for which one's BtnSave_Click wins.
+            // Delegates to OpenSettingsAndNavigateTo(null) so the single-instance
+            // gate, the cache + Closed subscriber, and the apply-on-save logic
+            // live in exactly one place (also used by MenuItem_About_Click, which
+            // additionally navigates to the "About" section).
+            OpenSettingsAndNavigateTo(null);
+        }
+
+        /// <summary>
+        /// Opens the Settings dialog as a modeless owned window and
+        /// (optionally) jumps to a specific section. Used by both the
+        /// RMB-menu Settings entry (no section) and the RMB-menu About
+        /// entry ("About" section), matching .Kilobit/OverlayWindow.cs
+        /// where cmd 1003 (About) opens Settings and auto-selects the
+        /// About section.
+        ///
+        /// Single-instance gate: if Settings is already open, just
+        /// reactivate it (and re-navigate if a section was requested).
+        /// Without this gate, switching from modal ShowDialog to modeless
+        /// Show lets an impatient user spawn N independent SettingsWindow
+        /// instances, each holding a private clone of _settings (the JSON
+        /// round-trip in their ctor) and competing on close for which
+        /// one's BtnSave_Click wins.
+        ///
+        /// Apply-on-save: the Closed subscriber fires after the dialog
+        /// closes. If DialogResult == true (BtnSave_Click path), we run the
+        /// full ApplySettings branch. If DialogResult != true (X-button or
+        /// Esc), SettingsWindow's own SettingsWindow_Closing handler already
+        /// restored the snapshot to _original before Closed even fires, so
+        /// we leave _settings alone.
+        /// </summary>
+        private void OpenSettingsAndNavigateTo(string? sectionName)
+        {
             if (_existingSettingsWindow is { } existing)
             {
                 existing.Activate();
+                if (!string.IsNullOrEmpty(sectionName))
+                {
+                    existing.SelectSection(sectionName);
+                }
                 return;
             }
 
             var dlg = new SettingsWindow(_settings) { Owner = this };
             _existingSettingsWindow = dlg;
 
-            // Closed subscriber replaces the "if (dlg.ShowDialog() == true)"
-            // contract we used to live by. SettingsWindow sets DialogResult
-            // = true then Close() on the BtnSave_Click path; that fires
-            // Closed with DialogResult == true and we run the full
-            // ApplySettings branch here. SettingsWindow_Closing (subscribed
-            // inside SettingsWindow's own ctor) already handles cancel-revert
-            // on its side: when DialogResult != true it restores
-            // _snapshotBeforeEdit to _original before Closed even fires, so
-            // we don't need extra work in that branch.
             dlg.Closed += (_, _) =>
             {
                 try
@@ -655,7 +676,59 @@ namespace WinMeters
                 }
             };
 
+            if (!string.IsNullOrEmpty(sectionName))
+            {
+                dlg.SelectSection(sectionName);
+            }
             dlg.Show();
+        }
+
+        /// <summary>
+        /// Position-aware placement of the RMB ContextMenu, matching
+        /// .Kilobit/OverlayWindow.cs WM_RBUTTONUP: when the bar lives in
+        /// the bottom half of the screen (typical for a taskbar-docked
+        /// overlay), pop the menu UPWARD so it opens above the bar
+        /// instead of overlapping it; when the bar lives in the top half,
+        /// pop the menu DOWNWARD. WPF's ContextMenu.Placement=Top places
+        /// the menu above the placement target; =Bottom places it below.
+        /// VerticalOffset of +/- 4 leaves a 4-pixel gap between the menu
+        /// and the bar edge, matching the kil0bit `my = wr.Top - 4` /
+        /// `my = wr.Bottom + 4` constants in the popup-menu code.
+        /// </summary>
+        private void MainWindow_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (sender is not FrameworkElement fe) return;
+            var cm = fe.ContextMenu;
+            if (cm is null) return;
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+
+            NativeMethods.RECT barRect;
+            // GetWindowRect returns 0 on failure, nonzero on success (Win32
+            // convention). Cannot be used as a bool — `!int` is a CS0023.
+            if (NativeMethods.GetWindowRect(hwnd, out barRect) == 0) return;
+
+            // Mirror the kil0bit check: barTop > midpoint of monitor working
+            // area = bar is in the bottom half. System.Windows.Forms.Screen
+            // is per-monitor DPI aware (returns the screen the HWND is on)
+            // so its WorkingArea is in the same coordinate space as the
+            // barRect from GetWindowRect -- direct comparison is safe.
+            var screen = WnForms.Screen.FromHandle(hwnd);
+            int midY = (screen.WorkingArea.Top + screen.WorkingArea.Bottom) / 2;
+
+            if (barRect.Top > midY)
+            {
+                // Bar in bottom half -> pop menu UP
+                cm.Placement = PlacementMode.Top;
+                cm.VerticalOffset = -4;
+            }
+            else
+            {
+                // Bar in top half -> pop menu DOWN
+                cm.Placement = PlacementMode.Bottom;
+                cm.VerticalOffset = 4;
+            }
         }
 
         private void MenuItem_TaskManager_Click(object sender, RoutedEventArgs e)
@@ -719,20 +792,16 @@ namespace WinMeters
 
         private void MenuItem_About_Click(object sender, RoutedEventArgs e)
         {
-            WpfMessageBox.Show(
-                this,
-                "WinMeters v2.4\n\n" +
-                "A lightweight system monitoring utility for Windows.\n\n" +
-                "Features:\n" +
-                "• CPU & RAM monitoring\n" +
-                "• Multi-GPU VRAM & SRAM tracking\n" +
-                "• Disk & Network activity\n" +
-                "• Hardware temperatures\n\n" +
-                "• Use Ctrl+Alt+Shift+M to hide/show interface\n\n" +
-                "Created with AI.",
-                "About WinMeters",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            // kil0bit parity: the About entry (cmd 1003 in
+            // .Kilobit/OverlayWindow.cs WM_RBUTTONUP) opens Settings and
+            // auto-navigates to the About section instead of popping a
+            // transient MessageBox. The user gets a richer About view
+            // (version pulled from the assembly, GitHub repo link) inside
+            // the same UI surface as the rest of their settings, matching
+            // the upstream kil0bit reference port. OpenSettingsAndNavigateTo
+            // re-uses the single-instance gate and apply-on-save wiring so
+            // the cached reference is shared with the Settings entry.
+            OpenSettingsAndNavigateTo("About");
         }
 
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
