@@ -9,6 +9,7 @@ using Microsoft.Win32;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfMessageBox = System.Windows.MessageBox;
+using WpfBitmapSource = System.Windows.Media.Imaging.BitmapSource;
 using WinMeters.Utils;
 
 namespace WinMeters
@@ -46,13 +47,22 @@ namespace WinMeters
         private long _lastTimeTicks;
         private string _lastTimeFormatted = "";
 
-        // Cache geometry for pie charts to avoid recreation
-        private Geometry? _lastRamPieGeometry;
+        // Cache rendered bitmap + last percentage + last DPI bucket for pie charts.
+        // The bitmap is produced with GDI+ (System.Drawing.Graphics.FillPie / DrawEllipse)
+        // into a WPF WriteableBitmap backbuffer and displayed inside a WPF Image; see
+        // Utils/PieChartRenderer.cs and RENDERING.md for the policy. Pct + DPI bucket
+        // together form the cache key (Renderer.UpdatePieWithCache) — re-rendering only
+        // fires when either moves by more than its threshold, so a stable meter with
+        // occasional small fluctuations doesn't churn allocations.
+        private WpfBitmapSource? _lastRamPieSource;
         private double _lastRamPercentage = -1;
-        private Geometry? _lastGpuDedicatedGeometry;
+        private int _lastRamPieDpiBucket = -1;
+        private WpfBitmapSource? _lastGpuDedicatedSource;
         private double _lastGpuDedicatedPercentage = -1;
-        private Geometry? _lastGpuSharedGeometry;
+        private int _lastGpuDedicatedPieDpiBucket = -1;
+        private WpfBitmapSource? _lastGpuSharedSource;
         private double _lastGpuSharedPercentage = -1;
+        private int _lastGpuSharedPieDpiBucket = -1;
 
         // Foreground window tracking for Alt+Tab lowering mechanism
         private IntPtr _lastForegroundHwnd = IntPtr.Zero;
@@ -558,12 +568,15 @@ namespace WinMeters
 
         private void ClearCaches()
         {
-            _lastRamPieGeometry = null;
+            _lastRamPieSource = null;
             _lastRamPercentage = -1;
-            _lastGpuDedicatedGeometry = null;
+            _lastRamPieDpiBucket = -1;
+            _lastGpuDedicatedSource = null;
             _lastGpuDedicatedPercentage = -1;
-            _lastGpuSharedGeometry = null;
+            _lastGpuDedicatedPieDpiBucket = -1;
+            _lastGpuSharedSource = null;
             _lastGpuSharedPercentage = -1;
+            _lastGpuSharedPieDpiBucket = -1;
             _lastNetDownFormatted = "";
             _lastNetUpFormatted = "";
             _lastDiskReadFormatted = "";
@@ -663,20 +676,12 @@ namespace WinMeters
                 // CPU
                 SetupCpuBars();
 
-                // RAM
-                RamPie.Fill = ColorHelper.ParseBrush(_settings.Colors.RamPie);
-                RamBorder.Stroke = ColorHelper.ParseBrush(_settings.Colors.RamBorder);
-                RamBorder.StrokeThickness = _settings.Colors.RamBorderThickness;
-
-                // GPU Dedicated
-                GpuDedicatedPie.Fill = ColorHelper.ParseBrush(_settings.Colors.GpuDedicatedPie);
-                GpuDedicatedBorder.Stroke = ColorHelper.ParseBrush(_settings.Colors.RamBorder); // Reusing RAM border color for consistency
-                GpuDedicatedBorder.StrokeThickness = _settings.Colors.RamBorderThickness;
-
-                // GPU Shared
-                GpuSharedPie.Fill = ColorHelper.ParseBrush(_settings.Colors.GpuSharedPie);
-                GpuSharedBorder.Stroke = ColorHelper.ParseBrush(_settings.Colors.RamBorder);
-                GpuSharedBorder.StrokeThickness = _settings.Colors.RamBorderThickness;
+                // RAM / VRAM / SRAM pies: rendered with GDI+ into a WPF WriteableBitmap
+                // backbuffer (see Utils/PieChartRenderer.cs + RENDERING.md). The wedge
+                // fill AND the border stroke are painted into the same bitmap, so neither
+                // .Fill nor .Stroke brushes need to be assigned on the WPF Image host
+                // here — UpdateRamMeter / UpdateGpuMemoryMeters pass the current colors
+                // as parameters every tick.
 
                 // Disk Labels — the "R:" / "W:" prefixes use the read/write colors.
                 // The percentage values use the same colors so the meter stays self-consistent.
@@ -716,6 +721,18 @@ namespace WinMeters
 
         private void ApplyScale()
         {
+            // Lock the WPF window's DIP-height to AppBarService.BarHeightNormalDips × ScaleFactor
+            // (= 40 × Scale). Pair with the Window xaml's SizeToContent="Width" so WPF stops
+            // competing with the XAML for height — the WPF window's actual height always
+            // equals the centring formula's winHPx ÷ DPI. The WM_WINDOWPOSCHANGING Y-centre
+            // then lands at the *visual* centre of the WPF window. Before this fix the bar
+            // drifted ~4-12 DIPs downward because the centring formula anchored to a constant
+            // 32-DIP value while WinMeters' actual rendered height (CpuContainer 24 + Margin
+            // 5+5 + 2-row panels each ~14×2 + Margin 5+5 ≈ 40 DIPs) didn't match. Set BEFORE
+            // the early-return so first-load applies even when the saved Scale equals
+            // MainScale.ScaleX's default.
+            this.Height = 40 * _settings.General.Scale;
+
             if (Math.Abs(MainScale.ScaleX - _settings.General.Scale) <= 0.001) return;
 
             if (this.IsLoaded)
@@ -913,7 +930,19 @@ namespace WinMeters
         {
             if (!IsReadyToUpdate(ref _lastRamTicks, _settings.Rates.Ram ?? _settings.General.RefreshRateMs, now)) return;
             _monitorManager.UpdateRam();
-            PieChartRenderer.UpdatePieWithCache(RamPie, _monitorManager.RamUsage, ref _lastRamPieGeometry, ref _lastRamPercentage, _settings.Colors.RamBorderThickness);
+            // Render the RAM pie via GDI+ into a WPF WriteableBitmap backbuffer. The
+            // wedge fill and the border stroke are painted into the same bitmap; the
+            // WPF Image element hosts the result. See Utils/PieChartRenderer.cs.
+            PieChartRenderer.UpdatePieWithCache(
+                RamPie,
+                _monitorManager.RamUsage,
+                _settings.Colors.RamBorderThickness,
+                ColorHelper.ToDrawingColor(_settings.Colors.RamPie),
+                ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
+                _appBarService?.DpiScale ?? 1.0f,
+                ref _lastRamPieSource,
+                ref _lastRamPercentage,
+                ref _lastRamPieDpiBucket);
         }
 
         private void UpdateDiskMeter(long now)
@@ -1008,13 +1037,31 @@ namespace WinMeters
             if (dedicatedDue)
             {
                 double percentage = ResolveGpuDedicatedPercentage();
-                PieChartRenderer.UpdatePieWithCache(GpuDedicatedPie, percentage, ref _lastGpuDedicatedGeometry, ref _lastGpuDedicatedPercentage, _settings.Colors.RamBorderThickness);
+                PieChartRenderer.UpdatePieWithCache(
+                    GpuDedicatedPie,
+                    percentage,
+                    _settings.Colors.RamBorderThickness,
+                    ColorHelper.ToDrawingColor(_settings.Colors.GpuDedicatedPie),
+                    ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
+                    _appBarService?.DpiScale ?? 1.0f,
+                    ref _lastGpuDedicatedSource,
+                    ref _lastGpuDedicatedPercentage,
+                    ref _lastGpuDedicatedPieDpiBucket);
             }
 
             if (sharedDue)
             {
                 double percentage = ResolveGpuSharedPercentage();
-                PieChartRenderer.UpdatePieWithCache(GpuSharedPie, percentage, ref _lastGpuSharedGeometry, ref _lastGpuSharedPercentage, _settings.Colors.RamBorderThickness);
+                PieChartRenderer.UpdatePieWithCache(
+                    GpuSharedPie,
+                    percentage,
+                    _settings.Colors.RamBorderThickness,
+                    ColorHelper.ToDrawingColor(_settings.Colors.GpuSharedPie),
+                    ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
+                    _appBarService?.DpiScale ?? 1.0f,
+                    ref _lastGpuSharedSource,
+                    ref _lastGpuSharedPercentage,
+                    ref _lastGpuSharedPieDpiBucket);
             }
         }
 

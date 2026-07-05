@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WinMeters"
         mc:Ignorable="d"
-        Title="WinMeters" Height="40" Width="Auto" SizeToContent="WidthAndHeight"
+        Title="WinMeters" Height="40" Width="Auto" SizeToContent="Width"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         SnapsToDevicePixels="True" UseLayoutRounding="True">
@@ -174,11 +174,15 @@
                 </Grid>
             </StackPanel>
 
-            <!-- RAM -->
+            <!-- RAM
+                 Pie wedges are rendered with GDI+ (System.Drawing.Graphics.FillPie)
+                 into a WPF WriteableBitmap backbuffer and displayed inside an
+                 <Image>. The border (ellipse stroke) is drawn into the SAME bitmap,
+                 so no separate XAML border element is needed. See
+                 Utils/PieChartRenderer.cs and RENDERING.md for the policy. -->
             <StackPanel x:Name="PanelRam" Orientation="Horizontal">
                 <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Path x:Name="RamPie" Fill="#FFA500" Width="24" Height="24" Stretch="None"/>
-                    <Ellipse x:Name="RamBorder" Stroke="Black" StrokeThickness="1"/>
+                    <Image x:Name="RamPie" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock x:Name="RamLabel" Text="RAM" Style="{StaticResource PieLabelStyle}"/>
                 </Grid>
             </StackPanel>
@@ -186,8 +190,7 @@
             <!-- GPU Dedicated Memory -->
             <StackPanel x:Name="PanelGpuDedicated" Orientation="Horizontal">
                 <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Path x:Name="GpuDedicatedPie" Fill="#4ECDC4" Width="24" Height="24" Stretch="None"/>
-                    <Ellipse x:Name="GpuDedicatedBorder" Stroke="Black" StrokeThickness="1"/>
+                    <Image x:Name="GpuDedicatedPie" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock x:Name="GpuDedicatedLabel" Text="VRAM" Style="{StaticResource PieLabelStyle}"/>
                 </Grid>
             </StackPanel>
@@ -195,8 +198,7 @@
             <!-- GPU Shared Memory -->
             <StackPanel x:Name="PanelGpuShared" Orientation="Horizontal">
                 <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Path x:Name="GpuSharedPie" Fill="#A5D6A7" Width="24" Height="24" Stretch="None"/>
-                    <Ellipse x:Name="GpuSharedBorder" Stroke="Black" StrokeThickness="1"/>
+                    <Image x:Name="GpuSharedPie" Width="24" Height="24" Stretch="Uniform"/>
                     <TextBlock x:Name="GpuSharedLabel" Text="SRAM" Style="{StaticResource PieLabelStyle}"/>
                 </Grid>
             </StackPanel>

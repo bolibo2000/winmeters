@@ -68,3 +68,4 @@ project.lock.json
 *.msix
 *.msm
 *.msp
+commit_msg.txt

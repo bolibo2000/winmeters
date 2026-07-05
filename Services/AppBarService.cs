@@ -52,11 +52,25 @@ internal sealed class AppBarService : IDisposable
     private IntPtr _taskbarHwnd;
     private uint _currentDpi = 96;
     private float _dpiScale = 1.0f;
+    /// <summary>
+    /// Per-monitor DPI scale (96 = 100 %, 144 = 150 %, 192 = 200 %).
+    /// Updated from <c>WM_DPICHANGED</c> via <see cref="NativeMethods.GetDpiForWindow"/>.
+    /// Read by <c>MainWindow</c> when sizing pie-chart bitmaps (see
+    /// <c>PieChartRenderer.UpdatePieWithCache</c>) so the rendered pixel grid
+    /// matches the user's monitor scaling.
+    /// </summary>
+    public float DpiScale => _dpiScale;
     private bool _registered;
     private bool _disposed;
 
-    /// <summary>Logical bar height (DIPs). kil0bit uses 32 normal / 36 with pods.</summary>
-    private const int BarHeightNormalDips = 32;
+    /// <summary>Logical bar height (DIPs). WinMeters uses 40 (its XAML StackPanel
+    /// intrinsic content height with Margin="5,5,0,5" on CpuContainer + Margin="0,5"
+    /// on the 2-row panels); kil0bit uses 32 normal / 36 with pods. Bumped from
+    /// 32 → 40 in the centring fix so the formula's anchor matches WinMeters'
+    /// actual rendered height and the WM_WINDOWPOSCHANGING Y-centre lands at the
+    /// visual centre of the WPF window (was drifting ~4-12 DIPs downward before
+    /// this restatement).</summary>
+    private const int BarHeightNormalDips = 40;
     private const int BarHeightPodsDips = 36;
 
     public bool IsRegistered => _registered;
@@ -391,11 +405,19 @@ internal sealed class AppBarService : IDisposable
     /// <para>
     /// The window-height anchor is the IDEAL bar height from
     /// <see cref="ComputeBarHeightPx"/> — kil0bit's fixed
-    /// <c>oh = (ShowPods ? 36 : 32) × _dpiScale × ScaleFactor</c> formula.
-    /// Using <c>pos.cy</c> or the live HWND rect drifted the bar because
-    /// WinMeters' XAML <c>Height="40"</c> + auto-size-content routinely
-    /// renders taller than the kil0bit 32-DIP value when
-    /// <see cref="AppSettings.GeneralSettings.Scale"/> ≠ 1.0.
+    /// <c>oh = (ShowPods ? 36 : 32) × _dpiScale × ScaleFactor</c> formula
+    /// restated for WinMeters' actual 40-DIP content height (BarHeightNormalDips
+    /// was bumped from 32 to 40 to match WinMeters' XAML intrinsic height;
+    /// previously 32 didn't match and the bar drifted ~4-12 DIPs downward).
+    /// The companion fix on the WPF side (<see cref="MainWindow.ApplyScale"/> +
+    /// <see cref="MainWindow"/> xaml's <c>SizeToContent="Width"</c> +
+    /// <c>Height="40"</c>) locks the WPF window's actual DIP-height to
+    /// <c>BarHeightNormalDips × ScaleFactor = 40 × Scale</c>, so the WPF window's
+    /// pixel-height always equals <c>winHPx</c> and the centred Y lands at the
+    /// visual centre of the WPF window. Using <c>pos.cy</c> or the live HWND
+    /// rect was tried before and oscillated with content edits; locking
+    /// <c>this.Height</c> from the scaling code is the cleaner restatement of
+    /// the kil0bit invariant.
     /// </para>
     /// </summary>
     private bool ClampYToTaskbarPx(ref NativeMethods.WINDOWPOS pos)
@@ -465,8 +487,10 @@ internal sealed class AppBarService : IDisposable
 
     /// <summary>
     /// Computes the (post-dpi-and-scale) bar height in physical pixels using
-    /// kil0bit's <c>(ShowPods ? 36 : 32) × dpiScale × ScaleFactor</c> formula.
-    /// WinMeters has no ShowPods setting, so we always use 32.
+    /// kil0bit's <c>(ShowPods ? 36 : 32) × dpiScale × ScaleFactor</c> formula
+    /// restated for WinMeters' 40-DIP XAML intrinsic content
+    /// (<see cref="BarHeightNormalDips"/>). WinMeters has no ShowPods setting,
+    /// so we always use 40.
     /// </summary>
     private int ComputeBarHeightPx()
     {
