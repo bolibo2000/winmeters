@@ -696,31 +696,36 @@ public partial class SettingsWindow : Window
             // also dispatched through GenericToggle_Click because the Time
             // toggle on the Monitoring page sits in a direct CheckBox
             // (no MetricCard wrapper) and uses Click="GenericToggle_Click"
-            // directly. ApplySubMeterToggle consolidates the field-write +
-            // TriggerLiveUpdate so the per-MetricCard path (routed via
-            // SubMeterToggleChanged) and the direct-CheckBox path stay
-            // identically synchronized.
+            // directly. ApplySubMeterToggle is a pure field-setter shared
+            // with Card_SubMeterToggleChanged so the per-MetricCard path
+            // (routed via SubMeterToggleChanged) and the direct-CheckBox
+            // path stay identically synchronized. The post-switch
+            // TriggerLiveUpdate below fires the debounce timer once per
+            // GenericToggle_Click invocation.
             case "ShowCpuTemp":
             case "ShowGpuTemp":
             case "ShowHardwareLoad":
             case "ShowTime":
                 ApplySubMeterToggle(tag, value);
-                return; // ApplySubMeterToggle already triggered live update
+                break; // fall through to post-switch TriggerLiveUpdate
         }
         TriggerLiveUpdate();
     }
 
     /// <summary>
-    /// Single dispatch point for the four sub-meter visibility toggles
+    /// Pure field-setter for the four sub-meter visibility toggles
     /// (CPU Temp / GPU Temp / H/W Load / Show Time). Both the per-
     /// MetricCard path (raised from MetricCard.xaml.cs SubMeterToggleBase_Click
     /// via SubMeterToggleChanged) and the direct CheckBox path on the
-    /// Monitoring page call this helper, so a new sub-meter tag only needs
-    /// to be added in one place rather than two parallel switch statements.
-    /// The default branch returns without firing TriggerLiveUpdate so the
-    /// caller knows whether something changed.
+    /// Monitoring page call this helper, so a new sub-meter tag only
+    /// needs to be added in one place rather than two parallel switch
+    /// statements. Unknown tags are silently no-op'd. Callers drive
+    /// <see cref="TriggerLiveUpdate"/> themselves, which keeps each
+    /// call-site's debounce semantics intact (the per-card path fires
+    /// once after the helper, the per-CheckBox path falls through to
+    /// the existing post-switch TriggerLiveUpdate in GenericToggle_Click).
     /// </summary>
-    private bool ApplySubMeterToggle(string tag, bool value)
+    private void ApplySubMeterToggle(string tag, bool value)
     {
         switch (tag)
         {
@@ -728,10 +733,7 @@ public partial class SettingsWindow : Window
             case "ShowGpuTemp":       _working.Visibility.ShowGpuTemp       = value; break;
             case "ShowHardwareLoad":  _working.Visibility.ShowHardwareLoad  = value; break;
             case "ShowTime":          _working.Visibility.ShowTime          = value; break;
-            default: return false;
         }
-        TriggerLiveUpdate();
-        return true;
     }
 
     private void ComboRefreshRate_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -820,6 +822,7 @@ public partial class SettingsWindow : Window
     private void Card_SubMeterToggleChanged(object? sender, SubMeterToggleChangedEventArgs e)
     {
         ApplySubMeterToggle(e.Tag, e.IsChecked);
+        TriggerLiveUpdate();
     }
 
     private void Card_ValidationFailed(object? sender, ValidationFailedEventArgs e)

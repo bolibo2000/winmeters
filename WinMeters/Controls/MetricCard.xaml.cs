@@ -285,7 +285,7 @@ public partial class MetricCard : WpfCtrl.UserControl
     private void SubMeterToggleBase_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not WpfCtrl.CheckBox ts || ts.Tag is not string tag) return;
-        SubMeterToggleChanged?.Invoke(this, new SubMeterToggleChangedEventArgs(MetricKey, tag, ts.IsChecked == true));
+        SubMeterToggleChanged?.Invoke(this, new SubMeterToggleChangedEventArgs(tag, ts.IsChecked == true));
     }
 }
 
@@ -298,14 +298,12 @@ public class RefreshRateChangedEventArgs : EventArgs
 
 public class SubMeterToggleChangedEventArgs : EventArgs
 {
-    /// <summary>The owning MetricCard's MetricKey (Cpu / Ram / Gpu / Net / Disk).</summary>
-    public string MetricKey { get; }
-    /// <summary>The toggle's Tag -- mirrors the AppSettings.Visibility key the toggle writes through to (e.g. ShowCpuTemp).</summary>
+    /// <summary>The toggle's Tag -- mirrors the AppSettings.Visibility key the toggle writes through to (e.g. ShowCpuTemp). MetricKey was previously carried on the args but the lone consumer (SettingsWindow.Card_SubMeterToggleChanged) dispatches purely on Tag, so it was removed to reduce surface area.</summary>
     public string Tag { get; }
     public bool IsChecked { get; }
-    public SubMeterToggleChangedEventArgs(string metricKey, string tag, bool isChecked)
+    public SubMeterToggleChangedEventArgs(string tag, bool isChecked)
     {
-        MetricKey = metricKey; Tag = tag; IsChecked = isChecked;
+        Tag = tag; IsChecked = isChecked;
     }
 }
 
