@@ -93,4 +93,23 @@
     <!-- Note: logging removed and design-time shim files neutralized -->
   </ItemGroup>
 
+  <!-- Build-time guard against the MSB4025 XML-comment trap. A
+       double-hyphen sequence inside an XML comment is illegal in
+       both the Wpf XAML compiler and MSBuild's own project-file
+       parser, and the resulting error is cryptic ("An XML comment
+       cannot contain double-hyphen"). The Check-XmlComments.ps1
+       script scans every .xaml / .csproj / .props / .targets for
+       the pattern and fails the build with a clear, file:line
+       error if it finds one. Runs before CoreCompile so the script
+       catches the issue before the Wpf XAML compiler can. Skip on
+       design-time builds (temp wpftmp projects have a stripped
+       XAML set). Opt out for a single build with
+       -p:DisableXmlCommentCheck=true. -->
+  <Target Name="CheckXmlComments"
+          BeforeTargets="CoreCompile"
+          Condition="'$(DisableXmlCommentCheck)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Check-XmlComments.ps1&quot; -Path &quot;$(MSBuildThisFileDirectory)&quot;"
+          ContinueOnError="false" />
+  </Target>
+
 </Project>
