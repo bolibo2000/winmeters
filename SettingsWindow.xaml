@@ -4,8 +4,31 @@
         xmlns:ctrl="clr-namespace:WinMeters.Controls"
         Title="WinMeters Settings" Height="720" Width="920"
         MinHeight="540" MinWidth="900" MaxWidth="920"
-        ResizeMode="CanResize" WindowStartupLocation="CenterOwner"
+        WindowStartupLocation="CenterScreen"
+        ResizeMode="CanMinimize"
         Background="{DynamicResource ThemeBgBrush}">
+    <Window.Resources>
+        <!-- Hover-aware tile border for the Home page's 4 navigation
+             cards (General / Monitoring / Appearance / About). Inherits
+             the dark card surface + 8px corner radius + 20,16 padding
+             from WinMetersCard and only overrides BorderBrush to remove
+             the always-on 1px semi-transparent frame so the 4-up grid
+             breathes at rest. The IsMouseOver trigger swaps the border
+             to ThemeAccentBrush so the cursor handoff into a tile is
+             unambiguous without dominating the resting visual; the
+             trigger fires when the cursor is anywhere over the inner
+             Border (which fills the Button content area), not just on
+             the 1px edge itself. -->
+        <Style x:Key="WinMetersHomeTile" TargetType="Border"
+               BasedOn="{StaticResource WinMetersCard}">
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
@@ -167,8 +190,8 @@
 
                         <Button Grid.Row="0" Grid.Column="0" Click="HomeCard_Click" Tag="General" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource WinMetersCard}">
-                                <Grid>
+                            <Border Style="{StaticResource WinMetersHomeTile}">
+                                <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -188,8 +211,8 @@
 
                         <Button Grid.Row="0" Grid.Column="2" Click="HomeCard_Click" Tag="Monitoring" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource WinMetersCard}">
-                                <Grid>
+                            <Border Style="{StaticResource WinMetersHomeTile}">
+                                <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -209,8 +232,8 @@
 
                         <Button Grid.Row="2" Grid.Column="0" Click="HomeCard_Click" Tag="Appearance" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource WinMetersCard}">
-                                <Grid>
+                            <Border Style="{StaticResource WinMetersHomeTile}">
+                                <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
@@ -230,8 +253,8 @@
 
                         <Button Grid.Row="2" Grid.Column="2" Click="HomeCard_Click" Tag="About" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
-                            <Border Style="{StaticResource WinMetersCard}">
-                                <Grid>
+                            <Border Style="{StaticResource WinMetersHomeTile}">
+                                <Grid VerticalAlignment="Center">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="*"/>
