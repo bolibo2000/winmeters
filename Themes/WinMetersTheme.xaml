@@ -412,11 +412,13 @@
         WinMeters thin collapsible vertical scrollbar. Matches the kil0bit
         ModernWPF overlay scrollbar look: 8px wide, no end buttons, accent
         thumb on a transparent track. Opacity sits at 0.4 when the
-        scrollbar is idle and snaps to 1 on mouse enter (the
-        "collapsible" feel). Defined globally because the only ScrollViewer
-        in the app is the settings window's content scroller; ListBox
-        scrollbars inside the settings window also inherit this look for
-        consistency.
+        scrollbar is idle and fades to 1 on mouse enter / fades back to
+        0.4 on mouse leave (the "collapsible" feel; a 150ms CubicEase
+        EaseInOut animation on both directions instead of an instant
+        Opacity setter snap). Defined globally because the only
+        ScrollViewer in the app is the settings window's content
+        scroller; ListBox scrollbars inside the settings window also
+        inherit this look for consistency.
     -->
     <Style x:Key="WinMetersScrollBarThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
@@ -470,8 +472,40 @@
             </Setter.Value>
         </Setter>
         <Style.Triggers>
+            <!-- Mouse enter / leave fade: the Trigger.EnterActions /
+                 Trigger.ExitActions Storyboards replace the instant
+                 <Setter> snap with a 150ms CubicEase EaseInOut
+                 DoubleAnimation on the ScrollBar's own Opacity
+                 property. Leaving From unspecified means WPF picks up
+                 the current animated value at trigger time, so a
+                 rapid strip-mouse over and off the bar still ends at
+                 the resting 0.4 (or 1 on hover) without snapping
+                 through un animated intermediate frames. -->
             <Trigger Property="IsMouseOver" Value="True">
-                <Setter Property="Opacity" Value="1"/>
+                <Trigger.EnterActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             To="1" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseInOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.EnterActions>
+                <Trigger.ExitActions>
+                    <BeginStoryboard>
+                        <Storyboard>
+                            <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                             To="0.4" Duration="0:0:0.15">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseInOut"/>
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </BeginStoryboard>
+                </Trigger.ExitActions>
             </Trigger>
             <Trigger Property="Orientation" Value="Horizontal">
                 <Setter Property="Width" Value="Auto"/>
