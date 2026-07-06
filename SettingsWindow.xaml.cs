@@ -161,9 +161,64 @@ public partial class SettingsWindow : Window
 
     private void NavRail_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is WnControls.RadioButton rb && rb.Tag is string tag)
+        if (sender is not WnControls.RadioButton rb || rb.Tag is not string tag) return;
+        SelectSection(tag);
+
+        // Show click-triggered flyout only when the rail is collapsed
+        // (the expanded rail already shows the section name as a label
+        // so the flyout would be redundant). NavItemMetadata is the
+        // single source of truth for the name + description shown in
+        // the flyout -- this also dedupes the descriptions that used
+        // to be hardcoded in the XAML rich ToolTip elements (removed
+        // in the same commit).
+        if (BtnToggleRail.IsChecked == true)
         {
-            SelectSection(tag);
+            ShowNavFlyout(rb, tag);
+        }
+    }
+
+    /// <summary>
+    /// Show (or toggle) the nav flyout Popup anchored to the right of
+    /// the clicked nav RadioButton. Content is built from
+    /// <see cref="NavItemMetadata"/> so the flyout name + description
+    /// stay in lock-step with the search filter matches.
+    ///
+    /// Toggle semantics: clicking the same item that already has the
+    /// flyout open closes it (so the user can dismiss without
+    /// clicking outside). Clicking a different item switches the
+    /// flyout to the new item.
+    ///
+    /// Flicker avoidance: the <c>IsOpen = true</c> is dispatched via
+    /// <see cref="Dispatcher.BeginInvoke(System.Action)"/> so WPF's
+    /// <c>StaysOpen="False"</c> close-on-outside-click logic doesn't
+    /// immediately close the popup on the very click that opened it
+    /// (the click is on the PlacementTarget, which is outside the
+    /// Popup's visual area).
+    /// </summary>
+    private void ShowNavFlyout(WnControls.RadioButton target, string sectionName)
+    {
+        // Toggle: if the popup is already open for the same item,
+        // close it immediately (no deferred dispatch needed -- the
+        // popup is already open so there's no flicker to avoid).
+        if (NavFlyout.IsOpen && ReferenceEquals(NavFlyout.PlacementTarget, target))
+        {
+            NavFlyout.IsOpen = false;
+            return;
+        }
+
+        foreach (var (name, description) in NavItemMetadata)
+        {
+            if (name == sectionName)
+            {
+                FlyoutTitle.Text       = name;
+                FlyoutDescription.Text = description;
+                NavFlyout.PlacementTarget = target;
+                // Defer the IsOpen=true to after the click event
+                // completes so StaysOpen=False doesn't immediately
+                // close it on the same click.
+                Dispatcher.BeginInvoke(new Action(() => NavFlyout.IsOpen = true));
+                return;
+            }
         }
     }
 
