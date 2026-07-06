@@ -111,6 +111,16 @@ public partial class SettingsWindow : Window
     // blocks save while this is true -- inline errors on the MetricCard
     // already call out which input is bad.
     private bool _hasValidationError;
+    // Replaces the WPF Window.DialogResult property. MainWindow opens this
+    // window modeless via Show() (so the user can keep fiddling with the
+    // bar / drag-position it while Settings is up), and the WPF Window's
+    // built-in DialogResult setter THROWS InvalidOperationException when
+    // not shown via ShowDialog(). Using a plain bool works for both
+    // modeless and modal Show paths and lets SettingsWindow_Closing plus
+    // the MainWindow.Closed subscriber cleanly distinguish "saved" from
+    // "cancelled" without touching the WPF property.
+    private bool _userSaved;
+    public bool WasSaved => _userSaved;
 
     public SettingsWindow(AppSettings original)
     {
@@ -909,7 +919,14 @@ public partial class SettingsWindow : Window
         ApplyMeterOrderToWorking();
         CopyWorkingToOriginal();
         _original.Save();
-        DialogResult = true;
+        // Flag WasSaved and Close -- do NOT set WPF Window.DialogResult.
+        // MainWindow shows this window modeless via Show() (see
+        // MainWindow.OpenSettingsAndNavigateTo), and the WPF DialogResult
+        // setter only accepts writes when the window was opened via
+        // ShowDialog(). Setting it from a Show()'d window throws
+        // InvalidOperationException. The MainWindow.Closed subscriber and
+        // SettingsWindow_Closing both read WasSaved instead.
+        _userSaved = true;
         Close();
     }
 
@@ -944,7 +961,12 @@ public partial class SettingsWindow : Window
 
     private void SettingsWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
-        if (DialogResult == true) return;
+        // Same DialogResult caveat as BtnSave_Click: MainWindow shows this
+        // window modeless via Show() so the WPF DialogResult property is
+        // null on close. Read our own _userSaved bool (set by
+        // BtnSave_Click) instead of the WPF property to skip the snapshot
+        // revert on a successful save.
+        if (_userSaved) return;
 
         // Preserve the nav rail collapse state across the cancel
         // revert. The standard snapshot-restore below would clobber

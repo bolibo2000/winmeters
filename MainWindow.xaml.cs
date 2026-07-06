@@ -1128,11 +1128,15 @@ namespace WinMeters
         /// one's BtnSave_Click wins.
         ///
         /// Apply-on-save: the Closed subscriber fires after the dialog
-        /// closes. If DialogResult == true (BtnSave_Click path), we run
-        /// the full ApplySettings branch. If DialogResult != true
-        /// (X-button or Esc), SettingsWindow's own SettingsWindow_Closing
-        /// handler already restored the snapshot to _original before
-        /// Closed even fires, so we leave _settings alone.
+        /// closes. If dlg.WasSaved (BtnSave_Click path), we run the full
+        /// ApplySettings branch. If not (X-button or Esc), SettingsWindow's
+        /// own SettingsWindow_Closing handler already restored the snapshot
+        /// to _original before Closed even fires, so we leave _settings
+        /// alone. We deliberately use the SettingsWindow.WasSaved bool
+        /// rather than the WPF Window.DialogResult property -- Settings is
+        /// shown modeless via Show() (so the user can drag the bar while
+        /// it's up), and the WPF DialogResult setter throws when called on
+        /// a Show()'d window.
         /// </summary>
         private void OpenSettingsAndNavigateTo(string? sectionName)
         {
@@ -1153,7 +1157,7 @@ namespace WinMeters
             {
                 try
                 {
-                    if (dlg.DialogResult == true)
+                    if (dlg.WasSaved)
                     {
                         ApplySettings();
                     }
