@@ -36,6 +36,12 @@ public partial class SettingsWindow : Window
     /// populate / save loops which sub-object holds the meter state. Adding
     /// a new meter means adding one entry here + one &lt;ctrl:MetricCard&gt;
     /// x:Name to the XAML.
+    /// MaxValueRemoved: the WriteMaxValue / ReadMaxValue lambda pair was
+    /// dropped from every entry along with the per-meter Max-value TextBox
+    /// on MetricCard.xaml in the same commit (user request: remove the
+    /// Monitoring Max-value option from UI). The AppSettings.MaxValues
+    /// fields stay intact so any future consumer-side wiring can drop in
+    /// without touching settings.json.
     /// </summary>
     private static readonly MetricBinding[] MetricBindings =
     {
@@ -43,16 +49,12 @@ public partial class SettingsWindow : Window
             (s, v) => s.Visibility.ShowCpu = v,
             (s) => s.Visibility.ShowCpu,
             (s, v) => s.Rates.Cpu = v,
-            (s) => s.Rates.Cpu,
-            (s, v) => s.MaxValues.Cpu = v,
-            (s) => s.MaxValues.Cpu),
+            (s) => s.Rates.Cpu),
         new("Ram",  "Ram",
             (s, v) => s.Visibility.ShowRam = v,
             (s) => s.Visibility.ShowRam,
             (s, v) => s.Rates.Ram = v,
-            (s) => s.Rates.Ram,
-            (s, v) => s.MaxValues.Ram = v,
-            (s) => s.MaxValues.Ram),
+            (s) => s.Rates.Ram),
         // Gpu card aggregates ShowGpuDedicated + ShowGpuShared into one
         // toggle. The MetricCard's IsShown boolean reflects "any GPU pie
         // shown"; we OR the two on save.
@@ -60,23 +62,17 @@ public partial class SettingsWindow : Window
             (s, v) => { if (v) { s.Visibility.ShowGpuDedicated = true; s.Visibility.ShowGpuShared = true; } else { s.Visibility.ShowGpuDedicated = false; s.Visibility.ShowGpuShared = false; } },
             (s) => s.Visibility.ShowGpuDedicated && s.Visibility.ShowGpuShared,
             (s, v) => s.Rates.GpuDedicated = v,
-            (s) => s.Rates.GpuDedicated,
-            (s, v) => s.MaxValues.Gpu = v,
-            (s) => s.MaxValues.Gpu),
+            (s) => s.Rates.GpuDedicated),
         new("Net",  "Net",
             (s, v) => s.Visibility.ShowNet = v,
             (s) => s.Visibility.ShowNet,
             (s, v) => s.Rates.Net = v,
-            (s) => s.Rates.Net,
-            (s, v) => s.MaxValues.Net = v,
-            (s) => s.MaxValues.Net),
+            (s) => s.Rates.Net),
         new("Disk", "Disk",
             (s, v) => s.Visibility.ShowDisk = v,
             (s) => s.Visibility.ShowDisk,
             (s, v) => s.Rates.Disk = v,
-            (s) => s.Rates.Disk,
-            (s, v) => s.MaxValues.Disk = v,
-            (s) => s.MaxValues.Disk),
+            (s) => s.Rates.Disk),
     };
 
     private static readonly Dictionary<string, MetricCard> MetricCardsByKey = new();
@@ -602,7 +598,6 @@ public partial class SettingsWindow : Window
         {
             if (!MetricCardsByKey.TryGetValue(binding.MetricKey, out var card)) continue;
             card.IsShown         = binding.ReadIsShown(_working);
-            card.MaxValueText    = binding.ReadMaxValue(_working).ToString(System.Globalization.CultureInfo.InvariantCulture);
             card.RefreshRateText = (binding.ReadRefreshRate(_working) ?? _working.General.RefreshRateMs).ToString();
 
             if (_working.SectionColors.TryGetValue(binding.MetricKey, out var hex))
@@ -610,14 +605,15 @@ public partial class SettingsWindow : Window
 
             // Idempotent event attach. unsubscribe-then-subscribe - never
             // double-tap on subsequent PopulateUi calls (BIND-77x redo).
+            // MaxValueChanged was removed alongside the per-meter Max-value
+            // TextBox on MetricCard.xaml in the same commit (user request:
+            // remove the Monitoring Max-value option from UI).
             card.IsShownChanged       -= Card_IsShownChanged;
-            card.MaxValueChanged      -= Card_MaxValueChanged;
             card.RefreshRateChanged   -= Card_RefreshRateChanged;
             card.SectionColorChanged  -= Card_SectionColorChanged;
             card.ValidationFailed     -= Card_ValidationFailed;
 
             card.IsShownChanged       += Card_IsShownChanged;
-            card.MaxValueChanged      += Card_MaxValueChanged;
             card.RefreshRateChanged   += Card_RefreshRateChanged;
             card.SectionColorChanged  += Card_SectionColorChanged;
             card.ValidationFailed     += Card_ValidationFailed;
@@ -750,14 +746,6 @@ public partial class SettingsWindow : Window
         var binding = FindBinding(card.MetricKey);
         if (binding is null) return;
         binding.WriteIsShown(_working, card.IsShown);
-        TriggerLiveUpdate();
-    }
-
-    private void Card_MaxValueChanged(object? sender, MaxValueChangedEventArgs e)
-    {
-        var binding = FindBinding(e.MetricKey);
-        if (binding is null) return;
-        binding.WriteMaxValue(_working, e.Value);
         TriggerLiveUpdate();
     }
 
@@ -1035,11 +1023,14 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Per-meter wiring record. Holds lambdas that read/write the four
-    /// settings sub-objects (Visibility.X / Rates.X / MaxValues.X /
+    /// Per-meter wiring record. Holds lambdas that read/write the three
+    /// settings sub-objects (Visibility.X / Rates.X /
     /// MetricCard.SectionColorHex). Keeps PopulateMetrics / card-event
     /// handlers one-liners. Adding a new meter = one MetricBinding entry
-    /// + one &lt;ctrl:MetricCard&gt; XAML element.
+    /// + one &lt;ctrl:MetricCard&gt; XAML element. MaxValueRemoved:
+    /// WriteMaxValue / ReadMaxValue lamdbas dropped in the same commit
+    /// as the MetricCard Max-value TextBox removal; AppSettings.MaxValues
+    /// still exists for any future consumer-side wiring.
     /// </summary>
     private sealed record MetricBinding(
         string MetricKey,
@@ -1047,7 +1038,5 @@ public partial class SettingsWindow : Window
         Action<AppSettings, bool>  WriteIsShown,
         Func<AppSettings, bool>    ReadIsShown,
         Action<AppSettings, int?>  WriteRefreshRate,
-        Func<AppSettings, int?>    ReadRefreshRate,
-        Action<AppSettings, double> WriteMaxValue,
-        Func<AppSettings, double>  ReadMaxValue);
+        Func<AppSettings, int?>    ReadRefreshRate);
 }

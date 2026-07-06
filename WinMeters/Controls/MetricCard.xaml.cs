@@ -7,17 +7,21 @@ using System.Windows.Input;
 using WnForms = System.Windows.Forms;
 #endif
 
-namespace WinMeters.Controls;
-
-/// <summary>
-/// One themed per-meter card with four controls: Show toggle, Section
-/// colour swatch, Max-value textbox, Refresh-rate textbox. Replaces the
-/// flat UniformGrids that previously scattered the same four affordances
-/// across the Monitoring, General, and Appearance pages. Adding a new
-/// meter means wiring one new card here on the Monitoring page -- not
-/// three pages of switch statements. WinMeters-style dark surface; the
-/// in-card Show toggle uses the hand-built WinMetersToggleSwitch style
-/// (a CheckBox retemplated into a 40x20 rounded track + sliding thumb).
+namespace WinMeters.Controls;    /// <summary>
+    /// One themed per-meter card with three controls: Show toggle, Section
+    /// colour swatch, Refresh-rate textbox. Replaces the flat UniformGrids
+    /// that previously scattered the same affordances across the Monitoring,
+    /// General, and Appearance pages. Adding a new meter means wiring one
+    /// new card here on the Monitoring page -- not three pages of switch
+    /// statements. WinMeters-style dark surface; the in-card Show toggle
+    /// uses the hand-built WinMetersToggleSwitch style (a CheckBox
+    /// retemplated into a 40x20 rounded track + sliding thumb).
+    /// MaxValueRemoved: the per-meter Max-value textbox was removed from
+    /// this card in lock-step with its DependencyProperty, validation
+    /// branch, MaxValueChanged event, and MaxValueChangedEventArgs class
+    /// (user request: remove the Monitoring Max-value option from UI).
+    /// AppSettings.MaxValues still exists so any future consumer-side
+    /// wiring can drop in without touching settings.json.
 ///
 /// Type-name disambiguation: the WinMeters project has both UseWPF=true
 /// and UseWindowsForms=true so the SDK auto-imports both
@@ -33,11 +37,11 @@ public partial class MetricCard : WpfCtrl.UserControl
     {
         InitializeComponent();
 
-        // Idempotent PreviewTextInput attach for both numeric text boxes.
+        // Idempotent PreviewTextInput attach for the refresh-rate text box.
         // Detach-then-attach avoids double-subscribing if PopulateUi uses
         // the same card instance twice (BIND-77x family of regressions).
-        TxtMax.PreviewTextInput   -= Numeric_PreviewTextInput;
-        TxtMax.PreviewTextInput   += Numeric_PreviewTextInput;
+        // (The Max-value text box was removed alongside the MaxValue UI
+        // affordance; see the row-2 comment in MetricCard.xaml.)
         TxtRate.PreviewTextInput  -= Numeric_PreviewTextInput;
         TxtRate.PreviewTextInput  += Numeric_PreviewTextInput;
     }
@@ -95,16 +99,6 @@ public partial class MetricCard : WpfCtrl.UserControl
         set => SetValue(IsShownProperty, value);
     }
 
-    public static readonly DependencyProperty MaxValueTextProperty =
-        DependencyProperty.Register(nameof(MaxValueText), typeof(string), typeof(MetricCard),
-            new PropertyMetadata("100", OnNumericTextChanged));
-
-    public string MaxValueText
-    {
-        get => (string)GetValue(MaxValueTextProperty);
-        set => SetValue(MaxValueTextProperty, value);
-    }
-
     public static readonly DependencyProperty RefreshRateTextProperty =
         DependencyProperty.Register(nameof(RefreshRateText), typeof(string), typeof(MetricCard),
             new PropertyMetadata("1000", OnNumericTextChanged));
@@ -148,7 +142,14 @@ public partial class MetricCard : WpfCtrl.UserControl
     // ---- Public events raised when the user changes a value --------------------
 
     public event EventHandler? IsShownChanged;
-    public event EventHandler<MaxValueChangedEventArgs>? MaxValueChanged;
+    // MaxValueRemoved: the per-meter Max-value TextBox was removed from
+    // MetricCard.xaml in the same commit (user request: remove the
+    // Monitoring Max-value option from UI). The MaxValues data model on
+    // AppSettings stays intact so any future consumer-side wiring can
+    // drop in without touching settings.json. The MaxValueChanged event,
+    // ValidationFailedEventArgs.MaxError, the TryParseDouble branch, and
+    // the MaxText preview filter were all deleted in lock-step with the
+    // UI affordance.
     public event EventHandler<RefreshRateChangedEventArgs>? RefreshRateChanged;
     public event EventHandler<SectionColorChangedEventArgs>? SectionColorChanged;
     public event EventHandler<ValidationFailedEventArgs>? ValidationFailed;
@@ -182,18 +183,7 @@ public partial class MetricCard : WpfCtrl.UserControl
 
     private void ValidateAndFire()
     {
-        bool maxOk = TryParseDouble(MaxValueText, out double maxValue, out string? maxErr);
         bool rateOk = TryParseInt(RefreshRateText, out int rateValue, out string? rateErr);
-        // 0 is a valid maxvalue (means "stay at zero baseline when no traffic").
-        if (maxErr is not null)
-        {
-            ShowError(ErrMax, TxtMax, maxErr);
-        }
-        else
-        {
-            ClearError(ErrMax, TxtMax);
-            MaxValueChanged?.Invoke(this, new MaxValueChangedEventArgs(MetricKey, maxValue));
-        }
         if (rateErr is not null)
         {
             ShowError(ErrRate, TxtRate, rateErr);
@@ -203,9 +193,9 @@ public partial class MetricCard : WpfCtrl.UserControl
             ClearError(ErrRate, TxtRate);
             RefreshRateChanged?.Invoke(this, new RefreshRateChangedEventArgs(MetricKey, rateValue));
         }
-        if (!maxOk || !rateOk)
+        if (!rateOk)
         {
-            ValidationFailed?.Invoke(this, new ValidationFailedEventArgs(MetricKey, maxErr, rateErr));
+            ValidationFailed?.Invoke(this, new ValidationFailedEventArgs(MetricKey, rateErr));
         }
     }
 
@@ -225,16 +215,6 @@ public partial class MetricCard : WpfCtrl.UserControl
         tb.ToolTip = null;
     }
 
-    private static bool TryParseDouble(string? s, out double value, out string? error)
-    {
-        if (string.IsNullOrWhiteSpace(s)) { value = 0; error = "Empty"; return false; }
-        if (!double.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out value))
-        { error = "Invalid number"; return false; }
-        if (value < 0) { error = "Must be >= 0"; return false; }
-        error = null;
-        return true;
-    }
-
     private static bool TryParseInt(string? s, out int value, out string? error)
     {
         if (string.IsNullOrWhiteSpace(s)) { value = 0; error = "Empty"; return false; }
@@ -247,11 +227,11 @@ public partial class MetricCard : WpfCtrl.UserControl
 
     private void Numeric_PreviewTextInput(object sender, TextCompositionEventArgs e)
     {
-        // Digit + decimal-point filter. Match the legacy single-page dialog
-        // filter so users can type "1.5" for MaxValue and "1000" for refresh
-        // rate without pasting in a unit suffix. We accept "." only (not ",")
-        // because the validator parses with InvariantCulture; accepting "1,5"
-        // only to have the validator reject it would be confusing.
+        // Digit-only filter for the refresh-rate text box. Match the legacy
+        // single-page dialog filter so users can type "1000" without pasting
+        // in a unit suffix. We accept "." only (not ",") because the validator
+        // parses with InvariantCulture; accepting "1,5" only to have the
+        // validator reject it would be confusing.
         e.Handled = !string.IsNullOrEmpty(e.Text) &&
                     !e.Text.All(ch => char.IsDigit(ch) || ch == '.');
     }
@@ -283,13 +263,6 @@ public partial class MetricCard : WpfCtrl.UserControl
     }
 }
 
-public class MaxValueChangedEventArgs : EventArgs
-{
-    public string MetricKey { get; }
-    public double Value { get; }
-    public MaxValueChangedEventArgs(string key, double value) { MetricKey = key; Value = value; }
-}
-
 public class RefreshRateChangedEventArgs : EventArgs
 {
     public string MetricKey { get; }
@@ -306,10 +279,9 @@ public class SectionColorChangedEventArgs : EventArgs
 public class ValidationFailedEventArgs : EventArgs
 {
     public string MetricKey { get; }
-    public string? MaxError { get; }
     public string? RateError { get; }
-    public ValidationFailedEventArgs(string key, string? maxErr, string? rateErr)
+    public ValidationFailedEventArgs(string key, string? rateErr)
     {
-        MetricKey = key; MaxError = maxErr; RateError = rateErr;
+        MetricKey = key; RateError = rateErr;
     }
 }

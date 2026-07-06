@@ -48,11 +48,15 @@
                 </StackPanel>
             </Grid>
 
-            <!-- 3-control row: section color (with swatch + pick), max value, refresh rate -->
+            <!-- 2-control row: section color (with swatch + pick), refresh rate.
+                 The Max-value column was removed in the same commit per user
+                 request (the data model stays intact on AppSettings.MaxValues
+                 so any future consumer-side wiring can drop in without
+                 touching settings.json), but the on-card UI affordance and
+                 its DP / validation / event handler were deleted because
+                 there is no current rendering consumer that reads them. -->
             <Grid Grid.Row="2">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="16"/>
                     <ColumnDefinition Width="*"/>
@@ -76,30 +80,8 @@
                             HorizontalContentAlignment="Left"/>
                 </Grid>
 
-                <!-- Max value -->
-                <StackPanel Grid.Column="2">
-                    <TextBlock Style="{StaticResource WinMetersTextHint}"
-                               Text="Max value"
-                               Margin="0,0,0,2"/>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-                        <TextBox x:Name="TxtMax" Grid.Column="0"
-                                 Style="{StaticResource WinMetersTextBox}"
-                                 Text="{Binding ElementName=Root, Path=MaxValueText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
-                        <TextBlock x:Name="ErrMax" Grid.Column="1"
-                                   Style="{StaticResource WinMetersTextSub}"
-                                   Foreground="{DynamicResource ThemeDangerBrush}"
-                                   Visibility="Collapsed"
-                                   FontSize="11" Margin="6,0,0,0"
-                                   VerticalAlignment="Center"/>
-                    </Grid>
-                </StackPanel>
-
                 <!-- Refresh rate -->
-                <StackPanel Grid.Column="4">
+                <StackPanel Grid.Column="2">
                     <TextBlock Style="{StaticResource WinMetersTextHint}"
                                Text="Refresh rate (ms)"
                                Margin="0,0,0,2"/>
