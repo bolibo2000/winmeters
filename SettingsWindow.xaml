@@ -539,23 +539,19 @@
 
                         <Border Grid.Column="0" Style="{StaticResource WinMetersCard}">
                             <StackPanel>
-                                <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Layout"/>
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Scale" Margin="0,0,0,4"/>
-                                <DockPanel Margin="0,0,0,12">
-                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource WinMetersTextSub}"
-                                               Text="{Binding ElementName=SliderScale, Path=Value, StringFormat=F2}"/>
-                                    <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0"
-                                            TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource WinMetersSlider}"/>
-                                </DockPanel>
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Opacity" Margin="0,0,0,4"/>
-                                <DockPanel Margin="0,0,0,4">
-                                    <TextBlock DockPanel.Dock="Right" Style="{StaticResource WinMetersTextSub}"
-                                               Text="{Binding ElementName=SliderOpacity, Path=Value, StringFormat=F2}"/>
-                                    <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0"
-                                            TickFrequency="0.1" IsSnapToTickEnabled="True"
-                                            Style="{StaticResource WinMetersSlider}"/>
-                                </DockPanel>
+                                <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Layout"/>                                                <!-- kil0bit-style slider rows: small label + plain slider, no value
+                                                     display TextBlock and no DockPanel wrapper. The current value
+                                                     is visible via the thumb position only. Matches the
+                                                     Scaling / Column Spacing rows in .Kilobit/SettingsWindow.xaml. -->
+                                                <TextBlock Text="Scale" FontWeight="SemiBold" FontSize="12" Opacity="0.7" Margin="0,0,0,4"/>
+                                                <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0"
+                                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                        Style="{StaticResource WinMetersSlider}" Margin="0,0,0,12"/>
+
+                                                <TextBlock Text="Opacity" FontWeight="SemiBold" FontSize="12" Opacity="0.7" Margin="0,0,0,4"/>
+                                                <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0"
+                                                        TickFrequency="0.1" IsSnapToTickEnabled="True"
+                                                        Style="{StaticResource WinMetersSlider}" Margin="0,0,0,4"/>
                                 <TextBlock Style="{StaticResource WinMetersTextSub}"
                                            Text="Tip: opacity is ignored when the bar is docked to the taskbar. Edit the alpha byte of Background instead."
                                            TextWrapping="Wrap" FontSize="10" Margin="0,0,0,8"/>
