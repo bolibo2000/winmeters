@@ -147,13 +147,25 @@
 
                 <!-- HOME -->
                 <StackPanel x:Name="SectionHome">
-                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Welcome"/>
-                    <TextBlock Style="{StaticResource WinMetersTextSub}"
-                               Text="WinMeters is active and tracking your hardware performance with near-zero overhead."
-                               TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,20"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Home"
+                               Foreground="{DynamicResource ThemeAccentBrush}"/>
+                        <!-- 2x2 grid (3 columns, 3 rows; the 12px spacer
+                         rows/columns give the same 12px gap the
+                         UniformGrid produced). 384+12+384 = 780 fills
+                         the content area exactly. -->
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="12"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <UniformGrid Columns="2" HorizontalAlignment="Left" Margin="0,0,0,12">
-                        <Button Click="HomeCard_Click" Tag="General" Width="384" Height="120" Margin="0,0,0,0"
+                        <Button Grid.Row="0" Grid.Column="0" Click="HomeCard_Click" Tag="General" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
                             <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
@@ -173,7 +185,8 @@
                                 </Grid>
                             </Border>
                         </Button>
-                        <Button Click="HomeCard_Click" Tag="Monitoring" Width="384" Height="120" Margin="0,0,0,0"
+
+                        <Button Grid.Row="0" Grid.Column="2" Click="HomeCard_Click" Tag="Monitoring" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
                             <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
@@ -193,7 +206,8 @@
                                 </Grid>
                             </Border>
                         </Button>
-                        <Button Click="HomeCard_Click" Tag="Appearance" Width="384" Height="120" Margin="0,0,0,0"
+
+                        <Button Grid.Row="2" Grid.Column="0" Click="HomeCard_Click" Tag="Appearance" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
                             <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
@@ -213,7 +227,8 @@
                                 </Grid>
                             </Border>
                         </Button>
-                        <Button Click="HomeCard_Click" Tag="About" Width="384" Height="120" Margin="0,0,0,0"
+
+                        <Button Grid.Row="2" Grid.Column="2" Click="HomeCard_Click" Tag="About" Width="384" Height="120"
                                 Background="Transparent" BorderThickness="0" Padding="0" Cursor="Hand">
                             <Border Style="{StaticResource WinMetersCard}">
                                 <Grid>
@@ -233,7 +248,7 @@
                                 </Grid>
                             </Border>
                         </Button>
-                    </UniformGrid>
+                    </Grid>
 
                     <Border Style="{StaticResource WinMetersInfoBar}" Margin="0,16,0,0">
                         <Grid>
@@ -256,7 +271,8 @@
 
                 <!-- GENERAL -->
                 <StackPanel x:Name="SectionGeneral" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="General"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="General"
+                               Foreground="{DynamicResource ThemeAccentBrush}"/>
 
                     <Grid>
                         <Grid.ColumnDefinitions>
@@ -442,7 +458,8 @@
 
                 <!-- MONITORING: 5 MetricCards -->
                 <StackPanel x:Name="SectionMonitoring" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Monitoring"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Monitoring"
+                               Foreground="{DynamicResource ThemeAccentBrush}"/>
                     <TextBlock Style="{StaticResource WinMetersTextSub}"
                                Text="Each meter keeps its visibility toggle, max-value, refresh rate, and section colour in one card. Adding or reordering a meter is a one-line edit in code-behind."
                                TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,16"/>
@@ -511,7 +528,8 @@
 
                 <!-- APPEARANCE -->
                 <StackPanel x:Name="SectionAppearance" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Appearance"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="Appearance"
+                               Foreground="{DynamicResource ThemeAccentBrush}"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -622,7 +640,8 @@
 
                 <!-- ABOUT -->
                 <StackPanel x:Name="SectionAbout" Visibility="Collapsed">
-                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="About"/>
+                    <TextBlock Style="{StaticResource WinMetersSectionHeader}" Text="About"
+                               Foreground="{DynamicResource ThemeAccentBrush}"/>
                     <StackPanel Margin="0,0,0,16">
                         <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="WinMeters" FontSize="20"/>
                         <TextBlock x:Name="AboutVersion" Style="{StaticResource WinMetersTextSub}" Text="v2.4"/>
