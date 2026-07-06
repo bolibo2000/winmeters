@@ -42,7 +42,7 @@
                      available, 8px breathing room; the old 12px on each
                      side overflowed by 8px and clipped the button on
                      the right when the rail was collapsed). -->
-                <Grid DockPanel.Dock="Top" Margin="4,4,4,4">
+                <Grid DockPanel.Dock="Top" Margin="8,4,4,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
@@ -361,24 +361,6 @@
                             </Grid>
                         </Border>
 
-                        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE950;"
-                                           Foreground="{DynamicResource ThemeAccentBrush}"
-                                           VerticalAlignment="Center" Margin="0,0,16,0"/>
-                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
-                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Combine Logical Cores" FontSize="14"/>
-                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Show one bar per physical core pair." TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="CombineLogicalCores" Click="GenericToggle_Click"/>
-                            </Grid>
-                        </Border>
-
                         <Border Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource WinMetersCard}">
                             <Grid>
                                 <Grid.ColumnDefinitions>
@@ -464,6 +446,31 @@
                     <TextBlock Style="{StaticResource WinMetersTextSub}"
                                Text="Each meter keeps its visibility toggle, max-value, refresh rate, and section colour in one card. Adding or reordering a meter is a one-line edit in code-behind."
                                TextWrapping="Wrap" MaxWidth="640" Margin="0,0,0,16"/>
+
+                    <!-- CPU Display: per-meter toggle that doesn't fit the
+                         MetricCard pattern (it changes the per-core bar
+                         count, not the meter itself). Lives on the
+                         Monitoring page because it's a CPU-specific
+                         display setting; the 5 MetricCards below are
+                         scoped to per-meter (IsShown / MaxValue /
+                         RefreshRate / SectionColor) knobs. -->
+                    <Border Style="{StaticResource WinMetersCard}" Margin="0,0,0,12">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE950;"
+                                       Foreground="{DynamicResource ThemeAccentBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,16,0"/>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Combine Logical Cores" FontSize="14"/>
+                                <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Show one bar per physical core pair." TextWrapping="Wrap"/>
+                            </StackPanel>
+                            <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="CombineLogicalCores" Click="GenericToggle_Click"/>
+                        </Grid>
+                    </Border>
 
                     <StackPanel x:Name="MetricsPanel">
                         <ctrl:MetricCard x:Name="CardCpu"
