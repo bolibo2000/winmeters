@@ -35,8 +35,14 @@
                 <!-- Hamburger + title row (always docked at top). Hamburger
                      ToggleButton drives the collapse / expand animation;
                      RailTitle TextBlock collapses its Visibility on the
-                     same event so it disappears in lock-step. -->
-                <Grid DockPanel.Dock="Top" Margin="12,4,12,4">
+                     same event so it disappears in lock-step. The 4px
+                     horizontal margin (not 12px) leaves the 32px
+                     WinMetersHamburgerButton enough room to fit inside
+                     the 48px collapsed rail (4+4=8px margin, 40px
+                     available, 8px breathing room; the old 12px on each
+                     side overflowed by 8px and clipped the button on
+                     the right when the rail was collapsed). -->
+                <Grid DockPanel.Dock="Top" Margin="4,4,4,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
