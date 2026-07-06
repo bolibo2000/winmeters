@@ -70,6 +70,7 @@
                             Margin="0,0,10,0"/>
                     <Button Grid.Column="1" Content="Section colour..."
                             Click="ColorButton_Click"
+                            ToolTip="Override this meter's section color in the bar"
                             Style="{StaticResource WinMetersSecondaryButton}"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"/>

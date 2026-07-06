@@ -387,4 +387,25 @@
         <Setter Property="Padding" Value="16"/>
     </Style>
 
+    <!--
+        Default ToolTip style applied to every ToolTip in the app
+        (the 5 nav rail RadioButtons, the MetricCard section-colour
+        pickers, and the inline validation error tooltips on the
+        numeric MaxValue / RefreshRate textboxes). Dark card surface
+        + subtle white border + drop shadow match the rest of the
+        chrome so tooltips feel native to the WinMeters theme rather
+        than the default OS chrome.
+    -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Background"     Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="Foreground"     Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="BorderBrush"    Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding"        Value="8,4"/>
+        <Setter Property="FontFamily"     Value="Segoe UI"/>
+        <Setter Property="FontSize"       Value="12"/>
+        <Setter Property="HasDropShadow"  Value="True"/>
+        <Setter Property="Placement"      Value="MousePoint"/>
+    </Style>
+
 </ResourceDictionary>

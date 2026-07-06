@@ -257,6 +257,14 @@ public class AppSettings
         public string DiskInstanceName { get; set; } = "_Total";
         public bool CombineLogicalCores { get; set; } = true;
         public List<string> MeterOrder { get; set; } = ["Cpu", "CpuTemp", "GpuTemp", "GpuDedicated", "GpuShared", "Ram", "Disk", "Net", "Time"];
+        /// <summary>
+        /// Whether the SettingsWindow left rail is in its collapsed state
+        /// (icons only, 48px wide). Persisted across SettingsWindow
+        /// openings so the user doesn't have to re-collapse the rail
+        /// every time they open settings. Defaults to false (expanded)
+        /// to match the kil0bit NavigationView's first-open behaviour.
+        /// </summary>
+        public bool NavRailCollapsed { get; set; } = false;
         public bool EnableHardwareMonitor { get; set; } = true;
         public bool Time24H { get; set; } = true;
     }

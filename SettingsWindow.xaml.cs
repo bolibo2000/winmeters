@@ -140,6 +140,11 @@ public partial class SettingsWindow : Window
         SelectSection("Home");
 
         this.Closing += SettingsWindow_Closing;
+
+        // Snap the rail to its persisted collapsed/expanded state without
+        // animation. Runs after InitializeComponent so the named elements
+        // (BtnToggleRail, LeftRailBorder, RailTitle, NavXxxText) exist.
+        ApplyInitialRailState();
     }
 
     // ---------------------------------------------------------------------
@@ -173,6 +178,38 @@ public partial class SettingsWindow : Window
     {
         bool collapse = BtnToggleRail.IsChecked == true;
         AnimateRailWidth(collapse ? RailWidthCollapsed : RailWidthExpanded, collapse);
+
+        // Persist the new state to both _working (so a subsequent
+        // live update carries it) and _original (so the next
+        // SettingsWindow opening reads the correct value). The
+        // standard cancel-via-X path in SettingsWindow_Closing
+        // reverts _original to the pre-edit snapshot, which would
+        // otherwise undo the rail toggle -- that handler
+        // special-cases NavRailCollapsed to preserve it across the
+        // revert. We treat the rail state as window UI chrome, not
+        // as a user-configurable setting, so it should survive a
+        // cancel.
+        _working.General.NavRailCollapsed  = collapse;
+        _original.General.NavRailCollapsed = collapse;
+        _original.Save();
+    }
+
+    /// <summary>
+    /// Snap the rail to its persisted collapsed/expanded state on
+    /// first show. Reads <c>_working.General.NavRailCollapsed</c> (a
+    /// deep copy of the original from the ctor's JSON round-trip) and
+    /// sets the Width + IsChecked + text Visibility directly so the
+    /// window opens in the correct shape without playing the
+    /// collapse/expand animation. Called once from the ctor after
+    /// <c>InitializeComponent</c> so the named elements exist.
+    /// </summary>
+    private void ApplyInitialRailState()
+    {
+        if (!_working.General.NavRailCollapsed) return;
+
+        BtnToggleRail.IsChecked = true;
+        LeftRailBorder.Width    = RailWidthCollapsed;
+        SetNavTextVisibility(Visibility.Collapsed);
     }
 
     /// <summary>
@@ -804,6 +841,13 @@ public partial class SettingsWindow : Window
     {
         if (DialogResult == true) return;
 
+        // Preserve the nav rail collapse state across the cancel
+        // revert. The standard snapshot-restore below would clobber
+        // it because the snapshot predates the toggle -- but the
+        // rail state is window UI chrome, not a user-configurable
+        // setting, so a close-via-X should NOT undo it.
+        bool savedRailState = _original.General.NavRailCollapsed;
+
         try
         {
             var restored = JsonSerializer.Deserialize<AppSettings>(
@@ -821,6 +865,8 @@ public partial class SettingsWindow : Window
         {
             WinMeters.Log.D($"SettingsWindow cancel-revert: {ex}");
         }
+
+        _original.General.NavRailCollapsed = savedRailState;
     }
 
     private void ApplyMeterOrderToWorking()

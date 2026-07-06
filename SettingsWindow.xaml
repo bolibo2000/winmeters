@@ -62,6 +62,7 @@
                 <StackPanel x:Name="NavItemsPanel" Margin="0,4,0,12">
                     <RadioButton x:Name="NavHome" Tag="Home"
                                  GroupName="NavRail" IsChecked="True"
+                                 ToolTip="Home"
                                  Click="NavRail_Click" Style="{StaticResource WinMetersNavItem}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE80F;"
@@ -74,7 +75,9 @@
                         </DockPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavGeneral" Tag="General"
-                                 GroupName="NavRail" Click="NavRail_Click"
+                                 GroupName="NavRail"
+                                 ToolTip="General"
+                                 Click="NavRail_Click"
                                  Style="{StaticResource WinMetersNavItem}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE713;"
@@ -87,7 +90,9 @@
                         </DockPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavMonitoring" Tag="Monitoring"
-                                 GroupName="NavRail" Click="NavRail_Click"
+                                 GroupName="NavRail"
+                                 ToolTip="Monitoring"
+                                 Click="NavRail_Click"
                                  Style="{StaticResource WinMetersNavItem}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE9F5;"
@@ -100,7 +105,9 @@
                         </DockPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavAppearance" Tag="Appearance"
-                                 GroupName="NavRail" Click="NavRail_Click"
+                                 GroupName="NavRail"
+                                 ToolTip="Appearance"
+                                 Click="NavRail_Click"
                                  Style="{StaticResource WinMetersNavItem}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE70F;"
@@ -113,7 +120,9 @@
                         </DockPanel>
                     </RadioButton>
                     <RadioButton x:Name="NavAbout" Tag="About"
-                                 GroupName="NavRail" Click="NavRail_Click"
+                                 GroupName="NavRail"
+                                 ToolTip="About"
+                                 Click="NavRail_Click"
                                  Style="{StaticResource WinMetersNavItem}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Left" Text="&#xE897;"
