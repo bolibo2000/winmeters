@@ -36,7 +36,7 @@
                      ToggleButton drives the collapse / expand animation;
                      RailTitle TextBlock collapses its Visibility on the
                      same event so it disappears in lock-step. -->
-                <Grid DockPanel.Dock="Top" Margin="12,12,12,4">
+                <Grid DockPanel.Dock="Top" Margin="12,4,12,4">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>

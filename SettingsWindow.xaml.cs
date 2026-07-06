@@ -467,6 +467,7 @@ public partial class SettingsWindow : Window
         SliderScale.ValueChanged   += SliderScale_ValueChanged;
         SliderOpacity.ValueChanged -= SliderOpacity_ValueChanged;
         SliderOpacity.ValueChanged += SliderOpacity_ValueChanged;
+        PopulateNavTooltips();
     }
 
     private void PopulateGeneralToggles()
@@ -686,6 +687,52 @@ public partial class SettingsWindow : Window
     private static void SetSwatch(Border swatch, string hex)
     {
         swatch.Background = ColorHelper.ParseBrush(hex);
+    }
+
+    /// <summary>
+    /// Build rich hover ToolTips on the 5 nav RadioButtons from
+    /// <see cref="NavItemMetadata"/>. The ToolTip uses the global
+    /// WinMetersTooltip style (dark card surface, drop shadow) -- we
+    /// just provide the content (bold section name + one-line
+    /// description). Same source of truth as the click-flyout Popup,
+    /// so the description text stays in lock-step with the flyout
+    /// description.
+    /// </summary>
+    private void PopulateNavTooltips()
+    {
+        var radios = new[] { NavHome, NavGeneral, NavMonitoring, NavAppearance, NavAbout };
+        foreach (var rb in radios)
+        {
+            if (rb.Tag is not string tag) continue;
+            var (name, description) = NavItemMetadata.FirstOrDefault(
+                x => x.Name.Equals(tag, StringComparison.OrdinalIgnoreCase));
+            if (string.IsNullOrEmpty(name)) continue;
+
+            rb.ToolTip = new WnControls.ToolTip
+            {
+                Content = new WnControls.StackPanel
+                {
+                    Children =
+                    {
+                        new WnControls.TextBlock
+                        {
+                            Text       = name,
+                            FontWeight = FontWeights.SemiBold,
+                            FontSize   = 13,
+                        },
+                        new WnControls.TextBlock
+                        {
+                            Text         = description,
+                            Opacity      = 0.7,
+                            FontSize     = 11,
+                            MaxWidth     = 200,
+                            TextWrapping = TextWrapping.Wrap,
+                            Margin       = new Thickness(0, 2, 0, 0),
+                        },
+                    },
+                },
+            };
+        }
     }
 
     // ---------------------------------------------------------------------
