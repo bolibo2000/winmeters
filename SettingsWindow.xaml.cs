@@ -163,78 +163,6 @@ public partial class SettingsWindow : Window
     {
         if (sender is not WnControls.RadioButton rb || rb.Tag is not string tag) return;
         SelectSection(tag);
-
-        // Show click-triggered flyout only when the rail is collapsed
-        // (the expanded rail already shows the section name as a label
-        // so the flyout would be redundant). NavItemMetadata is the
-        // single source of truth for the name + description shown in
-        // the flyout -- this also dedupes the descriptions that used
-        // to be hardcoded in the XAML rich ToolTip elements (removed
-        // in the same commit).
-        if (BtnToggleRail.IsChecked == true)
-        {
-            ShowNavFlyout(rb, tag);
-        }
-    }
-
-    /// <summary>
-    /// Show (or toggle) the nav flyout Popup anchored to the right of
-    /// the clicked nav RadioButton. Content is built from
-    /// <see cref="NavItemMetadata"/> so the flyout name + description
-    /// stay in lock-step with the search filter matches.
-    ///
-    /// Toggle semantics: clicking the same item that already has the
-    /// flyout open closes it (so the user can dismiss without
-    /// clicking outside). Clicking a different item switches the
-    /// flyout to the new item.
-    ///
-    /// Flicker avoidance: the <c>IsOpen = true</c> is dispatched via
-    /// <see cref="Dispatcher.BeginInvoke(System.Action)"/> so WPF's
-    /// <c>StaysOpen="False"</c> close-on-outside-click logic doesn't
-    /// immediately close the popup on the very click that opened it
-    /// (the click is on the PlacementTarget, which is outside the
-    /// Popup's visual area).
-    /// </summary>
-    private void ShowNavFlyout(WnControls.RadioButton target, string sectionName)
-    {
-        // Toggle: if the popup is already open for the same item,
-        // close it immediately (no deferred dispatch needed -- the
-        // popup is already open so there's no flicker to avoid).
-        if (NavFlyout.IsOpen && ReferenceEquals(NavFlyout.PlacementTarget, target))
-        {
-            NavFlyout.IsOpen = false;
-            return;
-        }
-
-        foreach (var (name, description) in NavItemMetadata)
-        {
-            if (name == sectionName)
-            {
-                FlyoutTitle.Text       = name;
-                FlyoutDescription.Text = description;
-                NavFlyout.PlacementTarget = target;
-                // Defer the IsOpen=true to after the click event
-                // completes so StaysOpen=False doesn't immediately
-                // close it on the same click. Also start the
-                // Popup at Opacity=0 and animate to 1 over 150ms
-                // (CubicEase EaseInOut) for a smooth fade-in. The
-                // close (StaysOpen=False or toggle-close) is a snap
-                // -- the fade-in is the polish.
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    NavFlyout.Opacity = 0;
-                    NavFlyout.IsOpen  = true;
-                    var fadeIn = new DoubleAnimation
-                    {
-                        To            = 1,
-                        Duration      = TimeSpan.FromMilliseconds(150),
-                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
-                    };
-                    NavFlyout.BeginAnimation(UIElement.OpacityProperty, fadeIn);
-                }));
-                return;
-            }
-        }
     }
 
     private void HomeCard_Click(object sender, RoutedEventArgs e)
@@ -274,9 +202,10 @@ public partial class SettingsWindow : Window
 
     /// <summary>
     /// Single source of truth for the nav item display name + the
-    /// one-line description shown in the nav flyout Popup. If a
-    /// 6th nav item lands here, both the XAML nav-item section and
-    /// this table need editing.
+    /// one-line description shown in the hover ToolTip on the 5
+    /// nav RadioButtons (built in <see cref="PopulateNavTooltips"/>).
+    /// If a 6th nav item lands here, both the XAML nav-item section
+    /// and this table need editing.
     /// </summary>
     private static readonly (string Name, string Description)[] NavItemMetadata = new[]
     {
@@ -692,11 +621,9 @@ public partial class SettingsWindow : Window
     /// <summary>
     /// Build rich hover ToolTips on the 5 nav RadioButtons from
     /// <see cref="NavItemMetadata"/>. The ToolTip uses the global
-    /// WinMetersTooltip style (dark card surface, drop shadow) -- we
+    /// WinMetersTooltip style (dark card surface, drop shadow); we
     /// just provide the content (bold section name + one-line
-    /// description). Same source of truth as the click-flyout Popup,
-    /// so the description text stays in lock-step with the flyout
-    /// description.
+    /// description). Single source of truth for the description text.
     /// </summary>
     private void PopulateNavTooltips()
     {

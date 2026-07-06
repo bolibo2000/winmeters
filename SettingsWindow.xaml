@@ -664,28 +664,5 @@
             </Grid>
         </Border>
 
-        <!-- NAV FLYOUT (click-triggered, only visible when the rail is
-             collapsed). The Popup is a child of the Window's root Grid
-             but doesn't participate in layout (it floats above the
-             content). Content is built dynamically from NavItemMetadata
-             in code-behind (ShowNavFlyout), so the (name, description)
-             tuples live in exactly one place. PlacementTarget is set
-             to the clicked RadioButton on each show so the flyout
-             anchors at the icon's Y coordinate. -->
-        <Popup x:Name="NavFlyout"
-               Placement="Right"
-               StaysOpen="False"
-               AllowsTransparency="True"
-               HorizontalOffset="8">
-            <Border Style="{StaticResource WinMetersCard}" Padding="12,8">
-                <Border.Effect>
-                    <DropShadowEffect BlurRadius="8" Color="Black" Opacity="0.3" ShadowDepth="2"/>
-                </Border.Effect>
-                <StackPanel>
-                    <TextBlock x:Name="FlyoutTitle" Text="" FontWeight="SemiBold" FontSize="13"/>
-                    <TextBlock x:Name="FlyoutDescription" Text="" Opacity="0.7" FontSize="11" MaxWidth="200" TextWrapping="Wrap"/>
-                </StackPanel>
-            </Border>
-        </Popup>
     </Grid>
 </Window>
