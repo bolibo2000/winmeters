@@ -215,8 +215,23 @@ public partial class SettingsWindow : Window
                 NavFlyout.PlacementTarget = target;
                 // Defer the IsOpen=true to after the click event
                 // completes so StaysOpen=False doesn't immediately
-                // close it on the same click.
-                Dispatcher.BeginInvoke(new Action(() => NavFlyout.IsOpen = true));
+                // close it on the same click. Also start the
+                // Popup at Opacity=0 and animate to 1 over 150ms
+                // (CubicEase EaseInOut) for a smooth fade-in. The
+                // close (StaysOpen=False or toggle-close) is a snap
+                // -- the fade-in is the polish.
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    NavFlyout.Opacity = 0;
+                    NavFlyout.IsOpen  = true;
+                    var fadeIn = new DoubleAnimation
+                    {
+                        To            = 1,
+                        Duration      = TimeSpan.FromMilliseconds(150),
+                        EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+                    };
+                    NavFlyout.BeginAnimation(UIElement.OpacityProperty, fadeIn);
+                }));
                 return;
             }
         }
