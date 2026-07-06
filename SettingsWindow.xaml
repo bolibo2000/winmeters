@@ -377,6 +377,36 @@
                             </Grid>
                         </Border>
 
+                        <!-- Hardware Telemetry toggle (EnableHardwareMonitor).
+                             Fills the previously empty row 2 col 2 cell that
+                             CombineLogicalCores left behind when it moved to
+                             the Monitoring page. The setting only gates
+                             MainWindow's HardwareMonitorService start so it
+                             existed on AppSettings for ages without a UI
+                             affordance; this commit surfaces it so the user
+                             can disable temp reading without dropping into
+                             settings.json. Glyph 0xE94C is the Segoe MDL2
+                             Assets Heartbeat, which reads as a background
+                             health-check icon, visually distinct from the
+                             other CPU / display settings in this card. -->
+                        <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource WinMetersCard}" Margin="0,0,0,10">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBlock FontFamily="Segoe MDL2 Assets" FontSize="20" Text="&#xE94C;"
+                                           Foreground="{DynamicResource ThemeAccentBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,16,0"/>
+                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,12,0">
+                                    <TextBlock Style="{StaticResource WinMetersTextHeading}" Text="Hardware Telemetry" FontSize="14"/>
+                                    <TextBlock Style="{StaticResource WinMetersTextSub}" Text="Read CPU and GPU temps via LibreHardwareMonitor. Off hides the temp panel." TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <CheckBox Grid.Column="2" Style="{StaticResource WinMetersToggleSwitch}" Tag="EnableHardwareMonitor" Click="GenericToggle_Click"/>
+                            </Grid>
+                        </Border>
+
                         <Border Grid.Row="3" Grid.ColumnSpan="3" Style="{StaticResource WinMetersCard}">
                             <Grid>
                                 <Grid.ColumnDefinitions>

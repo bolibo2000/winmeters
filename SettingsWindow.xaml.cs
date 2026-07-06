@@ -408,6 +408,7 @@ public partial class SettingsWindow : Window
             ("SnapToTaskbar",        _working.Window.StickToTaskbar),
             ("KeepOnTop",            _working.General.KeepOnTop),
             ("Time24H",              _working.General.Time24H),
+            ("EnableHardwareMonitor", _working.General.EnableHardwareMonitor),
             ("CombineLogicalCores",  _working.General.CombineLogicalCores),
         };
         foreach (var (tag, value) in card)
@@ -678,6 +679,7 @@ public partial class SettingsWindow : Window
             case "HideInFullscreen":     _working.General.HideInFullscreen = value; break;
             case "KeepOnTop":            _working.General.KeepOnTop = value; break;
             case "Time24H":              _working.General.Time24H = value; break;
+            case "EnableHardwareMonitor": _working.General.EnableHardwareMonitor = value; break;
             case "CombineLogicalCores":  _working.General.CombineLogicalCores = value; break;
             case "ShowCpuTemp":          _working.Visibility.ShowCpuTemp = value; break;
             case "ShowGpuTemp":          _working.Visibility.ShowGpuTemp = value; break;
