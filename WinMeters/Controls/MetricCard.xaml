@@ -133,10 +133,12 @@
                                Margin="0,0,16,0"/>
                     <CheckBox Content="CPU Temp" Tag="ShowCpuTemp"
                               Click="SubMeterToggleBase_Click"
+                              ToolTip="Show the CPU temperature reading from the LibreHardwareMonitor background service. Off hides the temperature row in the bar."
                               Style="{StaticResource WinMetersToggleSwitch}"
                               VerticalAlignment="Center" Margin="0,0,16,0"/>
                     <CheckBox Content="H/W Load" Tag="ShowHardwareLoad"
                               Click="SubMeterToggleBase_Click"
+                              ToolTip="Show CPU and GPU load percentages from the LibreHardwareMonitor service. Off hides the load reading in the bar."
                               Style="{StaticResource WinMetersToggleSwitch}"
                               VerticalAlignment="Center"/>
                 </StackPanel>
@@ -158,6 +160,7 @@
                                Margin="0,0,16,0"/>
                     <CheckBox Content="GPU Temp" Tag="ShowGpuTemp"
                               Click="SubMeterToggleBase_Click"
+                              ToolTip="Show the GPU temperature reading from the LibreHardwareMonitor background service. Off hides the temperature row in the bar."
                               Style="{StaticResource WinMetersToggleSwitch}"
                               VerticalAlignment="Center"/>
                 </StackPanel>
