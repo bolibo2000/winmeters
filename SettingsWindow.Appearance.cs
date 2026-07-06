@@ -51,16 +51,40 @@ public partial class SettingsWindow
         // handler-isn't-subscribed-yet invariant keeps the Slider coerce
         // during InitializeComponent from clobbering the saved value).
         // After this, the badges stay in sync via SliderScale_ValueChanged
-        // / SliderOpacity_ValueChanged on Core.
-        ScaleValueText.Text = _working.General.Scale.ToString(
-            "0.0", System.Globalization.CultureInfo.InvariantCulture) + "\u00d7";
-        OpacityValueText.Text = (_working.General.Opacity * 100).ToString(
-            "0", System.Globalization.CultureInfo.InvariantCulture) + "%";
+        // / SliderOpacity_ValueChanged on Core, both of which call the
+        // shared Format* helpers below so the seed and the live update
+        // can't disagree if either side is tweaked later.
+        ScaleValueText.Text   = FormatScaleValue(_working.General.Scale);
+        OpacityValueText.Text = FormatOpacityValue(_working.General.Opacity);
 
         SetSwatch(SwatchAccent,     _working.Colors.Accent);
         SetSwatch(SwatchBackground, _working.Colors.Background);
         SetSwatch(SwatchBorder,     _working.Colors.Border);
     }
+
+    /// <summary>
+    /// Single source of truth for the Scale slider's value-badge
+    /// formatting ("0.0\u00d7" with InvariantCulture). Called both at
+    /// populate-seed time (PopulateAppearance above) and on every
+    /// SliderScale_ValueChanged tick from Core, so the badge never drifts
+    /// from the slider position. Explicit InvariantCulture keeps the
+    /// decimal separator consistent across comma-decimal locales.
+    /// </summary>
+    private static string FormatScaleValue(double v) =>
+        v.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + "\u00d7";
+
+    /// <summary>
+    /// Single source of truth for the Opacity slider's value-badge
+    /// formatting ("0%" with InvariantCulture). Called both at
+    /// populate-seed time (PopulateAppearance above) and on every
+    /// SliderOpacity_ValueChanged tick from Core, so the badge never
+    /// drifts from the slider position. Translucency is rendered as
+    /// integer percent (the slider's internal 0.0-1.0 is multiplied
+    /// by 100) since UI users expect whole-number percent for the
+    /// translucency knob rather than fractional precision.
+    /// </summary>
+    private static string FormatOpacityValue(double v) =>
+        (v * 100).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + "%";
 
     private void PopulateAbout()
     {

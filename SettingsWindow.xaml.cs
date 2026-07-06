@@ -432,12 +432,22 @@ public partial class SettingsWindow : Window
     private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _working.General.Scale = e.NewValue;
+        // Live-update the right-aligned value badge. FormatScaleValue
+        // lives on SettingsWindow.Appearance.cs (single source of truth
+        // for the badge-string format); same-class method call resolves
+        // across the partial-class files without an extra using.
+        ScaleValueText.Text = FormatScaleValue(e.NewValue);
         TriggerLiveUpdate();
     }
 
     private void SliderOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _working.General.Opacity = e.NewValue;
+        // Live-update the right-aligned value badge. FormatOpacityValue
+        // lives on SettingsWindow.Appearance.cs (single source of truth
+        // for the badge-string format); same-class method call resolves
+        // across the partial-class files without an extra using.
+        OpacityValueText.Text = FormatOpacityValue(e.NewValue);
         TriggerLiveUpdate();
     }
 
