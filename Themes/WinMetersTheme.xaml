@@ -107,13 +107,20 @@
         accent colour when IsChecked is true. Matches the kil0bit NavigationView
         selected item visual.
     -->
+    <!-- Nav rail RadioButton. Padding tightened from 14,8 to 10,8 so the
+         24px Segoe MDL2 Assets icon in each item sits comfortably to the
+         left of the label (was 14px which pushed the icon too far in).
+         Content is a DockPanel with a fixed-width icon block on the left
+         + the label filling the rest; when the rail is collapsed the
+         label's Visibility is set to Collapsed from code-behind and the
+         icon is all that remains visible. -->
     <Style x:Key="WinMetersNavItem" TargetType="RadioButton">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="14,8"/>
+        <Setter Property="Padding" Value="10,8"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Template">
             <Setter.Value>
@@ -137,6 +144,47 @@
                             </MultiTrigger.Conditions>
                             <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
                         </MultiTrigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        Hamburger toggle for the collapsible nav rail. Slim 32x32 square
+        with a 4px corner radius that lights up with the dim accent hover
+        background when the cursor is over it (and stays lit while checked
+        so the user has feedback that the rail is in its collapsed state).
+        The control template is hand rolled so we get a chrome-less
+        ToggleButton (the WPF default has a heavy thumb / track that would
+        look out of place in the rail). Glyph is Segoe MDL2 Assets 0xE700
+        (hamburger three lines).
+    -->
+    <Style x:Key="WinMetersHamburgerButton" TargetType="ToggleButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToggleButton">
+                    <Border x:Name="HamburgerBorder"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="4">
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="HamburgerBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="HamburgerBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
+                        </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

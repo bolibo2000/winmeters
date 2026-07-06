@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using WnControls = System.Windows.Controls;
 #if !DESIGN_TIME
@@ -95,6 +96,15 @@ public partial class SettingsWindow : Window
 
     private readonly DispatcherTimer _liveUpdateTimer;
     private const int LiveUpdateDebounceMs = 120;
+
+    // Nav rail collapse/expand animation. Width is animated on
+    // LeftRailBorder.Border.WidthProperty directly (Width is a double,
+    // so a stock DoubleAnimation works without a custom
+    // GridLengthAnimation). The outer column is Width=Auto MinWidth=0
+    // and tracks the Border.
+    private const double RailWidthExpanded      = 200.0;
+    private const double RailWidthCollapsed     = 48.0;
+    private const double RailAnimationDurationMs = 150.0;
     private bool _isNavigating;
     // Sticky flag flipped by Card_ValidationFailed. Reset at start of every
     // PopulateUi to clear stale errors from a prior session. SettingsWindow
@@ -150,6 +160,70 @@ public partial class SettingsWindow : Window
         {
             SelectSection(tag);
         }
+    }
+
+    /// <summary>
+    /// Hamburger toggle in the nav rail header. Drives
+    /// AnimateRailWidth between RailWidthExpanded (200px) and
+    /// RailWidthCollapsed (48px) so the rail matches the kil0bit
+    /// NavigationView's left-pane collapse / expand behaviour. State
+    /// is held in the ToggleButton's IsChecked (true = collapsed).
+    /// </summary>
+    private void BtnToggleRail_Click(object sender, RoutedEventArgs e)
+    {
+        bool collapse = BtnToggleRail.IsChecked == true;
+        AnimateRailWidth(collapse ? RailWidthCollapsed : RailWidthExpanded, collapse);
+    }
+
+    /// <summary>
+    /// Animates LeftRailBorder's Width with a 150ms cubic ease and
+    /// toggles Visibility on the nav text labels in lock-step. On
+    /// collapse: text labels are hidden immediately so they cannot
+    /// overflow the shrinking 48px rail. On expand: text labels stay
+    /// hidden during the animation and are revealed on the Completed
+    /// event, so the user sees a clean snap from collapsed to fully
+    /// expanded with no peek of a 1-2 character sliver poking out of
+    /// the narrow column in the early frames.
+    /// </summary>
+    private void AnimateRailWidth(double targetWidth, bool collapse)
+    {
+        if (collapse) SetNavTextVisibility(Visibility.Collapsed);
+
+        var animation = new DoubleAnimation
+        {
+            To          = targetWidth,
+            Duration    = TimeSpan.FromMilliseconds(RailAnimationDurationMs),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+        };
+        if (!collapse) animation.Completed += ExpandAnimation_Completed;
+        LeftRailBorder.BeginAnimation(Border.WidthProperty, animation);
+    }
+
+    /// <summary>
+    /// Reveal the nav text labels + the WinMeters title once the expand
+    /// animation has finished. Guarded on BtnToggleRail.IsChecked so a
+    /// rapid collapse mid-expand (which cancels the expand animation
+    /// and reuses no events) doesn't accidentally re-show the labels.
+    /// </summary>
+    private void ExpandAnimation_Completed(object? sender, EventArgs e)
+    {
+        if (BtnToggleRail.IsChecked == true) return; // user cancelled expansion
+        SetNavTextVisibility(Visibility.Visible);
+    }
+
+    /// <summary>
+    /// Single source of truth for the 6 visibility targets that toggle
+    /// in lock-step with the rail collapse / expand animation. If a
+    /// future 6th nav item lands here, only this method needs editing.
+    /// </summary>
+    private void SetNavTextVisibility(Visibility visibility)
+    {
+        RailTitle.Visibility         = visibility;
+        NavHomeText.Visibility       = visibility;
+        NavGeneralText.Visibility    = visibility;
+        NavMonitoringText.Visibility = visibility;
+        NavAppearanceText.Visibility = visibility;
+        NavAboutText.Visibility      = visibility;
     }
 
     /// <summary>
