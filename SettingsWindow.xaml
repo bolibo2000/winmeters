@@ -463,27 +463,6 @@
                         </Border>
                     </Grid>
 
-                    <TextBlock Style="{StaticResource WinMetersSubHeader}" Text="Sub-Meter Toggles" Margin="0,20,0,10"/>
-                    <Border Style="{StaticResource WinMetersCard}">
-                        <UniformGrid Columns="4">
-                            <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="CPU Temp" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowCpuTemp" Click="GenericToggle_Click"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="GPU Temp" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowGpuTemp" Click="GenericToggle_Click"/>
-                            </StackPanel>
-                            <StackPanel Margin="0,0,8,0">
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="H/W Load" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowHardwareLoad" Click="GenericToggle_Click"/>
-                            </StackPanel>
-                            <StackPanel>
-                                <TextBlock Style="{StaticResource WinMetersTextHint}" Text="Time" Margin="0,0,0,4"/>
-                                <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowTime" Click="GenericToggle_Click"/>
-                            </StackPanel>
-                        </UniformGrid>
-                    </Border>
                 </StackPanel>
 
                 <!-- MONITORING: 5 MetricCards -->
@@ -536,6 +515,29 @@
                                          Title="Disk" Subtitle="Disk instance read/write throughput."
                                          Glyph="&#xEDA2;" MetricKey="Disk"/>
                     </StackPanel>
+
+                    <!-- Time visibility toggle: a top-level meter that nests
+                         here on the Monitoring page rather than the General
+                         section, because the other three sub-meter toggles
+                         (CPU Temp / GPU Temp / H/W Load) already moved into
+                         per-MetricCard rows; making Time a border on General
+                         would have stranded it on the wrong page. A full
+                         MetricCard would be overkill (no refresh rate or
+                         section colour knobs apply to static time text), so
+                         the same single-ToggleSwitch + Tag pattern as
+                         CombineLogicalCores is reused. Sits between the
+                         MetricCards list and the Tip InfoBar so the user sees
+                         it right after reviewing per-meter settings and before
+                         the educational banner. -->
+                    <Border Style="{StaticResource WinMetersCard}" Margin="0,16,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Style="{StaticResource WinMetersTextHint}"
+                                       Text="Show Time in bar"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,16,0"/>
+                            <CheckBox Style="{StaticResource WinMetersToggleSwitch}" Tag="ShowTime" Click="GenericToggle_Click"/>
+                        </StackPanel>
+                    </Border>
 
                     <Border Style="{StaticResource WinMetersInfoBar}" Margin="0,16,0,0">
                         <Grid>

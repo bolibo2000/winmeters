@@ -10,6 +10,7 @@
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="12"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
             <!-- Title row: glyph + title + Show toggle -->
@@ -100,6 +101,65 @@
                                    FontSize="11" Margin="6,0,0,0"
                                    VerticalAlignment="Center"/>
                     </Grid>
+                </StackPanel>
+            </Grid>
+
+            <!-- Sub-meter toggles row: per-card inline visibility flips for
+                 readings that nest under the parent meter. Previously lived
+                 on the General page in a single 4-column UniformGrid where
+                 they were physically separated from the meters they
+                 controlled. Moved here so CpuTemp/HW-Load nest under CPU,
+                 GpuTemp nests under GPU, and the user can find each toggle
+                 next to the meter it gates. The 2 StackPanels overlap in
+                 the same Grid cell; DataTriggers on MetricKey collapse the
+                 inactive one so each card only shows its own substrings.
+                 Re-home commit; if a future meter needs its own sub-toggle,
+                 add another StackPanel with a DataTrigger here. -->
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=Root, Path=MetricKey}" Value="Cpu">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Style="{StaticResource WinMetersTextHint}"
+                               Text="Sub-meters"
+                               VerticalAlignment="Center"
+                               Margin="0,0,16,0"/>
+                    <CheckBox Content="CPU Temp" Tag="ShowCpuTemp"
+                              Click="SubMeterToggleBase_Click"
+                              Style="{StaticResource WinMetersToggleSwitch}"
+                              VerticalAlignment="Center" Margin="0,0,16,0"/>
+                    <CheckBox Content="H/W Load" Tag="ShowHardwareLoad"
+                              Click="SubMeterToggleBase_Click"
+                              Style="{StaticResource WinMetersToggleSwitch}"
+                              VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding ElementName=Root, Path=MetricKey}" Value="Gpu">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+                    <TextBlock Style="{StaticResource WinMetersTextHint}"
+                               Text="Sub-meters"
+                               VerticalAlignment="Center"
+                               Margin="0,0,16,0"/>
+                    <CheckBox Content="GPU Temp" Tag="ShowGpuTemp"
+                              Click="SubMeterToggleBase_Click"
+                              Style="{StaticResource WinMetersToggleSwitch}"
+                              VerticalAlignment="Center"/>
                 </StackPanel>
             </Grid>
         </Grid>

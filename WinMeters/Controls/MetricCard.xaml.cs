@@ -142,6 +142,14 @@ public partial class MetricCard : WpfCtrl.UserControl
     // ---- Public events raised when the user changes a value --------------------
 
     public event EventHandler? IsShownChanged;
+    // SubMeterMoved: the 3 sub-meter visibility toggles (CPU Temp / GPU
+    // Temp / H/W Load) used to live on the General page in a 4-column
+    // UniformGrid. They are now inline per-MetricCard toggles (Cpu card
+    // shows CPU Temp + H/W Load, Gpu card shows GPU Temp). The toggle's
+    // Click handler is routed here via SubMeterToggleBase_Click; the
+    // handler raises this event so the parent SettingsWindow can
+    // subscribe once per card and dispatch the tag through the same
+    // switch as GenericToggle_Click.
     // MaxValueRemoved: the per-meter Max-value TextBox was removed from
     // MetricCard.xaml in the same commit (user request: remove the
     // Monitoring Max-value option from UI). The MaxValues data model on
@@ -153,6 +161,7 @@ public partial class MetricCard : WpfCtrl.UserControl
     public event EventHandler<RefreshRateChangedEventArgs>? RefreshRateChanged;
     public event EventHandler<SectionColorChangedEventArgs>? SectionColorChanged;
     public event EventHandler<ValidationFailedEventArgs>? ValidationFailed;
+    public event EventHandler<SubMeterToggleChangedEventArgs>? SubMeterToggleChanged;
 
     // ---- Property changed callbacks -------------------------------------------
 
@@ -261,6 +270,23 @@ public partial class MetricCard : WpfCtrl.UserControl
         }
 #endif
     }
+
+    /// <summary>
+    /// Click handler for the per-card sub-meter toggles defined in
+    /// MetricCard.xaml Row 3 (CPU Temp / GPU Temp / H/W Load). The
+    /// SettingsWindow.xaml.cs GenericToggle_Click handler resolves
+    /// only against SettingsWindow.xaml, not against MetricCard.xaml,
+    /// so we can't wire directly. Routed via a Click event here on
+    /// MetricCard.xaml.cs that reads the ToggleSwitch's Tag and
+    /// forwards it through <see cref="SubMeterToggleChanged"/> so
+    /// SettingsWindow can dispatch the same way it does for its
+    /// own direct toggles.
+    /// </summary>
+    private void SubMeterToggleBase_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not WpfCtrl.CheckBox ts || ts.Tag is not string tag) return;
+        SubMeterToggleChanged?.Invoke(this, new SubMeterToggleChangedEventArgs(MetricKey, tag, ts.IsChecked == true));
+    }
 }
 
 public class RefreshRateChangedEventArgs : EventArgs
@@ -268,6 +294,19 @@ public class RefreshRateChangedEventArgs : EventArgs
     public string MetricKey { get; }
     public int Value { get; }
     public RefreshRateChangedEventArgs(string key, int value) { MetricKey = key; Value = value; }
+}
+
+public class SubMeterToggleChangedEventArgs : EventArgs
+{
+    /// <summary>The owning MetricCard's MetricKey (Cpu / Ram / Gpu / Net / Disk).</summary>
+    public string MetricKey { get; }
+    /// <summary>The toggle's Tag -- mirrors the AppSettings.Visibility key the toggle writes through to (e.g. ShowCpuTemp).</summary>
+    public string Tag { get; }
+    public bool IsChecked { get; }
+    public SubMeterToggleChangedEventArgs(string metricKey, string tag, bool isChecked)
+    {
+        MetricKey = metricKey; Tag = tag; IsChecked = isChecked;
+    }
 }
 
 public class SectionColorChangedEventArgs : EventArgs

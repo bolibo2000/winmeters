@@ -608,15 +608,20 @@ public partial class SettingsWindow : Window
             // MaxValueChanged was removed alongside the per-meter Max-value
             // TextBox on MetricCard.xaml in the same commit (user request:
             // remove the Monitoring Max-value option from UI).
-            card.IsShownChanged       -= Card_IsShownChanged;
-            card.RefreshRateChanged   -= Card_RefreshRateChanged;
-            card.SectionColorChanged  -= Card_SectionColorChanged;
-            card.ValidationFailed     -= Card_ValidationFailed;
+            // SubMeterToggleChanged is wired here so each MetricCard that
+            // hosts sub-meter toggles (Cpu -> CPU Temp / H/W Load, Gpu ->
+            // GPU Temp) can raise toggle clicks out to this handler.
+            card.IsShownChanged         -= Card_IsShownChanged;
+            card.RefreshRateChanged     -= Card_RefreshRateChanged;
+            card.SectionColorChanged    -= Card_SectionColorChanged;
+            card.ValidationFailed       -= Card_ValidationFailed;
+            card.SubMeterToggleChanged  -= Card_SubMeterToggleChanged;
 
-            card.IsShownChanged       += Card_IsShownChanged;
-            card.RefreshRateChanged   += Card_RefreshRateChanged;
-            card.SectionColorChanged  += Card_SectionColorChanged;
-            card.ValidationFailed     += Card_ValidationFailed;
+            card.IsShownChanged         += Card_IsShownChanged;
+            card.RefreshRateChanged     += Card_RefreshRateChanged;
+            card.SectionColorChanged    += Card_SectionColorChanged;
+            card.ValidationFailed       += Card_ValidationFailed;
+            card.SubMeterToggleChanged  += Card_SubMeterToggleChanged;
         }
     }
 
@@ -687,12 +692,46 @@ public partial class SettingsWindow : Window
             case "Time24H":              _working.General.Time24H = value; break;
             case "EnableHardwareMonitor": _working.General.EnableHardwareMonitor = value; break;
             case "CombineLogicalCores":  _working.General.CombineLogicalCores = value; break;
-            case "ShowCpuTemp":          _working.Visibility.ShowCpuTemp = value; break;
-            case "ShowGpuTemp":          _working.Visibility.ShowGpuTemp = value; break;
-            case "ShowHardwareLoad":     _working.Visibility.ShowHardwareLoad = value; break;
-            case "ShowTime":             _working.Visibility.ShowTime = value; break;
+            // ShowCpuTemp / ShowGpuTemp / ShowHardwareLoad / ShowTime are
+            // also dispatched through GenericToggle_Click because the Time
+            // toggle on the Monitoring page sits in a direct CheckBox
+            // (no MetricCard wrapper) and uses Click="GenericToggle_Click"
+            // directly. ApplySubMeterToggle consolidates the field-write +
+            // TriggerLiveUpdate so the per-MetricCard path (routed via
+            // SubMeterToggleChanged) and the direct-CheckBox path stay
+            // identically synchronized.
+            case "ShowCpuTemp":
+            case "ShowGpuTemp":
+            case "ShowHardwareLoad":
+            case "ShowTime":
+                ApplySubMeterToggle(tag, value);
+                return; // ApplySubMeterToggle already triggered live update
         }
         TriggerLiveUpdate();
+    }
+
+    /// <summary>
+    /// Single dispatch point for the four sub-meter visibility toggles
+    /// (CPU Temp / GPU Temp / H/W Load / Show Time). Both the per-
+    /// MetricCard path (raised from MetricCard.xaml.cs SubMeterToggleBase_Click
+    /// via SubMeterToggleChanged) and the direct CheckBox path on the
+    /// Monitoring page call this helper, so a new sub-meter tag only needs
+    /// to be added in one place rather than two parallel switch statements.
+    /// The default branch returns without firing TriggerLiveUpdate so the
+    /// caller knows whether something changed.
+    /// </summary>
+    private bool ApplySubMeterToggle(string tag, bool value)
+    {
+        switch (tag)
+        {
+            case "ShowCpuTemp":       _working.Visibility.ShowCpuTemp       = value; break;
+            case "ShowGpuTemp":       _working.Visibility.ShowGpuTemp       = value; break;
+            case "ShowHardwareLoad":  _working.Visibility.ShowHardwareLoad  = value; break;
+            case "ShowTime":          _working.Visibility.ShowTime          = value; break;
+            default: return false;
+        }
+        TriggerLiveUpdate();
+        return true;
     }
 
     private void ComboRefreshRate_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -762,6 +801,25 @@ public partial class SettingsWindow : Window
         if (sender is not MetricCard card) return;
         _working.SectionColors[card.MetricKey] = e.Hex;
         TriggerLiveUpdate();
+    }
+
+    /// <summary>
+    /// Per-MetricCard sub-meter toggle handler. The sub-meter toggles
+    /// (CPU Temp / GPU Temp / H/W Load) used to live in the General
+    /// section's UniformGrid; in the re-home commit they moved into
+    /// per-card inline rows on the Monitoring page (Cpu card shows CPU
+    /// Temp + H/W Load, Gpu card shows GPU Temp). The GenericToggle_Click
+    /// handler resolves only against SettingsWindow.xaml, so the cards
+    /// wire their inline Click to MetricCard.xaml.cs SubMeterToggleBase_Click
+    /// which raises <see cref="SubMeterToggleChanged"/>. We then dispatch
+    /// through the shared <see cref="ApplySubMeterToggle"/> helper so the
+    /// per-card path stays synchronized with the direct CheckBox path
+    /// (the Show Time toggle on the Monitoring page uses GenericToggle_Click
+    /// directly).
+    /// </summary>
+    private void Card_SubMeterToggleChanged(object? sender, SubMeterToggleChangedEventArgs e)
+    {
+        ApplySubMeterToggle(e.Tag, e.IsChecked);
     }
 
     private void Card_ValidationFailed(object? sender, ValidationFailedEventArgs e)
