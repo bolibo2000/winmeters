@@ -273,57 +273,10 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Search-box filter. Hides nav items whose section name does not
-    /// contain the typed text (case-insensitive). An empty filter
-    /// shows all items. The currently-selected section is NOT
-    /// auto-changed when it gets hidden -- the user can keep editing
-    /// the current section even if its nav button is filtered out,
-    /// matching VS Code's activity-bar search behaviour.
-    /// </summary>
-    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        string filter = TxtSearch.Text?.Trim() ?? string.Empty;
-        TxtSearchPlaceholder.Visibility = string.IsNullOrEmpty(filter)
-            ? Visibility.Visible
-            : Visibility.Collapsed;
-        ApplyNavFilter(filter);
-    }
-
-    private void ApplyNavFilter(string filter)
-    {
-        bool noFilter = string.IsNullOrEmpty(filter);
-        NavHome.Visibility       = (noFilter || MatchesFilter("Home",       filter)) ? Visibility.Visible : Visibility.Collapsed;
-        NavGeneral.Visibility    = (noFilter || MatchesFilter("General",    filter)) ? Visibility.Visible : Visibility.Collapsed;
-        NavMonitoring.Visibility = (noFilter || MatchesFilter("Monitoring", filter)) ? Visibility.Visible : Visibility.Collapsed;
-        NavAppearance.Visibility = (noFilter || MatchesFilter("Appearance", filter)) ? Visibility.Visible : Visibility.Collapsed;
-        NavAbout.Visibility      = (noFilter || MatchesFilter("About",      filter)) ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>
-    /// Case-insensitive Contains match against the section name OR its
-    /// one-line description. The metadata lives in
-    /// <see cref="NavItemMetadata"/> so the XAML ToolTip descriptions
-    /// and the search filter stay in lock-step.
-    /// </summary>
-    private static bool MatchesFilter(string sectionName, string filter)
-    {
-        foreach (var (name, description) in NavItemMetadata)
-        {
-            if (name == sectionName)
-            {
-                return name.Contains(filter, StringComparison.OrdinalIgnoreCase)
-                    || description.Contains(filter, StringComparison.OrdinalIgnoreCase);
-            }
-        }
-        return false;
-    }
-
-    /// <summary>
     /// Single source of truth for the nav item display name + the
-    /// one-line description shown in the rich ToolTip and matched by
-    /// the search filter. Mirrors the 5 entries in
-    /// <c>SettingsWindow.xaml</c> -- if a 6th nav item lands here,
-    /// both the XAML and this table need editing.
+    /// one-line description shown in the nav flyout Popup. If a
+    /// 6th nav item lands here, both the XAML nav-item section and
+    /// this table need editing.
     /// </summary>
     private static readonly (string Name, string Description)[] NavItemMetadata = new[]
     {
@@ -411,11 +364,11 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Reveal the nav text labels + the WinMeters title + the search
-    /// row once the expand animation has finished. Guarded on
-    /// BtnToggleRail.IsChecked so a rapid collapse mid-expand (which
-    /// cancels the expand animation and reuses no events) doesn't
-    /// accidentally re-show the labels.
+    /// Reveal the nav text labels + the WinMeters title once the
+    /// expand animation has finished. Guarded on BtnToggleRail.IsChecked
+    /// so a rapid collapse mid-expand (which cancels the expand
+    /// animation and reuses no events) doesn't accidentally re-show
+    /// the labels.
     /// </summary>
     private void ExpandAnimation_Completed(object? sender, EventArgs e)
     {
@@ -424,11 +377,10 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Single source of truth for the 8 visibility targets that toggle
+    /// Single source of truth for the 6 visibility targets that toggle
     /// in lock-step with the rail collapse / expand animation: the
-    /// WinMeters title, the 5 nav item labels, the search row, and
-    /// the search placeholder. If a future 6th nav item lands here,
-    /// only this method needs editing.
+    /// WinMeters title and the 5 nav item labels. If a future 6th
+    /// nav item lands here, only this method needs editing.
     /// </summary>
     private void SetRailCollapsedState(Visibility visibility)
     {
@@ -438,14 +390,6 @@ public partial class SettingsWindow : Window
         NavMonitoringText.Visibility = visibility;
         NavAppearanceText.Visibility = visibility;
         NavAboutText.Visibility      = visibility;
-        NavSearchRow.Visibility      = visibility;
-        // Note: TxtSearchPlaceholder is NOT toggled here. It's a
-        // child of NavSearchRow (so it's hidden when the row is
-        // Collapsed) and its visibility is otherwise owned by the
-        // TxtSearch_TextChanged handler -- which correctly hides it
-        // when the TextBox has text. Setting it here to Visible on
-        // expand would clobber that and re-show the placeholder
-        // even when the user has typed something.
     }
 
     /// <summary>
