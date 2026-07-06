@@ -15,9 +15,17 @@
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
     <PublishSingleFile>true</PublishSingleFile>
-    <SelfContained>false</SelfContained> 
+    <SelfContained>false</SelfContained>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- Single-file safety: turn IL3xxx warnings (Assembly.Location,
+         FileName, CodeBase, AssemblyName.CodeBase) into build errors so
+         any future use of those properties (which return empty in
+         single-file publishes) breaks the build instead of silently
+         regressing. Scoped to Release because that's where
+         PublishSingleFile is enabled; the IL3xxx warnings are N/A in
+         Debug where single-file is off. -->
+    <WarningsAsErrors>IL3000;IL3001;IL3002;IL3003</WarningsAsErrors>
   </PropertyGroup>
 
   <!-- Packages removed - included in .NET 10 by default -->
