@@ -989,8 +989,23 @@ namespace WinMeters
             // we want to relaunch. If the entry assembly is a .dll we
             // launch via "dotnet path/to.dll"; otherwise the entry path
             // is itself the .exe.
+            //
+            // The .Location access is wrapped in a #pragma disable IL3000:
+            // the WinMeters csproj sets <PublishSingleFile>true</PublishSingleFile>,
+            // so .Location returns "" at runtime in published builds. The
+            // empty-string fall-through below routes us to Environment.ProcessPath
+            // (which returns the .exe path in single-file mode) and then
+            // to Process.MainModule.FileName as a last resort. The fallback
+            // chain covers both single-file and normal publishes; the
+            // .Location call exists only to catch the dotnet-run dev
+            // workflow where Environment.ProcessPath would return dotnet.exe.
             string? entryPath = null;
-            try { entryPath = System.Reflection.Assembly.GetEntryAssembly()?.Location; }
+            try
+            {
+#pragma warning disable IL3000
+                entryPath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
+#pragma warning restore IL3000
+            }
             catch { /* GetEntryAssembly can throw in some hosted scenarios; fall through */ }
 
             if (string.IsNullOrEmpty(entryPath))
