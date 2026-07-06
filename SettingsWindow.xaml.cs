@@ -140,11 +140,19 @@ public partial class SettingsWindow : Window
         SelectSection("Home");
 
         this.Closing += SettingsWindow_Closing;
+        this.ContentRendered += Window_ContentRendered;
 
-        // Snap the rail to its persisted collapsed/expanded state without
-        // animation. Runs after InitializeComponent so the named elements
-        // (BtnToggleRail, LeftRailBorder, RailTitle, NavXxxText) exist.
+        // Set the rail's logical collapsed/expanded state (hamburger
+        // IsChecked + text Visibility) but NOT the Width. The actual
+        // rail animation runs in Window_ContentRendered after the
+        // window is first shown, so the user sees a smooth fade-in
+        // animation instead of an instant snap to the persisted state.
         ApplyInitialRailState();
+
+        // Start with the window invisible; Window_ContentRendered will
+        // animate it to visible. Combined with the rail animation
+        // above, this gives a polished first-show experience.
+        Opacity = 0;
     }
 
     // ---------------------------------------------------------------------
@@ -195,21 +203,117 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
+    /// Search-box filter. Hides nav items whose section name does not
+    /// contain the typed text (case-insensitive). An empty filter
+    /// shows all items. The currently-selected section is NOT
+    /// auto-changed when it gets hidden -- the user can keep editing
+    /// the current section even if its nav button is filtered out,
+    /// matching VS Code's activity-bar search behaviour.
+    /// </summary>
+    private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        string filter = TxtSearch.Text?.Trim() ?? string.Empty;
+        TxtSearchPlaceholder.Visibility = string.IsNullOrEmpty(filter)
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        ApplyNavFilter(filter);
+    }
+
+    private void ApplyNavFilter(string filter)
+    {
+        bool noFilter = string.IsNullOrEmpty(filter);
+        NavHome.Visibility       = (noFilter || MatchesFilter("Home",       filter)) ? Visibility.Visible : Visibility.Collapsed;
+        NavGeneral.Visibility    = (noFilter || MatchesFilter("General",    filter)) ? Visibility.Visible : Visibility.Collapsed;
+        NavMonitoring.Visibility = (noFilter || MatchesFilter("Monitoring", filter)) ? Visibility.Visible : Visibility.Collapsed;
+        NavAppearance.Visibility = (noFilter || MatchesFilter("Appearance", filter)) ? Visibility.Visible : Visibility.Collapsed;
+        NavAbout.Visibility      = (noFilter || MatchesFilter("About",      filter)) ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// Case-insensitive Contains match against the section name OR its
+    /// one-line description. The metadata lives in
+    /// <see cref="NavItemMetadata"/> so the XAML ToolTip descriptions
+    /// and the search filter stay in lock-step.
+    /// </summary>
+    private static bool MatchesFilter(string sectionName, string filter)
+    {
+        foreach (var (name, description) in NavItemMetadata)
+        {
+            if (name == sectionName)
+            {
+                return name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+                    || description.Contains(filter, StringComparison.OrdinalIgnoreCase);
+            }
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Single source of truth for the nav item display name + the
+    /// one-line description shown in the rich ToolTip and matched by
+    /// the search filter. Mirrors the 5 entries in
+    /// <c>SettingsWindow.xaml</c> -- if a 6th nav item lands here,
+    /// both the XAML and this table need editing.
+    /// </summary>
+    private static readonly (string Name, string Description)[] NavItemMetadata = new[]
+    {
+        ("Home",       "Overview and quick links"),
+        ("General",    "Lock position, hide in fullscreen, refresh rate"),
+        ("Monitoring", "Per-meter show / max-value / refresh-rate / colour"),
+        ("Appearance", "Scale, opacity, theme accent, background, border"),
+        ("About",      "Version info and project links"),
+    };
+
+    /// <summary>
+    /// First-show fade-in. Animates the window's Opacity from 0 to 1
+    /// over 250ms (CubicEase EaseInOut), and if the persisted rail
+    /// state is collapsed, also animates LeftRailBorder.Width from
+    /// the XAML default 200px to the collapsed 48px. The user sees a
+    /// smooth window-appearing animation with the rail collapsing in
+    /// place if needed. Fires only once -- the handler unsubscribes
+    /// itself on first invocation.
+    /// </summary>
+    private void Window_ContentRendered(object? sender, EventArgs e)
+    {
+        ContentRendered -= Window_ContentRendered; // only animate once
+
+        var fadeIn = new DoubleAnimation
+        {
+            From          = 0,
+            To            = 1,
+            Duration      = TimeSpan.FromMilliseconds(250),
+            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+        };
+        BeginAnimation(Window.OpacityProperty, fadeIn);
+
+        if (_working.General.NavRailCollapsed)
+        {
+            var railAnimation = new DoubleAnimation
+            {
+                To            = RailWidthCollapsed,
+                Duration      = TimeSpan.FromMilliseconds(250),
+                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
+            };
+            LeftRailBorder.BeginAnimation(Border.WidthProperty, railAnimation);
+        }
+    }
+
+    /// <summary>
     /// Snap the rail to its persisted collapsed/expanded state on
-    /// first show. Reads <c>_working.General.NavRailCollapsed</c> (a
-    /// deep copy of the original from the ctor's JSON round-trip) and
-    /// sets the Width + IsChecked + text Visibility directly so the
-    /// window opens in the correct shape without playing the
-    /// collapse/expand animation. Called once from the ctor after
-    /// <c>InitializeComponent</c> so the named elements exist.
+    /// first show. Sets the logical state (hamburger IsChecked + text
+    /// Visibility) but NOT the Width -- the actual rail animation
+    /// runs in Window_ContentRendered after the window is first
+    /// shown, so the user sees a smooth fade-in animation instead of
+    /// an instant snap to the persisted state. Called once from the
+    /// ctor after <c>InitializeComponent</c> so the named elements
+    /// exist.
     /// </summary>
     private void ApplyInitialRailState()
     {
         if (!_working.General.NavRailCollapsed) return;
 
         BtnToggleRail.IsChecked = true;
-        LeftRailBorder.Width    = RailWidthCollapsed;
-        SetNavTextVisibility(Visibility.Collapsed);
+        SetRailCollapsedState(Visibility.Collapsed);
     }
 
     /// <summary>
@@ -224,7 +328,7 @@ public partial class SettingsWindow : Window
     /// </summary>
     private void AnimateRailWidth(double targetWidth, bool collapse)
     {
-        if (collapse) SetNavTextVisibility(Visibility.Collapsed);
+        if (collapse) SetRailCollapsedState(Visibility.Collapsed);
 
         var animation = new DoubleAnimation
         {
@@ -237,23 +341,26 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Reveal the nav text labels + the WinMeters title once the expand
-    /// animation has finished. Guarded on BtnToggleRail.IsChecked so a
-    /// rapid collapse mid-expand (which cancels the expand animation
-    /// and reuses no events) doesn't accidentally re-show the labels.
+    /// Reveal the nav text labels + the WinMeters title + the search
+    /// row once the expand animation has finished. Guarded on
+    /// BtnToggleRail.IsChecked so a rapid collapse mid-expand (which
+    /// cancels the expand animation and reuses no events) doesn't
+    /// accidentally re-show the labels.
     /// </summary>
     private void ExpandAnimation_Completed(object? sender, EventArgs e)
     {
         if (BtnToggleRail.IsChecked == true) return; // user cancelled expansion
-        SetNavTextVisibility(Visibility.Visible);
+        SetRailCollapsedState(Visibility.Visible);
     }
 
     /// <summary>
-    /// Single source of truth for the 6 visibility targets that toggle
-    /// in lock-step with the rail collapse / expand animation. If a
-    /// future 6th nav item lands here, only this method needs editing.
+    /// Single source of truth for the 8 visibility targets that toggle
+    /// in lock-step with the rail collapse / expand animation: the
+    /// WinMeters title, the 5 nav item labels, the search row, and
+    /// the search placeholder. If a future 6th nav item lands here,
+    /// only this method needs editing.
     /// </summary>
-    private void SetNavTextVisibility(Visibility visibility)
+    private void SetRailCollapsedState(Visibility visibility)
     {
         RailTitle.Visibility         = visibility;
         NavHomeText.Visibility       = visibility;
@@ -261,6 +368,14 @@ public partial class SettingsWindow : Window
         NavMonitoringText.Visibility = visibility;
         NavAppearanceText.Visibility = visibility;
         NavAboutText.Visibility      = visibility;
+        NavSearchRow.Visibility      = visibility;
+        // Note: TxtSearchPlaceholder is NOT toggled here. It's a
+        // child of NavSearchRow (so it's hidden when the row is
+        // Collapsed) and its visibility is otherwise owned by the
+        // TxtSearch_TextChanged handler -- which correctly hides it
+        // when the TextBox has text. Setting it here to Visible on
+        // expand would clobber that and re-show the placeholder
+        // even when the user has typed something.
     }
 
     /// <summary>
