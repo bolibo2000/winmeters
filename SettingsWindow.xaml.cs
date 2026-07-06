@@ -1,17 +1,10 @@
-using System.Collections.ObjectModel;
-using System.Diagnostics;
-using System.IO;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using WnControls = System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Threading;
-using WnControls = System.Windows.Controls;
-#if !DESIGN_TIME
-using WnForms = System.Windows.Forms;
-#endif
-using WinMeters.Controls;
 
 namespace WinMeters;
 
@@ -21,74 +14,28 @@ namespace WinMeters;
 /// MetricCard on the Monitoring page, each holding its Show toggle,
 /// Max-value, Refresh-rate, and Section color in one place. Lock-position
 /// toggles, sub-meter toggles, theme-token color pickers, and the
-/// meter-display-order list keep their individual x:Names -- they're not
+/// meter-display-order list keep their individual x:Names --- they're not
 /// per-meter controls and don't fit the MetricCard pattern. Every toggle is
 /// a plain CheckBox + the hand-built WinMetersToggleSwitch style.
+///
+/// Partial-class split: the per-section populators / event handlers now
+/// live in SettingsWindow.General.cs / .Monitoring.cs / .Appearance.cs
+/// (one file per nav-rail item). This file owns state, lifecycle (ctor +
+/// nav + first-show fade animation), the PopulateUi() orchestrator, the
+/// generic per-attribute handlers (Slider ValueChanged + GenericToggle_Click),
+/// the ApplySubMeterToggle helper used by both the per-MetricCard path and
+/// the direct CheckBox path, the live-update debounce timer plumbing, and
+/// the footer (Save / Reset All / Quit) and Closing handlers. Visual-tree
+/// helpers and the per-meter order record also live here as cross-partial
+/// plumbing. All partial files declare `partial class SettingsWindow`
+/// in the same WinMeters namespace, so XAML-attribute event wiring and
+/// cross-partial method calls resolve transparently.
 /// </summary>
 public partial class SettingsWindow : Window
 {
     private readonly AppSettings _original;
     private readonly AppSettings _working;
     private readonly AppSettings _snapshotBeforeEdit;
-
-    /// <summary>
-    /// Static metric-key -> AppSettings wiring helper. Each entry tells the
-    /// populate / save loops which sub-object holds the meter state. Adding
-    /// a new meter means adding one entry here + one &lt;ctrl:MetricCard&gt;
-    /// x:Name to the XAML.
-    /// MaxValueRemoved: the WriteMaxValue / ReadMaxValue lambda pair was
-    /// dropped from every entry along with the per-meter Max-value TextBox
-    /// on MetricCard.xaml in the same commit (user request: remove the
-    /// Monitoring Max-value option from UI). The AppSettings.MaxValues
-    /// fields stay intact so any future consumer-side wiring can drop in
-    /// without touching settings.json.
-    /// </summary>
-    private static readonly MetricBinding[] MetricBindings =
-    {
-        new("Cpu",  "Cpu",      // MetricKey, Rate-binding key in AppSettings.Rates
-            (s, v) => s.Visibility.ShowCpu = v,
-            (s) => s.Visibility.ShowCpu,
-            (s, v) => s.Rates.Cpu = v,
-            (s) => s.Rates.Cpu),
-        new("Ram",  "Ram",
-            (s, v) => s.Visibility.ShowRam = v,
-            (s) => s.Visibility.ShowRam,
-            (s, v) => s.Rates.Ram = v,
-            (s) => s.Rates.Ram),
-        // Gpu card aggregates ShowGpuDedicated + ShowGpuShared into one
-        // toggle. The MetricCard's IsShown boolean reflects "any GPU pie
-        // shown"; we OR the two on save.
-        new("Gpu",  "GpuDedicated",
-            (s, v) => { if (v) { s.Visibility.ShowGpuDedicated = true; s.Visibility.ShowGpuShared = true; } else { s.Visibility.ShowGpuDedicated = false; s.Visibility.ShowGpuShared = false; } },
-            (s) => s.Visibility.ShowGpuDedicated && s.Visibility.ShowGpuShared,
-            (s, v) => s.Rates.GpuDedicated = v,
-            (s) => s.Rates.GpuDedicated),
-        new("Net",  "Net",
-            (s, v) => s.Visibility.ShowNet = v,
-            (s) => s.Visibility.ShowNet,
-            (s, v) => s.Rates.Net = v,
-            (s) => s.Rates.Net),
-        new("Disk", "Disk",
-            (s, v) => s.Visibility.ShowDisk = v,
-            (s) => s.Visibility.ShowDisk,
-            (s, v) => s.Rates.Disk = v,
-            (s) => s.Rates.Disk),
-    };
-
-    private static readonly Dictionary<string, MetricCard> MetricCardsByKey = new();
-
-    private static readonly Dictionary<string, string> MeterDisplayNames = new()
-    {
-        ["Cpu"] = "CPU Usage",
-        ["CpuTemp"] = "CPU Temp",
-        ["GpuTemp"] = "GPU Temp",
-        ["Ram"] = "RAM Usage",
-        ["GpuDedicated"] = "GPU VRAM",
-        ["GpuShared"] = "GPU SRAM",
-        ["Disk"] = "Disk",
-        ["Net"] = "Network",
-        ["Time"] = "Time",
-    };
 
     private readonly DispatcherTimer _liveUpdateTimer;
     private const int LiveUpdateDebounceMs = 120;
@@ -104,7 +51,7 @@ public partial class SettingsWindow : Window
     private bool _isNavigating;
     // Sticky flag flipped by Card_ValidationFailed. Reset at start of every
     // PopulateUi to clear stale errors from a prior session. SettingsWindow
-    // blocks save while this is true -- inline errors on the MetricCard
+    // blocks save while this is true --- inline errors on the MetricCard
     // already call out which input is bad.
     private bool _hasValidationError;
     // Replaces the WPF Window.DialogResult property. MainWindow opens this
@@ -124,7 +71,7 @@ public partial class SettingsWindow : Window
         // parser's pre-Connect event wireups (e.g. ComboBox SelectionChanged
         // via inline `SelectionChanged="..."`) find `_working` and
         // `_liveUpdateTimer` already initialised. The Slider ValueChanged
-        // handlers are NOT subscribed via XAML attr (intentionally) -- the
+        // handlers are NOT subscribed via XAML attr (intentionally) --- the
         // explicit subscribe happens at the END of PopulateUi() below so
         // the Slider coerce during InitializeComponent can't write through
         // to `_working` and clobber the saved Scale/Opacity.
@@ -196,7 +143,7 @@ public partial class SettingsWindow : Window
         // SettingsWindow opening reads the correct value). The
         // standard cancel-via-X path in SettingsWindow_Closing
         // reverts _original to the pre-edit snapshot, which would
-        // otherwise undo the rail toggle -- that handler
+        // otherwise undo the rail toggle --- that handler
         // special-cases NavRailCollapsed to preserve it across the
         // revert. We treat the rail state as window UI chrome, not
         // as a user-configurable setting, so it should survive a
@@ -207,28 +154,12 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// Single source of truth for the nav item display name + the
-    /// one-line description shown in the hover ToolTip on the 5
-    /// nav RadioButtons (built in <see cref="PopulateNavTooltips"/>).
-    /// If a 6th nav item lands here, both the XAML nav-item section
-    /// and this table need editing.
-    /// </summary>
-    private static readonly (string Name, string Description)[] NavItemMetadata = new[]
-    {
-        ("Home",       "Overview and quick links"),
-        ("General",    "Lock position, hide in fullscreen, refresh rate"),
-        ("Monitoring", "Per-meter show / max-value / refresh-rate / colour"),
-        ("Appearance", "Scale, opacity, theme accent, background, border"),
-        ("About",      "Version info and project links"),
-    };
-
-    /// <summary>
     /// First-show fade-in. Animates the window's Opacity from 0 to 1
     /// over 250ms (CubicEase EaseInOut), and if the persisted rail
     /// state is collapsed, also animates LeftRailBorder.Width from
     /// the XAML default 200px to the collapsed 48px. The user sees a
     /// smooth window-appearing animation with the rail collapsing in
-    /// place if needed. Fires only once -- the handler unsubscribes
+    /// place if needed. Fires only once --- the handler unsubscribes
     /// itself on first invocation.
     /// </summary>
     private void Window_ContentRendered(object? sender, EventArgs e)
@@ -259,7 +190,7 @@ public partial class SettingsWindow : Window
     /// <summary>
     /// Snap the rail to its persisted collapsed/expanded state on
     /// first show. Sets the logical state (hamburger IsChecked + text
-    /// Visibility) but NOT the Width -- the actual rail animation
+    /// Visibility) but NOT the Width --- the actual rail animation
     /// runs in Window_ContentRendered after the window is first
     /// shown, so the user sees a smooth fade-in animation instead of
     /// an instant snap to the persisted state. Called once from the
@@ -376,7 +307,7 @@ public partial class SettingsWindow : Window
     }
 
     // ---------------------------------------------------------------------
-    // UI population
+    // UI population orchestrator
     // ---------------------------------------------------------------------
 
     private void PopulateUi()
@@ -392,7 +323,7 @@ public partial class SettingsWindow : Window
         // Idempotent event attach. The XAML-side `ValueChanged="..."` attr
         // is intentionally omitted (SettingsWindow.xaml's SliderScale and
         // SliderOpacity) so the BAML Connect step does NOT wire those
-        // handlers during InitializeComponent -- the Slider coerce firing
+        // handlers during InitializeComponent --- the Slider coerce firing
         // ValueChanged there would otherwise write through to `_working`
         // and clobber the saved Scale/Opacity. Subscribe-then-set keeps
         // the Reset-all path's second PopulateUi() reseat from double-tap
@@ -405,57 +336,13 @@ public partial class SettingsWindow : Window
         PopulateNavTooltips();
     }
 
-    private void PopulateGeneralToggles()
-    {
-        var card = new[]
-        {
-            ("LockPosition",         _working.Window.LockPosition),
-            ("HideInFullscreen",     _working.General.HideInFullscreen),
-            ("SnapToTaskbar",        _working.Window.StickToTaskbar),
-            ("KeepOnTop",            _working.General.KeepOnTop),
-            ("Time24H",              _working.General.Time24H),
-            ("EnableHardwareMonitor", _working.General.EnableHardwareMonitor),
-            ("CombineLogicalCores",  _working.General.CombineLogicalCores),
-        };
-        foreach (var (tag, value) in card)
-        {
-            if (FindToggleByTag(tag) is { } ts) ts.IsChecked = value;
-        }
-
-        // Sub-meter toggles (CpuTemp / GpuTemp / HardwareLoad / Time)
-        var subs = new (string tag, bool value)[]
-        {
-            ("ShowCpuTemp",       _working.Visibility.ShowCpuTemp),
-            ("ShowGpuTemp",       _working.Visibility.ShowGpuTemp),
-            ("ShowHardwareLoad",  _working.Visibility.ShowHardwareLoad),
-            ("ShowTime",          _working.Visibility.ShowTime),
-        };
-        foreach (var (tag, value) in subs)
-        {
-            if (FindToggleByTag(tag) is { } ts) ts.IsChecked = value;
-        }
-
-        int currentRate = _working.General.RefreshRateMs;
-        int[] rateSteps = { 500, 1000, 2000, 5000 };
-        int closest = rateSteps.OrderBy(v => Math.Abs(v - currentRate)).First();
-        for (int i = 0; i < ComboRefreshRate.Items.Count; i++)
-        {
-            if (ComboRefreshRate.Items[i] is WnControls.ComboBoxItem item &&
-                item.Tag is string tag &&
-                int.TryParse(tag, out int v) && v == closest)
-            {
-                ComboRefreshRate.SelectedIndex = i;
-                break;
-            }
-        }
-    }
-
     /// <summary>
-    /// Walks the visual tree to find a ui:ToggleSwitch with the given Tag.
-    /// Toggles on the General / Sub-Meter pages are tagged by their
-    /// canonical short key (LockPosition, ShowCpuTemp, etc.); we scan
-    /// descendants of the SettingsWindow so we don't have to enumerate
-    /// each card positionally.
+    /// Walks the visual tree to find a WinMetersToggleSwitch CheckBox with
+    /// the given Tag. Toggles on the General / Sub-Meter pages are tagged
+    /// by their canonical short key (LockPosition, ShowCpuTemp, etc.); we
+    /// scan descendants of the SettingsWindow so we don't have to enumerate
+    /// each card positionally. Used by <c>SettingsWindow.General.cs</c>
+    /// <see cref="PopulateGeneralToggles"/>.
     /// </summary>
     private WnControls.CheckBox? FindToggleByTag(string tag)
     {
@@ -463,6 +350,12 @@ public partial class SettingsWindow : Window
             .FirstOrDefault(t => (t.Tag as string) == tag);
     }
 
+    /// <summary>
+    /// Generic descendant walker used by <see cref="FindToggleByTag"/> on
+    /// the General page. Lives on Core so future per-section helpers
+    /// (e.g. an Appearance page swatch finder) can reuse it without
+    /// duplicating the recursion.
+    /// </summary>
     private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
     {
         int count = VisualTreeHelper.GetChildrenCount(parent);
@@ -474,208 +367,8 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void PopulateAppearance()
-    {
-        SliderScale.Value   = _working.General.Scale;
-        SliderOpacity.Value = _working.General.Opacity;
-
-        SetSwatch(SwatchAccent,     _working.Colors.Accent);
-        SetSwatch(SwatchBackground, _working.Colors.Background);
-        SetSwatch(SwatchBorder,     _working.Colors.Border);
-    }
-
-    private void PopulateDisks()
-    {
-        try
-        {
-            using var mgr = new Monitors.MonitorManager();
-            var disks = mgr.GetDiskInstances();
-            ComboDisk.ItemsSource = disks;
-            ComboDisk.SelectedItem = _working.General.DiskInstanceName;
-            if (ComboDisk.SelectedIndex == -1 && ComboDisk.Items.Count > 0)
-                ComboDisk.SelectedIndex = 0;
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.PopulateDisks: {ex}");
-        }
-    }
-
-    private void PopulateNetworkInterfaces()
-    {
-        try
-        {
-            var interfaces = new List<string> { "(All Interfaces)" };
-            foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
-            {
-                if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
-                    continue;
-                interfaces.Add(nic.Name);
-            }
-            ComboNetwork.ItemsSource = interfaces;
-            var selected = string.IsNullOrWhiteSpace(_working.General.NetworkInterfaceName)
-                ? "(All Interfaces)"
-                : _working.General.NetworkInterfaceName;
-            ComboNetwork.SelectedItem = selected;
-            if (ComboNetwork.SelectedIndex == -1 && ComboNetwork.Items.Count > 0)
-                ComboNetwork.SelectedIndex = 0;
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.PopulateNetworkInterfaces: {ex}");
-        }
-    }
-
-    private void PopulateMeterOrder()
-    {
-        var items = new ObservableCollection<MeterOrderItem>();
-        bool hwAdded = false;
-        foreach (var key in _working.General.MeterOrder)
-        {
-            if (key is "CpuTemp" or "GpuTemp")
-            {
-                if (!hwAdded)
-                {
-                    items.Add(new MeterOrderItem { Key = "CpuTemp", Name = "CPU Temp" });
-                    items.Add(new MeterOrderItem { Key = "GpuTemp", Name = "GPU Temp" });
-                    hwAdded = true;
-                }
-            }
-            else
-            {
-                items.Add(new MeterOrderItem
-                {
-                    Key = key,
-                    Name = MeterDisplayNames.GetValueOrDefault(key, key)
-                });
-            }
-        }
-        ListMeterOrder.ItemsSource = items;
-    }
-
-    private void PopulateAbout()
-    {
-        try
-        {
-            // Compose the path from two nullable sources: Environment.ProcessPath
-            // is nullable on its own, and Process.GetCurrentProcess().MainModule
-            // is nullable too, with .FileName a third nullable layer. The
-            // resulting expression is therefore string?, but the downstream
-            // `string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath)`
-            // check already short-circuits to skip work on null, so we just
-            // type the local as nullable instead of suppressing the warning
-            // with `!` (which would mislead future readers).
-            string? assemblyPath = Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName;
-            if (!string.IsNullOrEmpty(assemblyPath) && File.Exists(assemblyPath))
-            {
-                var info = FileVersionInfo.GetVersionInfo(assemblyPath);
-                AboutVersion.Text = $"v{info.FileVersion}";
-            }
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.PopulateAbout: {ex}");
-        }
-    }
-
-    /// <summary>
-    /// Bind the 5 MetricCard instances to their corresponding settings
-    /// rows (IsShown, MaxValue, RefreshRate, SectionColor). One card per
-    /// binding entry above; the dictionary keeps x:Name lookups out of
-    /// the loop so adding a new meter stays one line.
-    /// </summary>
-    private void PopulateMetrics()
-    {
-        MetricCardsByKey.Clear();
-        MetricCardsByKey["Cpu"]  = CardCpu;
-        MetricCardsByKey["Ram"]  = CardRam;
-        MetricCardsByKey["Gpu"]  = CardGpu;
-        MetricCardsByKey["Net"]  = CardNet;
-        MetricCardsByKey["Disk"] = CardDisk;
-
-        foreach (var binding in MetricBindings)
-        {
-            if (!MetricCardsByKey.TryGetValue(binding.MetricKey, out var card)) continue;
-            card.IsShown         = binding.ReadIsShown(_working);
-            card.RefreshRateText = (binding.ReadRefreshRate(_working) ?? _working.General.RefreshRateMs).ToString();
-
-            if (_working.SectionColors.TryGetValue(binding.MetricKey, out var hex))
-                card.SectionColorHex = hex;
-
-            // Idempotent event attach. unsubscribe-then-subscribe - never
-            // double-tap on subsequent PopulateUi calls (BIND-77x redo).
-            // MaxValueChanged was removed alongside the per-meter Max-value
-            // TextBox on MetricCard.xaml in the same commit (user request:
-            // remove the Monitoring Max-value option from UI).
-            // SubMeterToggleChanged is wired here so each MetricCard that
-            // hosts sub-meter toggles (Cpu -> CPU Temp / H/W Load, Gpu ->
-            // GPU Temp) can raise toggle clicks out to this handler.
-            card.IsShownChanged         -= Card_IsShownChanged;
-            card.RefreshRateChanged     -= Card_RefreshRateChanged;
-            card.SectionColorChanged    -= Card_SectionColorChanged;
-            card.ValidationFailed       -= Card_ValidationFailed;
-            card.SubMeterToggleChanged  -= Card_SubMeterToggleChanged;
-
-            card.IsShownChanged         += Card_IsShownChanged;
-            card.RefreshRateChanged     += Card_RefreshRateChanged;
-            card.SectionColorChanged    += Card_SectionColorChanged;
-            card.ValidationFailed       += Card_ValidationFailed;
-            card.SubMeterToggleChanged  += Card_SubMeterToggleChanged;
-        }
-    }
-
-    private static void SetSwatch(Border swatch, string hex)
-    {
-        swatch.Background = ColorHelper.ParseBrush(hex);
-    }
-
-    /// <summary>
-    /// Build rich hover ToolTips on the 5 nav RadioButtons from
-    /// <see cref="NavItemMetadata"/>. The ToolTip uses the global
-    /// WinMetersTooltip style (dark card surface, drop shadow); we
-    /// just provide the content (bold section name + one-line
-    /// description). Single source of truth for the description text.
-    /// </summary>
-    private void PopulateNavTooltips()
-    {
-        var radios = new[] { NavHome, NavGeneral, NavMonitoring, NavAppearance, NavAbout };
-        foreach (var rb in radios)
-        {
-            if (rb.Tag is not string tag) continue;
-            var (name, description) = NavItemMetadata.FirstOrDefault(
-                x => x.Name.Equals(tag, StringComparison.OrdinalIgnoreCase));
-            if (string.IsNullOrEmpty(name)) continue;
-
-            rb.ToolTip = new WnControls.ToolTip
-            {
-                Content = new WnControls.StackPanel
-                {
-                    Children =
-                    {
-                        new WnControls.TextBlock
-                        {
-                            Text       = name,
-                            FontWeight = FontWeights.SemiBold,
-                            FontSize   = 13,
-                        },
-                        new WnControls.TextBlock
-                        {
-                            Text         = description,
-                            Opacity      = 0.7,
-                            FontSize     = 11,
-                            MaxWidth     = 200,
-                            TextWrapping = TextWrapping.Wrap,
-                            Margin       = new Thickness(0, 2, 0, 0),
-                        },
-                    },
-                },
-            };
-        }
-    }
-
     // ---------------------------------------------------------------------
-    // Generic toggle / slider / combobox handlers
+    // Generic toggle / slider handlers
     // ---------------------------------------------------------------------
 
     private void GenericToggle_Click(object sender, RoutedEventArgs e)
@@ -736,35 +429,6 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void ComboRefreshRate_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ComboRefreshRate.SelectedItem is WnControls.ComboBoxItem item &&
-            item.Tag is string tag &&
-            int.TryParse(tag, out int ms))
-        {
-            _working.General.RefreshRateMs = ms;
-            TriggerLiveUpdate();
-        }
-    }
-
-    private void ComboDisk_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ComboDisk.SelectedItem is string sel)
-        {
-            _working.General.DiskInstanceName = sel;
-            TriggerLiveUpdate();
-        }
-    }
-
-    private void ComboNetwork_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ComboNetwork.SelectedItem is string sel)
-        {
-            _working.General.NetworkInterfaceName = (sel == "(All Interfaces)") ? null : sel;
-            TriggerLiveUpdate();
-        }
-    }
-
     private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _working.General.Scale = e.NewValue;
@@ -775,173 +439,6 @@ public partial class SettingsWindow : Window
     {
         _working.General.Opacity = e.NewValue;
         TriggerLiveUpdate();
-    }
-
-    // ---------------------------------------------------------------------
-    // MetricCard event handlers - one per DP, with binding lookup
-    // ---------------------------------------------------------------------
-
-    private void Card_IsShownChanged(object? sender, EventArgs e)
-    {
-        if (sender is not MetricCard card) return;
-        var binding = FindBinding(card.MetricKey);
-        if (binding is null) return;
-        binding.WriteIsShown(_working, card.IsShown);
-        TriggerLiveUpdate();
-    }
-
-    private void Card_RefreshRateChanged(object? sender, RefreshRateChangedEventArgs e)
-    {
-        var binding = FindBinding(e.MetricKey);
-        if (binding is null) return;
-        binding.WriteRefreshRate(_working, e.Value);
-        TriggerLiveUpdate();
-    }
-
-    private void Card_SectionColorChanged(object? sender, SectionColorChangedEventArgs e)
-    {
-        if (sender is not MetricCard card) return;
-        _working.SectionColors[card.MetricKey] = e.Hex;
-        TriggerLiveUpdate();
-    }
-
-    /// <summary>
-    /// Per-MetricCard sub-meter toggle handler. The sub-meter toggles
-    /// (CPU Temp / GPU Temp / H/W Load) used to live in the General
-    /// section's UniformGrid; in the re-home commit they moved into
-    /// per-card inline rows on the Monitoring page (Cpu card shows CPU
-    /// Temp + H/W Load, Gpu card shows GPU Temp). The GenericToggle_Click
-    /// handler resolves only against SettingsWindow.xaml, so the cards
-    /// wire their inline Click to MetricCard.xaml.cs SubMeterToggleBase_Click
-    /// which raises <see cref="SubMeterToggleChanged"/>. We then dispatch
-    /// through the shared <see cref="ApplySubMeterToggle"/> helper so the
-    /// per-card path stays synchronized with the direct CheckBox path
-    /// (the Show Time toggle on the Monitoring page uses GenericToggle_Click
-    /// directly).
-    /// </summary>
-    private void Card_SubMeterToggleChanged(object? sender, SubMeterToggleChangedEventArgs e)
-    {
-        ApplySubMeterToggle(e.Tag, e.IsChecked);
-        TriggerLiveUpdate();
-    }
-
-    private void Card_ValidationFailed(object? sender, ValidationFailedEventArgs e)
-    {
-        // MetricCard already shows inline errors next to the offending textbox.
-        // We mirror that into a sticky flag so the Save button refuses to
-        // commit until the user fixes the value (clicked twice + blob
-        // submitted by Enter triggers Unsubscribe-on-empty-value too).
-        _hasValidationError = true;
-        TriggerLiveUpdate();
-    }
-
-    private static MetricBinding? FindBinding(string metricKey) =>
-        MetricBindings.FirstOrDefault(b => b.MetricKey == metricKey);
-
-    // ---------------------------------------------------------------------
-    // ListBox reorder + colour picker + hyperlink
-    // ---------------------------------------------------------------------
-
-    private void ListMeterOrder_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        BtnMoveUp.IsEnabled   = ListMeterOrder.SelectedIndex > 0;
-        BtnMoveDown.IsEnabled = ListMeterOrder.SelectedIndex >= 0
-                             && ListMeterOrder.SelectedIndex < ListMeterOrder.Items.Count - 1;
-    }
-
-    private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
-    {
-        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
-        int idx = ListMeterOrder.SelectedIndex;
-        if (idx > 0)
-        {
-            list.Move(idx, idx - 1);
-            ListMeterOrder.SelectedIndex = idx - 1;
-            TriggerLiveUpdate();
-        }
-    }
-
-    private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
-    {
-        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
-        int idx = ListMeterOrder.SelectedIndex;
-        if (idx >= 0 && idx < list.Count - 1)
-        {
-            list.Move(idx, idx + 1);
-            ListMeterOrder.SelectedIndex = idx + 1;
-            TriggerLiveUpdate();
-        }
-    }
-
-    /// <summary>
-    /// Single colour-picker used by the 3 theme-token (Accent / Background /
-    /// Border) rows on the Appearance page. MetricCard handles its own
-    /// SectionColours internally; the legacy 14 per-meter colour rows are
-    /// gone -- SectionColors takes their place.
-    /// </summary>
-    private void ColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not WnControls.Button btn || btn.Tag is not string tag) return;
-        string currentHex = tag switch
-        {
-            "Accent"     => _working.Colors.Accent,
-            "Background" => _working.Colors.Background,
-            "Border"     => _working.Colors.Border,
-            _            => "#FFFFFF"
-        };
-        Border? swatch = tag switch
-        {
-            "Accent"     => SwatchAccent,
-            "Background" => SwatchBackground,
-            "Border"     => SwatchBorder,
-            _            => null
-        };
-
-#if !DESIGN_TIME
-        try
-        {
-            using var dlg = new WnForms.ColorDialog
-            {
-                FullOpen = true,
-                Color = ColorHelper.ToDrawingColor(currentHex)
-            };
-            if (dlg.ShowDialog() != WnForms.DialogResult.OK) return;
-
-            string alpha = "FF";
-            if (currentHex.Length == 9) alpha = currentHex.Substring(1, 2);
-            else if (tag == "Background") alpha = "B4";
-
-            string hex = $"#{alpha}{dlg.Color.R:X2}{dlg.Color.G:X2}{dlg.Color.B:X2}";
-
-            switch (tag)
-            {
-                case "Accent":     _working.Colors.Accent = hex; break;
-                case "Background": _working.Colors.Background = hex; break;
-                case "Border":     _working.Colors.Border = hex; break;
-            }
-            if (swatch is not null) SetSwatch(swatch, hex);
-            TriggerLiveUpdate();
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.ColorButton_Click: {ex}");
-        }
-#endif
-    }
-
-    private void HyperlinkButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is WnControls.Button btn && btn.Tag is string url)
-        {
-            try
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"HyperlinkButton_Click: {ex}");
-            }
-        }
     }
 
     // ---------------------------------------------------------------------
@@ -968,7 +465,7 @@ public partial class SettingsWindow : Window
         ApplyMeterOrderToWorking();
         CopyWorkingToOriginal();
         _original.Save();
-        // Flag WasSaved and Close -- do NOT set WPF Window.DialogResult.
+        // Flag WasSaved and Close --- do NOT set WPF Window.DialogResult.
         // MainWindow shows this window modeless via Show() (see
         // MainWindow.OpenSettingsAndNavigateTo), and the WPF DialogResult
         // setter only accepts writes when the window was opened via
@@ -1019,7 +516,7 @@ public partial class SettingsWindow : Window
 
         // Preserve the nav rail collapse state across the cancel
         // revert. The standard snapshot-restore below would clobber
-        // it because the snapshot predates the toggle -- but the
+        // it because the snapshot predates the toggle --- but the
         // rail state is window UI chrome, not a user-configurable
         // setting, so a close-via-X should NOT undo it.
         bool savedRailState = _original.General.NavRailCollapsed;
@@ -1043,14 +540,6 @@ public partial class SettingsWindow : Window
         }
 
         _original.General.NavRailCollapsed = savedRailState;
-    }
-
-    private void ApplyMeterOrderToWorking()
-    {
-        if (ListMeterOrder.ItemsSource is not ObservableCollection<MeterOrderItem> list) return;
-        var newOrder = new List<string>();
-        foreach (var item in list) newOrder.Add(item.Key);
-        _working.General.MeterOrder = newOrder;
     }
 
     private void CopyWorkingToOriginal()
@@ -1077,6 +566,16 @@ public partial class SettingsWindow : Window
         if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
     }
 
+    /// <summary>
+    /// Per-meter order record. The <c>MeterOrder</c> list on
+    /// <c>AppSettings.General</c> stores raw keys (Cpu / GpuDedicated /
+    /// GpuShared / Ram / Net / Disk / CpuTemp / GpuTemp / Time); the
+    /// ListBox uses an observable collection of these items so adding,
+    /// removing, and reordering produces animated list transitions.
+    /// Used by the Monitoring partial file (<c>PopulateMeterOrder</c>,
+    /// <c>BtnMoveUp_Click</c>, <c>BtnMoveDown_Click</c>,
+    /// <c>ApplyMeterOrderToWorking</c>).
+    /// </summary>
     private class MeterOrderItem
     {
         public string Key { get; set; } = string.Empty;
@@ -1089,7 +588,7 @@ public partial class SettingsWindow : Window
     /// MetricCard.SectionColorHex). Keeps PopulateMetrics / card-event
     /// handlers one-liners. Adding a new meter = one MetricBinding entry
     /// + one &lt;ctrl:MetricCard&gt; XAML element. MaxValueRemoved:
-    /// WriteMaxValue / ReadMaxValue lamdbas dropped in the same commit
+    /// WriteMaxValue / ReadMaxValue lambdas dropped in the same commit
     /// as the MetricCard Max-value TextBox removal; AppSettings.MaxValues
     /// still exists for any future consumer-side wiring.
     /// </summary>
