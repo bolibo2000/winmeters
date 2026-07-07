@@ -445,19 +445,27 @@
         Default ToolTip style applied to every ToolTip in the app
         (the 5 nav rail RadioButtons, the MetricCard section-colour
         pickers, and the inline validation error tooltips on the
-        numeric MaxValue / RefreshRate textboxes). Dark card surface
-        + subtle white border + drop shadow match the rest of the
-        chrome so tooltips feel native to the WinMeters theme rather
-        than the default OS chrome.
+        numeric MaxValue / RefreshRate textboxes). Uses the bar
+        palette (opaque dark surface + grey border) at compact-bold
+        11pt Segoe UI so the dense per-metric tooltips read crisply
+        on top of the bar chrome and stay consistent across every
+        window rather than inheriting a card-paint feel that belongs
+        to the dialog cards. Drop shadow keeps the tooltip lifted
+        off whatever surface it points at. The ThemeBarTooltip brushes
+        were introduced in the Maximal colour recode and would
+        otherwise be defined-but-unused; wiring them here is what the
+        cluster comment at the top of the bar brush section has been
+        promising since the recode landed.
     -->
     <Style TargetType="ToolTip">
-        <Setter Property="Background"     Value="{DynamicResource ThemeCardBgBrush}"/>
+        <Setter Property="Background"     Value="{DynamicResource ThemeBarTooltipBgBrush}"/>
         <Setter Property="Foreground"     Value="{DynamicResource ThemeTextBrush}"/>
-        <Setter Property="BorderBrush"    Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="BorderBrush"    Value="{DynamicResource ThemeBarTooltipBorderBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Padding"        Value="8,4"/>
         <Setter Property="FontFamily"     Value="Segoe UI"/>
-        <Setter Property="FontSize"       Value="12"/>
+        <Setter Property="FontSize"       Value="11"/>
+        <Setter Property="FontWeight"     Value="Bold"/>
         <Setter Property="HasDropShadow"  Value="True"/>
         <Setter Property="Placement"      Value="MousePoint"/>
     </Style>
