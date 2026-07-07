@@ -131,9 +131,12 @@ namespace WinMeters
         /// system tray for the entire lifetime of the process. Menu is kept
         /// minimal on purpose: Show Settings (also wired to left-double-click
         /// to match Windows tray conventions), Show / Hide Bar (delegates to
-        /// the same ToggleVisibility the global hotkey uses), and Quit. The
-        /// Quit handler defers to MenuItem_Exit_Click so cleanup logic stays
-        /// in exactly one place.
+        /// the same ToggleVisibility the global hotkey uses), About
+        /// (parallel to the bar RMB popup's IDM_ABOUT entry — reuses the
+        /// <see cref="OpenAboutWindow"/> single-instance gate so repeated
+        /// clicks don't stack parallel About dialogs), and Quit. The Quit
+        /// handler defers to MenuItem_Exit_Click so cleanup logic stays in
+        /// exactly one place.
         /// All click handlers marshal onto the WPF Dispatcher because
         /// NotifyIcon's events fire on a WinForms MessageOnlyWindow thread,
         /// not on the WPF UI thread.
@@ -181,6 +184,13 @@ namespace WinMeters
         /// whole menu is rebuilt rather than just mutating .Text on the
         /// existing item so the user sees the label change BEFORE the
         /// next right-click on the tray icon.
+        ///
+        /// Item order parallels the bar's RMB popup (see BuildPopupMenu in
+        /// WmRButtonUp): top-level actions (settings + visibility toggle),
+        /// separator, then bottom-of-menu actions (About + Quit). About
+        /// sits between the separator and Quit so the user sees it the
+        /// last "data" item before the destructive Quit -- matches Explorer
+        /// / WinMeters conventions.
         /// </summary>
         private WnForms.ContextMenuStrip BuildTrayMenu()
         {
@@ -198,6 +208,9 @@ namespace WinMeters
             };
             toggleItem.Click += (_, _) => Dispatcher.Invoke(() => ToggleVisibility());
 
+            var aboutItem = new WnForms.ToolStripMenuItem("About");
+            aboutItem.Click += (_, _) => Dispatcher.Invoke(() => OpenAboutWindow());
+
             var quitItem = new WnForms.ToolStripMenuItem("Quit");
             quitItem.Click += (_, _) => Dispatcher.Invoke(() =>
                 MenuItem_Exit_Click(this, new RoutedEventArgs()));
@@ -205,6 +218,7 @@ namespace WinMeters
             menu.Items.Add(settingsItem);
             menu.Items.Add(toggleItem);
             menu.Items.Add(new WnForms.ToolStripSeparator());
+            menu.Items.Add(aboutItem);
             menu.Items.Add(quitItem);
 
             return menu;
