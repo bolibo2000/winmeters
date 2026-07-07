@@ -226,6 +226,27 @@ public class AppSettingsTests
         Assert.Equal("#CC202020", settings.Colors.Background);
     }
 
+    [Fact]
+    public void MigrateSettings_BackgroundIsNull()
+    {
+        // Explicit null in JSON is a hand-editor artefact rather than
+        // a normal user input (the SettingsWindow colorpicker never
+        // writes null). Deserialization sets ColorSettings.Background
+        // to null; the MigrateSettings Has+TryReadString path then
+        // can't extract a quoted string token (the value is the literal
+        // "null" not a quoted string), so the rebase rule is skipped
+        // and the property stays null. ColorHelper.ParseBrush treats
+        // a null as a transparent fallback -- ugly but not crashing.
+        // Pin the behaviour so a future refactor that adds null
+        // handling doesn't silently change the path.
+        const string raw = "{\"Colors\":{\"Background\":null}}";
+        var settings = JsonSerializer.Deserialize<AppSettings>(raw)!;
+
+        InvokeMigrate(settings, raw);
+
+        Assert.Null(settings.Colors.Background);
+    }
+
     /// <summary>
     /// Invokes the private <c>AppSettings.MigrateSettings</c> via reflection. The method
     /// takes a raw JSON token so we control which fields appear "present" vs missing.

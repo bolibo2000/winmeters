@@ -148,10 +148,17 @@ public class AppSettings
         // unchanged.
         if (Has(rawJson, "Background"))
         {
-            string? legacyBg = TryReadString(rawJson, "Background");
+            // Trim before the case-insensitive equality so hand-edited
+            // values like "#FF202020\n" or " #FF202020" still match the
+            // legacy default; the rule is value-aware, not byte-exact.
+            string? legacyBg = TryReadString(rawJson, "Background")?.Trim();
             if (string.Equals(legacyBg, "#FF202020", StringComparison.OrdinalIgnoreCase))
                 settings.Colors.Background = "#CC202020";
         }
+
+        // Both this rule's rebase target hex and ColorSettings.Background's
+        // default initializer must mirror ThemeBarBgBrush in
+        // Themes/WinMetersTheme.xaml. If you change one, change the other.
 
         EnsureMeterOrderEntry(settings.General.MeterOrder, "Time", afterKey: null);
 
@@ -327,6 +334,10 @@ public class AppSettings
         /// Editing this updates the theme; live-preview re-applies on the open dialog.
         /// </summary>
         public string Accent { get; set; } = "#00CCFF";
+        // Must mirror ThemeBarBgBrush hex in Themes/WinMetersTheme.xaml;
+        // the MigrateSettings rebase rule below rewrites the legacy
+        // "#FF202020" value to match this initializer's "#CC202020"
+        // for pre-recode upgrades.
         public string Background { get; set; } = "#CC202020";
         public string Border { get; set; } = "#44FFFFFF";
         public double BorderThickness { get; set; }
