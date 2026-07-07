@@ -54,10 +54,10 @@ public partial class AboutWindow : Window
         // Brushes.Transparent, which would make the dialog see-through).
         // RootGrid.Background explicit to defend against WPF Window
         // template masking the dialog's visible client area.
-        var menuBackground = ColorHelper.GetMenuBackgroundBrush();
+        var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
         this.Background = menuBackground;
         RootGrid.Background = menuBackground;
-        this.Foreground = ColorHelper.GetMenuTextBrush();
+        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
 
         // Fill the dynamic fields. TxtVersion via the multi-tier TryGetVersion
         // helper (Assembly.Version ->_FILEVERSION_info -> "unknown").

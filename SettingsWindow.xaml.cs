@@ -97,7 +97,7 @@ public partial class SettingsWindow : Window
         // the WPF Window theme default (a better fallback than
         // Brushes.Transparent, which would make the dialog genuinely
         // see-through and surface whatever is behind it).
-        this.Background = ColorHelper.GetMenuBackgroundBrush();
+        this.Background = ColorHelper.ThemeBrush("ThemeBgBrush");
         // ALSO paint the RootGrid with the same brush so the dialog's
         // visible client area is definitely dark. WPF's Window template
         // can mask Window.Background on its own when the visible client
@@ -108,7 +108,7 @@ public partial class SettingsWindow : Window
         // Cached locally so the two DP assignments are guaranteed to
         // hold the EXACT same instance -- keeps them in lockstep by
         // design and halves the brush-allocation count.
-        var menuBackground = ColorHelper.GetMenuBackgroundBrush();
+        var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
         RootGrid.Background = menuBackground;
         this.Background = menuBackground;
 
@@ -120,7 +120,7 @@ public partial class SettingsWindow : Window
         // Explicit per-element brushes (ErrorTextStyle's Red, the color-
         // picker rectangles' black borders etc.) are unaffected because
         // they're applied directly on the elements they belong to.
-        this.Foreground = ColorHelper.GetMenuTextBrush();
+        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
@@ -934,8 +934,8 @@ public partial class SettingsWindow : Window
     private static Style CreateMenuListBoxItemStyle()
     {
         var style = new Style(typeof(ListBoxItem));
-        var hl = ColorHelper.GetHighlightBrush();
-        var hlt = ColorHelper.GetHighlightTextBrush();
+        var hl = ColorHelper.ThemeBrush("ThemeAccentBrush");
+        var hlt = ColorHelper.ThemeBrush("ThemeTextBrush");
 
         // Native HMENU items light up on hover, not on click-selection.
         // Two triggers share the same setters so a hovered (but not yet

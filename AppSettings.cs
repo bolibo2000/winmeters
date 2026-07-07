@@ -306,7 +306,7 @@ public class AppSettings
         /// Editing this updates the theme; live-preview re-applies on the open dialog.
         /// </summary>
         public string Accent { get; set; } = "#00CCFF";
-        public string Background { get; set; } = "#FF202020";
+        public string Background { get; set; } = "#CC202020";
         public string Border { get; set; } = "#44FFFFFF";
         public double BorderThickness { get; set; }
         public double CpuBorderThickness { get; set; } = 0.5;

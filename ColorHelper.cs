@@ -115,125 +115,25 @@ namespace WinMeters
         }
 
         /// <summary>
-        /// Returns a SolidColorBrush matching the OS's current menu-background
-        /// brush, sampled live from <c>USER32!GetSysColor(COLOR_MENU)</c>. This
-        /// is the exact same brush the OS uses to paint the native Win32 HMENU
-        /// that the bar's RMB popup displays, so the WPF SettingsWindow dialog
-        /// lands on the user's existing chrome without any styling code of its
-        /// own. Folds the dark / light theme choice (and any custom accent the
-        /// user has configured in Windows Personalization) into a single
-        /// read at dialog-open time.
-        ///
-        /// Returns <c>null</c> (no exception escaped) only if the OS call fails
-        /// outright - rare, but covers very old Windows versions where the
-        /// GetSysColor ordinal behaves differently. Callers should null-coalesce
-        /// on the result so a missing brush falls back to the WPF Window
-        /// default background instead of throwing.
-        ///
-        /// One-shot read: the brush is sampled exactly once at dialog ctor and
-        /// cached on the Window.BACKGROUND dependency property. If the user
-        /// switcheS the system theme while the dialog is open the menu chrome
-        /// differs from the dialog background until the dialog is reopened.
-        /// Living with that mismatch is acceptable (settings dialogs are short
-        /// lived and the theme toggle mid-edit is an uncommon event); a
-        /// WM_SETTINGCHANGE hook could close the gap if it ever becomes a
-        /// real complaint.
+        /// Looks up a Theme* brush by resource key via the merged
+        /// Application.Resources dictionary (which already includes the
+        /// Themes/WinMetersTheme.xaml merged dictionary referenced by
+        /// App.xaml). Replaces the legacy OS-sampled
+        /// <c>GetMenuBackgroundBrush</c> /
+        /// <c>GetMenuTextBrush</c> /
+        /// <c>GetHighlightBrush</c> /
+        /// <c>GetHighlightTextBrush</c>
+        /// helpers that queried <c>NativeMethods.GetSysColor</c>. The
+        /// maximal colour recode retired that path so every colour the app
+        /// paints (bar XAML, SettingsWindow, AboutWindow) traces back to a
+        /// single Theme* source. Returns <c>null</c> on miss so callers
+        /// null-coalesce into the WPF Window default brush.
         /// </summary>
-        public static SolidColorBrush? GetMenuBackgroundBrush()
-            => BrushOrDark(NativeMethods.COLOR_MENU, 0x1F, 0x1F, 0x1F);
-
-        /// <summary>
-        /// Foreground of non-selected menu items. Used as
-        /// <see cref="System.Windows.Window.Foreground"/> in SettingsWindow
-        /// so every text-bearing child (TextBlocks, CheckBox.Content,
-        /// Button.Content, ComboBox items, ListBoxItem labels) inherits a
-        /// color matching the native HMENU's non-selected item text.
-        /// </summary>
-        public static SolidColorBrush? GetMenuTextBrush()
-            => BrushOrDark(NativeMethods.COLOR_MENUTEXT, 0xF0, 0xF0, 0xF0);
-
-        /// <summary>
-        /// Background of selected / highlighted menu items. Used as the
-        /// ListBoxItem.IsSelected background in SettingsWindow so the
-        /// selected entry in the meter-order list reads like a highlighted
-        /// native HMENU entry (the same color the OS paints when the user
-        /// hovers / keyboard-focuses a menu item).
-        /// </summary>
-        public static SolidColorBrush? GetHighlightBrush()
-            => BrushOrDark(NativeMethods.COLOR_HIGHLIGHT, 0x00, 0x78, 0xD7);
-
-        /// <summary>
-        /// Foreground of selected / highlighted menu items. Companion to
-        /// <see cref="GetHighlightBrush"/> - used as the ListBoxItem.IsSelected
-        /// foreground so the selected meter text reads with the same
-        /// contrast the native HMENU uses for highlighted entries.
-        /// </summary>
-        public static SolidColorBrush? GetHighlightTextBrush()
-            => BrushOrDark(NativeMethods.COLOR_HIGHLIGHTTEXT, 0xFF, 0xFF, 0xFF);
-
-        /// <summary>
-        /// Shared extraction path: reads <paramref name="sysColorIndex"/>
-        /// from USER32!GetSysColor, unpacks COLORREF (0x00BBGGRR) into RGB,
-        /// constructs a frozen WPF SolidColorBrush (safe to bind from any
-        /// WPF dispatcher context -- no inheritance-context churn, no
-        /// thread-affinity trap), and returns it. Logs and returns null on
-        /// the rare OS call failure so callers can simply null-coalesce.
-        /// Frozen brushes are the canonical way to bind a logically-immutable
-        /// color to a DependencyProperty; we Freeze() before returning so
-        /// WPF accepts the brush without re-checking IsFrozen on every bind.
-        /// </summary>
-        private static SolidColorBrush? GetSysColorBrush(int sysColorIndex)
+        public static SolidColorBrush? ThemeBrush(string resourceKey)
         {
-            try
-            {
-                int colorref = NativeMethods.GetSysColor(sysColorIndex);
-                byte r = (byte)(colorref & 0xFF);
-                byte g = (byte)((colorref >> 8) & 0xFF);
-                byte b = (byte)((colorref >> 16) & 0xFF);
-                var brush = new SolidColorBrush(WpfColor.FromRgb(r, g, b));
-                brush.Freeze();
+            if (System.Windows.Application.Current?.Resources[resourceKey] is SolidColorBrush brush)
                 return brush;
-            }
-            catch (System.Exception ex)
-            {
-                WinMeters.Log.D($"ColorHelper.GetSysColorBrush({sysColorIndex}): {ex.Message}");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Defensive override of <see cref="GetSysColorBrush"/> for Win10/11
-        /// dark-themed systems. On dark themes, GetSysColor(COLOR_MENU) reads
-        /// can return a near-white value -- a documented uxtheme quirk where
-        /// PreferredAppMode doesn't propagate to legacy syscolor translation
-        /// (visible most on Win10 1909 / 2004, recurring through Win11 22H2
-        /// patches) -- so the SettingsWindow lands on a near-white
-        /// background even after <c>Services.ThemeService.InitializeDarkMode()</c>
-        /// has flipped PreferredAppMode. This helper returns the documented
-        /// Win11 dark-menu hex (<paramref name="darkR"/>,
-        /// <paramref name="darkG"/>, <paramref name="darkB"/>) on dark
-        /// systems regardless of what GetSysColor returns, so the dialog
-        /// reliably lands on dark. Light-mode users continue to see the
-        /// live OS sample unchanged -- matches their OS theme.
-        /// Returns a frozen SolidColorBrush suitable for direct DP binding.
-        /// </summary>
-        private static SolidColorBrush? BrushOrDark(int sysColorIndex, byte darkR, byte darkG, byte darkB)
-        {
-            try
-            {
-                if (NativeMethods.ShouldSystemUseDarkMode() != 0)
-                {
-                    var brush = new SolidColorBrush(WpfColor.FromRgb(darkR, darkG, darkB));
-                    brush.Freeze();
-                    return brush;
-                }
-                return GetSysColorBrush(sysColorIndex);
-            }
-            catch (System.Exception ex)
-            {
-                WinMeters.Log.D($"ColorHelper.BrushOrDark({sysColorIndex}, #{darkR:X2}{darkG:X2}{darkB:X2}): {ex.Message}");
-                return null;
-            }
+            return null;
         }
     }
 }

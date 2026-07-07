@@ -36,6 +36,60 @@
     <SolidColorBrush x:Key="ThemeToggleThumb"     Color="White"/>
 
     <!--
+        WinMeters-bar token brushes. Migrated off MainWindow.xaml's inlined
+        hex/Foreground/Fill values so every colour the bar paints resolves
+        to a single source of truth in this dictionary. Kil0bit house
+        style: one brush per role, paired with a cluster comment so a
+        future reader can decide whether to recolour at source or override
+        per-control.
+
+            ThemeBarBgBrush              - MainBorder background (#CC202020;
+                                           80 percent alpha so the bar's
+                                           translucent overlay reads on top
+                                           of the user's taskbar / desktop).
+            ThemeBarBorderBrush          - MainBorder stroke (#44FFFFFF; 27
+                                           percent alpha 1px outline).
+            ThemeLabelBrush              - Grey labels (#AAAAAA). Replaces
+                                           LabelStyle.Foreground + IconStyle.Fill
+                                           and the NetArrow / DiskUpDown Path.Fill.
+            ThemeMetricCpuBrush          - CPU-bar value foreground (warm red
+                                           #FF6B6B). Used by MetricValueStyle.
+            ThemeMetricGpuBrush          - GPU temp / load foreground (teal
+                                           #4ECDC4). Inline-foreground on the
+                                           GpuTempText + GpuLoadText controls.
+            ThemeDiskReadBrush           - Disk read foreground (lime #44FF44).
+            ThemeDiskWriteBrush          - Disk write foreground (red #FF4444).
+            ThemeErrorBrush              - Inline validation error foreground
+                                           (Red). Backs the per-row
+                                           ErrorTextStyle in SettingsWindow.
+            ThemeBarTooltipBgBrush       - Bar ToolTip background (#FF202020).
+                                           Picked up by the App-level implicit
+                                           <Style TargetType="ToolTip"> so the
+                                           local MainWindow ToolTip style can
+                                           be deleted (single-ownership: the
+                                           theme owns ToolTip chrome).
+            ThemeBarTooltipBorderBrush   - Bar ToolTip border (#55555555).
+
+        Per-meter colour customisation (Cpu / Ram / Gpu / Net / Disk pies
+        plus the per-disk / per-network arrows) still flows through
+        AppSettings.Colors via ColorHelper.ParseBrush(_settings.Colors.X)
+        at runtime — the default hex strings in AppSettings.cs are aligned
+        to the values above so first-launch looks like the bar's static
+        chrome. User overrides through the SettingsWindow ColorDialog keep
+        working without the theme re-tinting.
+    -->
+    <SolidColorBrush x:Key="ThemeBarBgBrush"             Color="#CC202020"/>
+    <SolidColorBrush x:Key="ThemeBarBorderBrush"         Color="#44FFFFFF"/>
+    <SolidColorBrush x:Key="ThemeLabelBrush"             Color="#AAAAAA"/>
+    <SolidColorBrush x:Key="ThemeMetricCpuBrush"         Color="#FF6B6B"/>
+    <SolidColorBrush x:Key="ThemeMetricGpuBrush"         Color="#4ECDC4"/>
+    <SolidColorBrush x:Key="ThemeDiskReadBrush"          Color="#44FF44"/>
+    <SolidColorBrush x:Key="ThemeDiskWriteBrush"         Color="#FF4444"/>
+    <SolidColorBrush x:Key="ThemeErrorBrush"             Color="Red"/>
+    <SolidColorBrush x:Key="ThemeBarTooltipBgBrush"      Color="#FF202020"/>
+    <SolidColorBrush x:Key="ThemeBarTooltipBorderBrush"  Color="#55555555"/>
+
+    <!--
         WinMeters primary body text style: Segoe UI, semibold body weight. Used for
         section titles and toggle row labels. Falls back to Segoe UI when the
         user installed fonts do not carry the Display variant.

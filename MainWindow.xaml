@@ -12,29 +12,29 @@
     <Window.Resources>
         <!-- Shared Styles -->
         <Style x:Key="LabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="#AAAAAA"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeLabelBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Width" Value="24"/>
             <Setter Property="Margin" Value="0,0,6,0"/>
         </Style>
         <Style x:Key="ValueStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
         </Style>
         <Style x:Key="MetricValueStyle" TargetType="TextBlock" BasedOn="{StaticResource ValueStyle}">
-            <Setter Property="Foreground" Value="#FF6B6B"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeMetricCpuBrush}"/>
         </Style>
         <Style x:Key="IconStyle" TargetType="Path">
-            <Setter Property="Fill" Value="#AAAAAA"/>
+            <Setter Property="Fill" Value="{DynamicResource ThemeLabelBrush}"/>
             <Setter Property="Height" Value="9"/>
             <Setter Property="Width" Value="9"/>
             <Setter Property="Stretch" Value="Uniform"/>
         </Style>
         <Style x:Key="PieLabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
             <Setter Property="FontSize" Value="8"/>
             <Setter Property="HorizontalAlignment" Value="Center"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
@@ -50,41 +50,15 @@
             <Setter Property="Margin" Value="5,0,0,0"/>
         </Style>
         <!--
-            Native WPF ToolTip rendering, conforming to normal Windows
-            tooltip conventions. The .ToolTip string assigned in
-            MainWindow.UpdateTooltips() drives placement, timing, and
-            focus behaviour via the two implicit Style properties below:
-
-              * StackPanel ToolTipService defaults: Placement=Mouse
-                (cursor-relative position with auto edge-flip) and
-                InitialShowDelay=500ms (standard Windows hover delay).
-                BetweenShowDelay=0 keeps cross-panel sweeps instant —
-                exactly the behaviour the previous custom Window
-                duplicated with the 1-second pending timer + 150 ms
-                grace HideGrace rigging.
-              * ToolTip visual styling: dark-grey background, white
-                foreground, drop shadow — preserves the readable
-                larger-format look that the previous custom Window
-                delived, without paying the topmost-competition and
-                Window.Show() focus-win costs.
-
-            Replaces the previous custom Window path that competed for
-            topmost Z-order, hard-positioned at (0,0) on multi-monitor
-            edge overflow, and grabbed focus on .Show(). Native ToolTip
-            delegates placement to WPF's Popup which handles DPI
-            awareness, edge flipping, and focus discipline the way
-            Windows expects.
+            Implicit <Style TargetType="ToolTip"> intentionally
+            not redeclared here — the bar's ToolTip chrome is owned by
+            the App-level theme (Themes/WinMetersTheme.xaml), which
+            references ThemeBarTooltipBgBrush / ThemeBarTooltipBorderBrush /
+            ThemeTextBrush. The StackPanel ToolTipService defaults below
+            stay because they govern ToolTip behaviour (placement +
+            timing) specific to the bar's per-meter StackPanel layout,
+            not the visual chrome.
         -->
-        <Style TargetType="ToolTip">
-            <Setter Property="Background" Value="#FF202020"/>
-            <Setter Property="BorderBrush" Value="#55555555"/>
-            <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Foreground" Value="White"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Padding" Value="8,4,8,4"/>
-            <Setter Property="HasDropShadow" Value="True"/>
-        </Style>
         <Style TargetType="StackPanel">
             <!-- Placement=Top anchors the tooltip perpendicular to the panel's
                  top edge so it consistently sits ABOVE the bar regardless of
@@ -137,7 +111,7 @@
         </PathGeometry>
     </Window.Resources>
     <Grid x:Name="RootGrid">
-        <Border x:Name="MainBorder" Background="#CC202020" CornerRadius="5" BorderBrush="#44FFFFFF" BorderThickness="0">
+        <Border x:Name="MainBorder" Background="{DynamicResource ThemeBarBgBrush}" CornerRadius="5" BorderBrush="{DynamicResource ThemeBarBorderBrush}" BorderThickness="0">
             <Border.LayoutTransform>
                 <ScaleTransform x:Name="MainScale" ScaleX="1.0" ScaleY="1.0"/>
             </Border.LayoutTransform>
@@ -169,8 +143,8 @@
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="GpuTempLabel" Grid.Column="0" Text="Gpu:" Style="{StaticResource LabelStyle}"/>
-                    <TextBlock x:Name="GpuTempText" Grid.Column="1" Text="--°C" Foreground="#4ECDC4" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right"/>
-                    <TextBlock x:Name="GpuLoadText" Grid.Column="2" Text="--%" Foreground="#4ECDC4" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    <TextBlock x:Name="GpuTempText" Grid.Column="1" Text="--°C" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right"/>
+                    <TextBlock x:Name="GpuLoadText" Grid.Column="2" Text="--%" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                 </Grid>
             </StackPanel>
 
@@ -210,7 +184,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="R:" x:Name="DiskRestText" Foreground="#44FF44" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
+                    <TextBlock Grid.Column="0" Text="R:" x:Name="DiskRestText" Foreground="{DynamicResource ThemeDiskReadBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
                     <TextBlock Grid.Column="1" x:Name="DiskReadText" Text="0%" Style="{StaticResource ValueStyle}"/>
                 </Grid>
                 <Grid Margin="10,0,0,0">
@@ -218,7 +192,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="W:" x:Name="DiskWriteLabel" Foreground="#FF4444" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
+                    <TextBlock Grid.Column="0" Text="W:" x:Name="DiskWriteLabel" Foreground="{DynamicResource ThemeDiskWriteBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
                     <TextBlock Grid.Column="1" x:Name="DiskWriteText" Text="0%" Style="{StaticResource ValueStyle}"/>
                 </Grid>
             </StackPanel>
@@ -230,7 +204,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Path x:Name="ArrowDown" Grid.Column="0" Data="{StaticResource ArrowDownGeometry}" Fill="#AAAAAA" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,1,4,0"/>
+                    <Path x:Name="ArrowDown" Grid.Column="0" Data="{StaticResource ArrowDownGeometry}" Fill="{DynamicResource ThemeLabelBrush}" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,1,4,0"/>
                     <TextBlock Grid.Column="1" x:Name="NetDownText" Text="0 KB/s" Style="{StaticResource ValueStyle}"/>
                 </Grid>
                 <Grid Margin="10,0,0,0">
@@ -238,7 +212,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
-                    <Path x:Name="ArrowUp" Grid.Column="0" Data="{StaticResource ArrowUpGeometry}" Fill="#AAAAAA" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,1"/>
+                    <Path x:Name="ArrowUp" Grid.Column="0" Data="{StaticResource ArrowUpGeometry}" Fill="{DynamicResource ThemeLabelBrush}" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,1"/>
                     <TextBlock Grid.Column="1" x:Name="NetUpText" Text="0 KB/s" Style="{StaticResource ValueStyle}"/>
                 </Grid>
             </StackPanel>
