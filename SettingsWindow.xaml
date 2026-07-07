@@ -125,6 +125,24 @@
                 <!-- Visibility -->
                 <TextBlock Text="Visibility" Style="{StaticResource SectionHeaderStyle}"/>
                 <WrapPanel Margin="0,2">
+                    <!-- Access behavior toggles (Lock Position / Hide in Fullscreen /
+                         Snap to Taskbar / Keep on Top). These don't gate any meter's
+                         visibility; they gate how the bar BEHAVES in the desktop
+                         and shell (DragMove disabled by LockPosition, AppBarService
+                         driven by HideInFullscreen+SnapToTaskbar, WPF Topmost +
+                         EnforceZOrder timer driven by KeepOnTop). Drawn first in
+                         the Visibility section so the user lands on behavior
+                         settings before the meter on/off matrix below. TabIndex
+                         28-31 places them after every other keyboard-focusable
+                         control so the tab cycle doesn't accidentally land on a
+                         destructive Reset before the user has explored the
+                         visibility choices. -->
+                    <StackPanel Orientation="Horizontal">
+                        <CheckBox x:Name="ChkLockPosition"      Content="_Lock Position"    Style="{StaticResource CheckBoxStyle}" TabIndex="28"/>
+                        <CheckBox x:Name="ChkHideInFullscreen"  Content="Hide in _Fullscreen" Style="{StaticResource CheckBoxStyle}" TabIndex="29"/>
+                        <CheckBox x:Name="ChkSnapToTaskbar"     Content="_Snap to Taskbar"  Style="{StaticResource CheckBoxStyle}" TabIndex="30"/>
+                        <CheckBox x:Name="ChkKeepOnTop"         Content="_Keep on Top"      Style="{StaticResource CheckBoxStyle}" TabIndex="31"/>
+                    </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <CheckBox x:Name="ChkCpu" Content="_CPU" Style="{StaticResource CheckBoxStyle}" TabIndex="6"/>
                         <CheckBox x:Name="ChkRam" Content="_RAM" Style="{StaticResource CheckBoxStyle}" TabIndex="7"/>

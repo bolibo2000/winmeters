@@ -141,7 +141,7 @@ public partial class SettingsWindow : Window
 
         foreach (var handler in _checkboxHandlers)
         {
-            foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
+            foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
             {
                 chk.Checked -= handler;
                 chk.Unchecked -= handler;
@@ -244,6 +244,16 @@ public partial class SettingsWindow : Window
         ChkTime.IsChecked = _working.Visibility.ShowTime;
         ChkTime24H.IsChecked = _working.General.Time24H;
         ChkEnableHardwareMonitor.IsChecked = _working.General.EnableHardwareMonitor;
+        // Access toggles: live-preview wired (every other Visibility toggle too).
+        // Unlike ChkEnableHardwareMonitor, none of these have a one-shot
+        // side-effect that would churn on every drag tick -- LockPosition is
+        // read on next MouseLeftButtonDown, HideInFullscreen by AppBarService's
+        // ABN_FULLSCREENAPP handler, StickToTaskbar + KeepOnTop via
+        // MainWindow.ApplyWindowMode (called from ApplySettingsLive).
+        ChkLockPosition.IsChecked      = _working.Window.LockPosition;
+        ChkHideInFullscreen.IsChecked  = _working.General.HideInFullscreen;
+        ChkSnapToTaskbar.IsChecked     = _working.Window.StickToTaskbar;
+        ChkKeepOnTop.IsChecked         = _working.General.KeepOnTop;
 
         var checkHandler = new RoutedEventHandler((s, e) => TriggerLiveUpdate());
         // ChkEnableHardwareMonitor intentionally NOT subscribed here -- toggling it triggers
@@ -251,7 +261,7 @@ public partial class SettingsWindow : Window
         // only runs after the dialog commits via BtnOk_Click + ApplySettingsLive. Subscribing
         // it to TriggerLiveUpdate would cause spurious hardware-monitor churn on every ticked
         // live-preview during scroll / hover interactions before the user actually saves.
-        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
+        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
         {
             chk.Checked += checkHandler;
             chk.Unchecked += checkHandler;
@@ -725,6 +735,14 @@ public partial class SettingsWindow : Window
         _working.Visibility.ShowTime = ChkTime.IsChecked == true;
         _working.General.Time24H = ChkTime24H.IsChecked == true;
         _working.General.EnableHardwareMonitor = ChkEnableHardwareMonitor.IsChecked == true;
+        // Access toggle writes mirror the 4 IsChecked reads in PopulateVisibilityCheckboxes.
+        // Field mapping (UI name -> AppSettings) -- StickToTaskbar toggles _settings.Window
+        // .StickToTaskbar (kil0bit-style docked-as-AppBar vs floating-window), and KeepOnTop
+        // toggles _settings.General.KeepOnTop. Round-trips to the bar via ApplySettingsLive.
+        _working.Window.LockPosition      = ChkLockPosition.IsChecked == true;
+        _working.General.HideInFullscreen  = ChkHideInFullscreen.IsChecked == true;
+        _working.Window.StickToTaskbar     = ChkSnapToTaskbar.IsChecked == true;
+        _working.General.KeepOnTop         = ChkKeepOnTop.IsChecked == true;
 
         if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
         {
