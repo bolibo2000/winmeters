@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
@@ -158,23 +159,23 @@ public partial class SettingsWindow : Window
 
     private void PopulateSliders()
     {
-        // Opacity
+        // Opacity (formatted as integer 0%..100% via FormatOpacityValue; see helper below).
         SliderOpacity.Value = _working.General.Opacity;
-        TxtOpacity.Text = _working.General.Opacity.ToString("F2");
+        TxtOpacity.Text = FormatOpacityValue(_working.General.Opacity);
         var opacityHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
         {
-            TxtOpacity.Text = SliderOpacity.Value.ToString("F2");
+            TxtOpacity.Text = FormatOpacityValue(SliderOpacity.Value);
             TriggerLiveUpdate();
         });
         SliderOpacity.ValueChanged += opacityHandler;
         _sliderValueHandlers.Add(opacityHandler);
 
-        // Scale
+        // Scale (formatted as "1.0×" / "1.5×" / ...; see FormatScaleValue helper below).
         SliderScale.Value = _working.General.Scale;
-        TxtScale.Text = _working.General.Scale.ToString("F2");
+        TxtScale.Text = FormatScaleValue(_working.General.Scale);
         var scaleHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
         {
-            TxtScale.Text = SliderScale.Value.ToString("F2");
+            TxtScale.Text = FormatScaleValue(SliderScale.Value);
             TriggerLiveUpdate();
         });
         SliderScale.ValueChanged += scaleHandler;
@@ -715,6 +716,27 @@ public partial class SettingsWindow : Window
         public string Key { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
+
+    /// <summary>
+    /// Formats the Opacity slider value (0.0..1.0 stored, 0..100 displayed)
+    /// as an integer percent using <see cref="CultureInfo.InvariantCulture"/>
+    /// so a comma-decimal locale doesn't double up separators. Math.Round uses
+    /// the .NET 6+ default banker's-rounding which is tolerable for percent
+    /// display; matches the modernized dialog's badge format.
+    /// </summary>
+    private static string FormatOpacityValue(double v) =>
+        ((int)Math.Round(v * 100)).ToString(CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>
+    /// Formats the Scale slider value (0.5..2.0) as "1.0×" / "1.5×" / "2.0×"
+    /// using <see cref="CultureInfo.InvariantCulture"/>'s decimal point so
+    /// the value stays parseable across locales. The multiplication sign
+    /// (U+00D7) reads better than ASCII "x" on HiDPI displays and matches
+    /// FormatScaleValue / FormatOpacityValue parity with the modernized
+    /// dialog's slider badge format.
+    /// </summary>
+    private static string FormatScaleValue(double v) =>
+        v.ToString("F2", CultureInfo.InvariantCulture) + "\u00d7";
 }
 
 // Extension method to avoid type casting
