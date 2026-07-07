@@ -77,6 +77,34 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
 
+        // Opt this process into dark mode BEFORE sampling COLOR_MENU /
+        // COLOR_MENUTEXT / COLOR_HIGHLIGHT / COLOR_HIGHLIGHTTEXT. Win10
+        // 1903's per-process uxtheme-aware COLOR_MENU translation only
+        // returns the OS-painted dark value when PreferredAppMode is set
+        // to FORCE_DARK first; otherwise GetSysColor(COLOR_MENU) returns
+        // the legacy light-mode value even on a dark-themed system (this
+        // is what makes the SettingsWindow open with a near-white
+        // background the very first time the user opens the dialog -- the
+        // bar's popup flips PreferredAppMode process-wide on every right-
+        // click so opening the bar RMB first would mask the bug). Mirrors
+        // MainWindow.xaml.cs::ApplyMenuChromeMode. Wrapped in a try/catch
+        // so older Windows that don't export uxtheme ordinal #138
+        // (ShouldSystemUseDarkMode, pre-1903) fall through to the
+        // GetSysColor result the OS gives without it -- still better
+        // than a no-op crash that loses the dialog.
+        try
+        {
+            if (NativeMethods.ShouldSystemUseDarkMode() != 0)
+            {
+                NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
+                NativeMethods.FlushMenuThemes();
+            }
+        }
+        catch (System.Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow ctor (dark-mode setup): {ex.Message}");
+        }
+
         // Background matches the native Win32 HMENU that the bar's RMB
         // handler paints, pulled directly from COLOR_MENU via GetSysColor
         // so the dialog lands on whatever chrome the OS draws for the
