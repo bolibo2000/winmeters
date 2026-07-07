@@ -1,0 +1,71 @@
+<Window x:Class="WinMeters.AboutWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="About WinMeters" Height="280" Width="440"
+        WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
+        ShowInTaskbar="False">
+    <Grid x:Name="RootGrid" Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <!-- Brand: large "WinMeters" wordmark. Foreground inherits from
+             Window.Foreground (ColorHelper.GetMenuTextBrush), so it picks
+             up the OS-painted COLOR_MENUTEXT color live. FontSize 24 makes
+             it sans-serif big-text weight ~600; matches Kil0bit .WM.old
+             About-window styling. -->
+        <TextBlock Grid.Row="0" x:Name="TxtBrand"
+                   Text="WinMeters"
+                   FontSize="24" FontWeight="SemiBold"
+                   Margin="0,4,0,0"/>
+
+        <!-- Tagline: complements the brand. -->
+        <TextBlock Grid.Row="1" x:Name="TxtTagline"
+                   Text="A slim system-monitor overlay for the Windows taskbar."
+                   FontSize="11" Margin="0,2,0,12"/>
+
+        <!-- Version + Build row: side-by-side label/value pair. -->
+        <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,2">
+            <TextBlock Text="Version:" FontSize="11" Width="70" />
+            <TextBlock x:Name="TxtVersion" Text="—" FontSize="11" />
+        </StackPanel>
+
+        <!-- .NET target framework row (so users can see at a glance which
+             runtime they need). Filled by code-behind from the assembly's
+             TargetFrameworkAttribute so it stays in lockstep with the
+             csproj's <TargetFramework>. -->
+        <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,2">
+            <TextBlock Text="Runtime:" FontSize="11" Width="70" />
+            <TextBlock x:Name="TxtRuntime" Text="—" FontSize="11" />
+        </StackPanel>
+
+        <!-- Credits: line back to the original .Kilobit predecessor (so
+             anyone exploring the project tree sees the lineage). Plain
+             text only. No click handler is wired, because no canonical
+             WinMeters project repo URL lives in this codebase, and a
+             click handler that opened a placeholder URL would advertise
+             a feature that can't be fulfilled. -->
+        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,16,0,0">
+            <TextBlock Text="Predecessor:" FontSize="11" Width="70" />
+            <TextBlock x:Name="TxtCredits"
+                       Text="Successor to .Kilobit"
+                       FontSize="11" />
+        </StackPanel>
+
+        <!-- OK button: right-aligned at bottom (matches Windows About
+             dialog convention). IsDefault=True so Enter closes the
+             dialog. TabIndex=1 so Tab cycles straight to OK without
+             stalling on any of the read-only TextBlocks. -->
+        <Button Grid.Row="6" x:Name="BtnOk"
+                Content="_OK" Width="90" Margin="0,8,0,0"
+                HorizontalAlignment="Right"
+                IsDefault="True" Click="BtnOk_Click"
+                TabIndex="1"/>
+    </Grid>
+</Window>

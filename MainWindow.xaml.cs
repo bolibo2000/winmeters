@@ -43,9 +43,15 @@ namespace WinMeters
         private string _lastDiskReadFormatted = "";
         private string _lastDiskWriteFormatted = "";
 
-        // Cache formatted time
+        // Cache formatted time and date separately so the date tooltip only updates
+        // when the calendar day actually changes (once per day, not once per second).
         private long _lastTimeTicks;
         private string _lastTimeFormatted = "";
+        private string _lastDateFormatted = "";
+
+        // Reusable StringBuilder for EnforceZOrder's GetClassName call.
+        // EnforceZOrder runs on the WPF UI thread only, so a single instance is safe.
+        private readonly System.Text.StringBuilder _sbClassName = new(256);
 
         // Cache rendered bitmap + last percentage + last DPI bucket for pie charts.
         // The bitmap is produced with GDI+ (System.Drawing.Graphics.FillPie / DrawEllipse)
@@ -94,6 +100,12 @@ namespace WinMeters
         // window when settings window is open". Cleared by the Closed
         // subscriber attached inside MenuItem_Settings_Click.
         private SettingsWindow? _existingSettingsWindow;
+
+        // Active About dialog. Same single-instance gate pattern as
+        // _existingSettingsWindow -- repeated RMB-menu About clicks just
+        // reactivate the existing window. Cleared by the Closed
+        // subscriber attached inside OpenAboutWindow.
+        private AboutWindow? _existingAboutWindow;
 
         public MainWindow()
         {
@@ -559,10 +571,10 @@ namespace WinMeters
             if (fg == IntPtr.Zero) return;
 
             // Skip re-asserting while the shell's taskbar is in front of us.
-            var sb = new System.Text.StringBuilder(256);
-            if (NativeMethods.GetClassName(fg, sb, sb.Capacity) > 0)
+            _sbClassName.Clear();
+            if (NativeMethods.GetClassName(fg, _sbClassName, _sbClassName.Capacity) > 0)
             {
-                string fgClass = sb.ToString();
+                string fgClass = _sbClassName.ToString();
                 if (fgClass == "Shell_TrayWnd" || fgClass == "Shell_SecondaryTrayWnd")
                     return;
             }
@@ -889,9 +901,21 @@ namespace WinMeters
                     break;
 
                 case NativeMethods.IDM_ABOUT:
-                    // kil0bit parity: cmd 1003 opens Settings and
-                    // auto-navigates to the About section.
-                    OpenSettingsAndNavigateTo("About");
+                    // Cmd 1003 (About) opens the dedicated AboutWindow --
+                    // brand wordmark + version + credentials, single OK
+                    // button. The previous routing (OpenSettingsAndNavigateTo
+                    // ("About")) was a holdover from the .Kil0bit / .WM.old
+                    // menu structure where the same Settings dialog had an
+                    // embedded About section. The modernized single-page
+                    // SettingsWindow no longer has nav-rail sections, so
+                    // SelectSection("About") was a no-op and the About
+                    // invocation simply opened the full Settings dialog --
+                    // confusing, because the user clicked "About" expecting
+                    // a brief read-only info dialog and got the per-meter
+                    // configuration surface instead. OpenAboutWindow gives
+                    // the menu entry its own dialog with single-instance
+                    // gate (same pattern as OpenSettingsAndNavigateTo).
+                    OpenAboutWindow();
                     break;
 
                 case NativeMethods.IDM_EXIT:
@@ -1231,6 +1255,30 @@ namespace WinMeters
             OpenSettingsAndNavigateTo(null);
         }
 
+        /// <summary>
+        /// Opens the dedicated AboutWindow (cmd 1003 from the popup
+        /// menu). Single-instance gate with the same semantics as
+        /// <see cref="OpenSettingsAndNavigateTo"/>: if About is already
+        /// open, just reactivate it (no second MainWindow.OpenAboutWindow
+        /// invocations ever spawn a parallel instance). AboutWindow has
+        /// no model-time selection state to persist, so no Closed
+        /// subscriber reads any WhenSaved-style bool on close -- the
+        /// dialog is purely informational.
+        /// </summary>
+        private void OpenAboutWindow()
+        {
+            if (_existingAboutWindow is { } existing)
+            {
+                existing.Activate();
+                return;
+            }
+
+            var dlg = new AboutWindow { Owner = this };
+            _existingAboutWindow = dlg;
+            dlg.Closed += (_, _) => _existingAboutWindow = null;
+            dlg.Show();
+        }
+
 
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
         {
@@ -1311,6 +1359,7 @@ namespace WinMeters
             _lastDiskReadFormatted = "";
             _lastDiskWriteFormatted = "";
             _lastTimeFormatted = "";
+            _lastDateFormatted = "";
             _lastTimeTicks = 0;
         }
 
@@ -1752,8 +1801,10 @@ namespace WinMeters
 
             _monitorManager.UpdateGpu();
 
-            // Ensure HardwareMonitorService is refreshed so GpuDedicatedMemoryUsage / GpuSharedMemoryUsage are current.
-            _hardwareMonitor?.Update();
+            // Note: _hardwareMonitor is already updated by UpdateHardwareSensors() earlier
+            // in the same Timer_Tick. Do NOT call _hardwareMonitor?.Update() again here —
+            // that would double-poll every sensor on ticks where both GPU temp and GPU
+            // memory pies are due simultaneously.
 
             if (dedicatedDue)
             {
@@ -1831,7 +1882,13 @@ namespace WinMeters
                 TimeText.Text = timeStr;
             }
 
-            PanelTime.ToolTip = localTime.ToLongDateString();
+            // The date only changes once per day; only trigger a WPF DP write when it does.
+            string dateStr = localTime.ToLongDateString();
+            if (dateStr != _lastDateFormatted)
+            {
+                _lastDateFormatted = dateStr;
+                PanelTime.ToolTip = dateStr;
+            }
         }
 
         #endregion
