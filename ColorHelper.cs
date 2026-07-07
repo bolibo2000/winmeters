@@ -140,7 +140,7 @@ namespace WinMeters
         /// real complaint.
         /// </summary>
         public static SolidColorBrush? GetMenuBackgroundBrush()
-            => GetSysColorBrush(NativeMethods.COLOR_MENU);
+            => BrushOrDark(NativeMethods.COLOR_MENU, 0x1F, 0x1F, 0x1F);
 
         /// <summary>
         /// Foreground of non-selected menu items. Used as
@@ -150,7 +150,7 @@ namespace WinMeters
         /// color matching the native HMENU's non-selected item text.
         /// </summary>
         public static SolidColorBrush? GetMenuTextBrush()
-            => GetSysColorBrush(NativeMethods.COLOR_MENUTEXT);
+            => BrushOrDark(NativeMethods.COLOR_MENUTEXT, 0xF0, 0xF0, 0xF0);
 
         /// <summary>
         /// Background of selected / highlighted menu items. Used as the
@@ -160,7 +160,7 @@ namespace WinMeters
         /// hovers / keyboard-focuses a menu item).
         /// </summary>
         public static SolidColorBrush? GetHighlightBrush()
-            => GetSysColorBrush(NativeMethods.COLOR_HIGHLIGHT);
+            => BrushOrDark(NativeMethods.COLOR_HIGHLIGHT, 0x00, 0x78, 0xD7);
 
         /// <summary>
         /// Foreground of selected / highlighted menu items. Companion to
@@ -169,7 +169,7 @@ namespace WinMeters
         /// contrast the native HMENU uses for highlighted entries.
         /// </summary>
         public static SolidColorBrush? GetHighlightTextBrush()
-            => GetSysColorBrush(NativeMethods.COLOR_HIGHLIGHTTEXT);
+            => BrushOrDark(NativeMethods.COLOR_HIGHLIGHTTEXT, 0xFF, 0xFF, 0xFF);
 
         /// <summary>
         /// Shared extraction path: reads <paramref name="sysColorIndex"/>
@@ -197,6 +197,41 @@ namespace WinMeters
             catch (System.Exception ex)
             {
                 WinMeters.Log.D($"ColorHelper.GetSysColorBrush({sysColorIndex}): {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Defensive override of <see cref="GetSysColorBrush"/> for Win10/11
+        /// dark-themed systems. On dark themes, GetSysColor(COLOR_MENU) reads
+        /// can return a near-white value -- a documented uxtheme quirk where
+        /// PreferredAppMode doesn't propagate to legacy syscolor translation
+        /// (visible most on Win10 1909 / 2004, recurring through Win11 22H2
+        /// patches) -- so the SettingsWindow lands on a near-white
+        /// background even after <c>Services.ThemeService.InitializeDarkMode()</c>
+        /// has flipped PreferredAppMode. This helper returns the documented
+        /// Win11 dark-menu hex (<paramref name="darkR"/>,
+        /// <paramref name="darkG"/>, <paramref name="darkB"/>) on dark
+        /// systems regardless of what GetSysColor returns, so the dialog
+        /// reliably lands on dark. Light-mode users continue to see the
+        /// live OS sample unchanged -- matches their OS theme.
+        /// Returns a frozen SolidColorBrush suitable for direct DP binding.
+        /// </summary>
+        private static SolidColorBrush? BrushOrDark(int sysColorIndex, byte darkR, byte darkG, byte darkB)
+        {
+            try
+            {
+                if (NativeMethods.ShouldSystemUseDarkMode() != 0)
+                {
+                    var brush = new SolidColorBrush(WpfColor.FromRgb(darkR, darkG, darkB));
+                    brush.Freeze();
+                    return brush;
+                }
+                return GetSysColorBrush(sysColorIndex);
+            }
+            catch (System.Exception ex)
+            {
+                WinMeters.Log.D($"ColorHelper.BrushOrDark({sysColorIndex}, #{darkR:X2}{darkG:X2}{darkB:X2}): {ex.Message}");
                 return null;
             }
         }

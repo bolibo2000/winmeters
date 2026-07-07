@@ -103,6 +103,19 @@ public partial class SettingsWindow : Window
         // Brushes.Transparent, which would make the dialog genuinely
         // see-through and surface whatever is behind it).
         this.Background = ColorHelper.GetMenuBackgroundBrush();
+        // ALSO paint the RootGrid with the same brush so the dialog's
+        // visible client area is definitely dark. WPF's Window template
+        // can mask Window.Background on its own when the visible client
+        // area would otherwise show the Aero2 default chrome -- this
+        // explicit Grid brush closes that gap by guaranteeing the Grid
+        // (which fills the entire client area) paints the same brush
+        // instead of inheriting the (potentially-masked) Window chrome.
+        // Cached locally so the two DP assignments are guaranteed to
+        // hold the EXACT same instance -- keeps them in lockstep by
+        // design and halves the brush-allocation count.
+        var menuBackground = ColorHelper.GetMenuBackgroundBrush();
+        RootGrid.Background = menuBackground;
+        this.Background = menuBackground;
 
         // Foreground inherits via the WPF Visual tree -- sets the text
         // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
