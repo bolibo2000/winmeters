@@ -59,6 +59,15 @@ public partial class SettingsWindow : Window
     private readonly List<RoutedEventHandler> _checkboxHandlers = new();
     private readonly List<TextChangedEventHandler> _rateTextChangedHandlers = new();
     private readonly List<TextCompositionEventHandler> _ratePreviewTextHandlers = new();
+    // PopulateDisks / PopulateNetworkInterfaces SelectionChanged lambdas tracked
+    // separately so UnsubscribeDialogHandlers can detach them on close AND
+    // before a Reset-driven re-PopulateUi. Without this list pattern they
+    // would multiply one extra subscription per Reset (the old lambda stays
+    // attached to the ComboBox, and on every future user interaction it fires
+    // alongside the new lambda and calls TriggerLiveUpdate through the
+    // rebroadcast old closure). Mirrors the existing per-list pattern.
+    private readonly List<SelectionChangedEventHandler> _diskComboHandlers = new();
+    private readonly List<SelectionChangedEventHandler> _nicComboHandlers  = new();
 
     // Debounce timer for live updates to avoid excessive processing
     private System.Windows.Threading.DispatcherTimer? _liveUpdateTimer;
@@ -102,15 +111,33 @@ public partial class SettingsWindow : Window
 
     private void SettingsWindow_Closed(object? sender, EventArgs e)
     {
+        // Live-update debounce timer is a no-op once the window is gone;
+        // DispatcherTimer doesn't implement IDisposable in WPF.
         _liveUpdateTimer?.Stop();
-        // DispatcherTimer doesn't implement IDisposable in WPF
 
-        // Unsubscribe all event handlers to prevent memory leaks
+        // Memory-leak prevention: drop every per-control handler we subscribed
+        // during PopulateUi. Extracted to UnsubscribeDialogHandlers so
+        // BtnReset_Click can re-use the same cleanup before re-populating
+        // against a default-constructed _working instance.
+        UnsubscribeDialogHandlers();
+    }
+
+    /// <summary>
+    /// Removes every event handler we subscribed during PopulateUi (sliders /
+    /// visibility checkboxes / refresh-rate textboxes / refresh-rate preview)
+    /// and clears the tracking lists so a follow-up PopulateUi starts from a
+    /// clean slate. Called from BOTH SettingsWindow_Closed (memory-leak
+    /// prevention) AND BtnReset_Click (so the old handlers don't double-fire
+    /// alongside the new ones after _working is swapped for defaults).
+    /// </summary>
+    private void UnsubscribeDialogHandlers()
+    {
         foreach (var handler in _sliderValueHandlers)
         {
             SliderOpacity.ValueChanged -= handler;
             SliderScale.ValueChanged -= handler;
         }
+        _sliderValueHandlers.Clear();
 
         foreach (var handler in _checkboxHandlers)
         {
@@ -120,6 +147,7 @@ public partial class SettingsWindow : Window
                 chk.Unchecked -= handler;
             }
         }
+        _checkboxHandlers.Clear();
 
         foreach (var handler in _rateTextChangedHandlers)
         {
@@ -132,6 +160,7 @@ public partial class SettingsWindow : Window
             TxtRateGpuDedicated.TextChanged -= handler;
             TxtRateGpuShared.TextChanged -= handler;
         }
+        _rateTextChangedHandlers.Clear();
 
         foreach (var handler in _ratePreviewTextHandlers)
         {
@@ -144,6 +173,24 @@ public partial class SettingsWindow : Window
             TxtRateGpuDedicated.PreviewTextInput -= handler;
             TxtRateGpuShared.PreviewTextInput -= handler;
         }
+        _ratePreviewTextHandlers.Clear();
+
+        // Detach the disk / NIC ComboBox SelectionChanged lambdas that
+        // PopulateDisks / PopulateNetworkInterfaces tracked. Without this
+        // teardown a Reset-driven re-PopulateUi would leave the old lambdas
+        // attached -- they keep firing on every future user interaction, and
+        // each one closes over _working calling TriggerLiveUpdate.
+        foreach (var handler in _diskComboHandlers)
+        {
+            ComboDisk.SelectionChanged -= handler;
+        }
+        _diskComboHandlers.Clear();
+
+        foreach (var handler in _nicComboHandlers)
+        {
+            ComboNetwork.SelectionChanged -= handler;
+        }
+        _nicComboHandlers.Clear();
     }
 
     private void PopulateUi()
@@ -425,7 +472,7 @@ public partial class SettingsWindow : Window
             ComboDisk.ItemsSource = disks;
             SelectComboItem(ComboDisk, _working.General.DiskInstanceName);
 
-            ComboDisk.SelectionChanged += (s, e) =>
+            SelectionChangedEventHandler diskHandler = (s, e) =>
             {
                 if (ComboDisk.SelectedItem is string sel)
                 {
@@ -433,6 +480,8 @@ public partial class SettingsWindow : Window
                     TriggerLiveUpdate();
                 }
             };
+            ComboDisk.SelectionChanged += diskHandler;
+            _diskComboHandlers.Add(diskHandler);
         }
         catch (Exception ex)
         {
@@ -459,7 +508,7 @@ public partial class SettingsWindow : Window
                 : _working.General.NetworkInterfaceName;
             SelectComboItem(ComboNetwork, selectedNet);
 
-            ComboNetwork.SelectionChanged += (s, e) =>
+            SelectionChangedEventHandler nicHandler = (s, e) =>
             {
                 if (ComboNetwork.SelectedItem is string sel)
                 {
@@ -468,6 +517,8 @@ public partial class SettingsWindow : Window
                     TriggerLiveUpdate();
                 }
             };
+            ComboNetwork.SelectionChanged += nicHandler;
+            _nicComboHandlers.Add(nicHandler);
         }
         catch (Exception ex)
         {
@@ -580,6 +631,60 @@ public partial class SettingsWindow : Window
         // MainWindow reads WasSaved via its Closed subscriber instead. See BtnOk_Click for
         // the broader avoid-DialogResult reasoning.
         Close();
+    }
+
+    /// <summary>
+    /// Replaces <c>_working</c> with a default-constructed AppSettings (the same
+    /// values AppSettings.Load writes to settings.json on first launch when no
+    /// settings file exists), re-populates the dialog UI against the fresh
+    /// _working, and live-previews the reset on the bar so the user sees the
+    /// defaults land without having to OK the dialog.
+    ///
+    /// Safe under Cancel: _snapshotBeforeEdit is unchanged, so BtnCancel_Click
+    /// still restores the values the dialog opened with -- the Reset is freely
+    /// reversible via Cancel. The Reset tabindex (27) puts it after every other
+    /// keyboard-focusable control so tabbing through the dialog reaches it
+    /// LAST, matching the "I'm done fiddling, want to bail" mental model.
+    /// </summary>
+    private void BtnReset_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // _working is readonly, so reset by copying each nested reference
+            // from a transient new AppSettings() rather than reassigning.
+            // The transient's auto-property initializers supply the factory
+            // defaults so we don't hardcode each one (which would silently
+            // drift on any future AppSettings field addition).
+            var defaults = new AppSettings();
+            _working.General       = defaults.General;
+            _working.Window        = defaults.Window;
+            _working.Colors        = defaults.Colors;
+            _working.Visibility    = defaults.Visibility;
+            _working.Rates         = defaults.Rates;
+            _working.MaxValues     = defaults.MaxValues;
+            _working.SectionColors = defaults.SectionColors;
+            // `defaults` falls out of scope at method return and is GC'd.
+
+            // Unsubscribe the old per-control handlers before PopulateUi re-adds
+            // them so a single Slider drag doesn't fire both old + new lambdas.
+            UnsubscribeDialogHandlers();
+
+            // Re-fill every control group against the fresh _working.
+            // PopulateColors starts with ColorsPanel.Children.Clear() and
+            // PopulateRateTextboxes calls ValidateAll() at the end -- the
+            // reset UI lands in a consistent, validated state.
+            PopulateUi();
+
+            // Mirror the existing slider-drag live-preview path so MainWindow
+            // picks up the defaults immediately. ApplyChangesLive copies
+            // _working -> _original and forwards to MainWindow.ApplySettingsLive
+            // -- same contract as the slider/checkbox drag ticks.
+            ApplyChangesLive();
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow.BtnReset_Click: {ex}");
+        }
     }
 
     private void ApplyChangesLive()
