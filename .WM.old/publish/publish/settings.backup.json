@@ -1,0 +1,74 @@
+{
+  "Recommendation": "Exit WinMeters before changing these settings!",
+  "General": {
+    "RefreshRateMs": 1000,
+    "Opacity": 0,
+    "Scale": 1,
+    "StartWithWindows": true,
+    "NetworkInterfaceName": null,
+    "DiskInstanceName": "_Total",
+    "CombineLogicalCores": true,
+    "MeterOrder": [
+      "Cpu",
+      "CpuTemp",
+      "GpuTemp",
+      "Ram",
+      "GpuDedicated",
+      "GpuShared",
+      "Disk",
+      "Net"
+    ],
+    "EnableHardwareMonitor": true
+  },
+  "Window": {
+    "LockPosition": true,
+    "DockOnTaskbar": true,
+    "PositionX": 234,
+    "PositionY": 1398.6666666666667,
+    "Height": 0,
+    "IsHiddenByUser": false
+  },
+  "Colors": {
+    "Background": "#FF202020",
+    "Border": "#44FFFFFF",
+    "BorderThickness": 0,
+    "CpuBorderThickness": 0.5,
+    "RamBorderThickness": 0.5,
+    "Separator": "#00FFFFFF",
+    "Label": "#AAAAAA",
+    "CpuSys": "#44FF44",
+    "CpuUser": "#FF4444",
+    "CpuTrack": "#28FFFFFF",
+    "RamPie": "#FFA500",
+    "RamBorder": "#FF000000",
+    "DiskRead": "#44FF44",
+    "DiskWrite": "#FF4444",
+    "NetDown": "#44FF44",
+    "NetUp": "#FF4444",
+    "CpuTemp": "#ffae6bff",
+    "GpuTemp": "#4ECDC4",
+    "GpuDedicatedPie": "#FFFF8080",
+    "GpuSharedPie": "#FFFFFF00"
+  },
+  "Visibility": {
+    "ShowCpu": true,
+    "ShowRam": true,
+    "ShowDisk": false,
+    "ShowNet": true,
+    "ShowCpuTemp": true,
+    "ShowGpuTemp": true,
+    "ShowHardwareLoad": true,
+    "ShowGpuDedicated": true,
+    "ShowGpuShared": true
+  },
+  "Rates": {
+    "Cpu": 1000,
+    "Ram": 1000,
+    "Disk": 1000,
+    "Net": 1000,
+    "CpuTemp": 1000,
+    "GpuTemp": 1000,
+    "GpuDedicated": 1000,
+    "GpuShared": 1000
+  }
+}

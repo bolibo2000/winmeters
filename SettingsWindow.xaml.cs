@@ -1,612 +1,717 @@
+using System.Collections.ObjectModel;
 using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using WnControls = System.Windows.Controls;
-using System.Windows.Media;
-using System.Windows.Media.Animation;
-using System.Windows.Threading;
+using WnShapes = System.Windows.Shapes;
+#if !DESIGN_TIME
+using WnForms = System.Windows.Forms;
+using WnDrawing = System.Drawing;
+#endif
 
 namespace WinMeters;
 
 /// <summary>
-/// Settings dialog rewritten to consume the new MetricCard UserControl. The
-/// 5 main meters (CPU / RAM / GPU / Net / Disk) live as 5 instances of
-/// MetricCard on the Monitoring page, each holding its Show toggle,
-/// Max-value, Refresh-rate, and Section color in one place. Lock-position
-/// toggles, sub-meter toggles, theme-token color pickers, and the
-/// meter-display-order list keep their individual x:Names --- they're not
-/// per-meter controls and don't fit the MetricCard pattern. Every toggle is
-/// a plain CheckBox + the hand-built WinMetersToggleSwitch style.
-///
-/// Partial-class split: the per-section populators / event handlers now
-/// live in SettingsWindow.General.cs / .Monitoring.cs / .Appearance.cs
-/// (one file per nav-rail item). This file owns state, lifecycle (ctor +
-/// nav + first-show fade animation), the PopulateUi() orchestrator, the
-/// generic per-attribute handlers (Slider ValueChanged + GenericToggle_Click),
-/// the ApplySubMeterToggle helper used by both the per-MetricCard path and
-/// the direct CheckBox path, the live-update debounce timer plumbing, and
-/// the footer (Save / Reset All / Quit) and Closing handlers. Visual-tree
-/// helpers and the per-meter order record also live here as cross-partial
-/// plumbing. All partial files declare `partial class SettingsWindow`
-/// in the same WinMeters namespace, so XAML-attribute event wiring and
-/// cross-partial method calls resolve transparently.
+/// Settings dialog window for configuring WinMeters appearance and behavior.
 /// </summary>
 public partial class SettingsWindow : Window
 {
+    // Compat shims preserved from the modernized SettingsWindow: MainWindow.OpenSettingsAndNavigateTo
+    // opens this dialog modeless via Show() and reads WasSaved on Closed to decide whether to
+    // ApplySettings, plus calls SelectSection("About") from the RMB-tray About entry. The single-
+    // page .WM.old layout has no nav-rail sections, so SelectSection is a no-op. WasSaved is
+    // flipped to true in BtnOk_Click right before Close(); BtnCancel_Click keeps it at the
+    // default false (the explicit set is defensive). The legacy DialogResult setter is removed
+    // below because it InvalidOperationException-throws on modeless Show()'d windows and the
+    // MainWindow pair-up doesn't read DialogResult anyway (replaced by WasSaved here).
+
+    /// <summary>True iff the user clicked OK and the dialog committed its edits to _original.</summary>
+    public bool WasSaved { get; private set; }
+
+    /// <summary>
+    /// No-op in the single-page .WM.old layout -- the modernized version had a 4-section nav
+    /// rail (Home / General / Monitoring / Appearance) that this dialog has no equivalent for.
+    /// Kept as a compat shim so the tray-icon RMB About entry still resolves on
+    /// MainWindow.OpenSettingsAndNavigateTo without throwing on a missing method.
+    /// </summary>
+    public void SelectSection(string sectionName) { /* single-page dialog has no sections */ }
+
     private readonly AppSettings _original;
     private readonly AppSettings _working;
     private readonly AppSettings _snapshotBeforeEdit;
 
-    private readonly DispatcherTimer _liveUpdateTimer;
-    private const int LiveUpdateDebounceMs = 120;
+    private static readonly Dictionary<string, string> FriendlyNames = new()
+    {
+        ["Cpu"] = "CPU Usage",
+        ["Ram"] = "Total RAM Usage",
+        ["Disk"] = "Disk Activity",
+        ["Net"] = "Network Activity",
+        ["H/W Temps"] = "H/W Temperatures",
+        ["GpuDedicated"] = "GPU VRAM Usage",
+        ["GpuShared"] = "GPU SRAM Usage",
+        ["Time"] = "System Time"
+    };
 
-    // Nav rail collapse/expand animation. Width is animated on
-    // LeftRailBorder.Border.WidthProperty directly (Width is a double,
-    // so a stock DoubleAnimation works without a custom
-    // GridLengthAnimation). The outer column is Width=Auto MinWidth=0
-    // and tracks the Border.
-    private const double RailWidthExpanded      = 200.0;
-    private const double RailWidthCollapsed     = 48.0;
-    private const double RailAnimationDurationMs = 150.0;
-    private bool _isNavigating;
-    // Sticky flag flipped by Card_ValidationFailed. Reset at start of every
-    // PopulateUi to clear stale errors from a prior session. SettingsWindow
-    // blocks save while this is true --- inline errors on the MetricCard
-    // already call out which input is bad.
-    private bool _hasValidationError;
-    // Replaces the WPF Window.DialogResult property. MainWindow opens this
-    // window modeless via Show() (so the user can keep fiddling with the
-    // bar / drag-position it while Settings is up), and the WPF Window's
-    // built-in DialogResult setter THROWS InvalidOperationException when
-    // not shown via ShowDialog(). Using a plain bool works for both
-    // modeless and modal Show paths and lets SettingsWindow_Closing plus
-    // the MainWindow.Closed subscriber cleanly distinguish "saved" from
-    // "cancelled" without touching the WPF property.
-    private bool _userSaved;
-    public bool WasSaved => _userSaved;
+    // Track event handlers for cleanup
+    private readonly List<RoutedPropertyChangedEventHandler<double>> _sliderValueHandlers = new();
+    private readonly List<RoutedEventHandler> _checkboxHandlers = new();
+    private readonly List<TextChangedEventHandler> _rateTextChangedHandlers = new();
+    private readonly List<TextCompositionEventHandler> _ratePreviewTextHandlers = new();
+
+    // Debounce timer for live updates to avoid excessive processing
+    private System.Windows.Threading.DispatcherTimer? _liveUpdateTimer;
+    private const int LiveUpdateDebounceMs = 100;
 
     public SettingsWindow(AppSettings original)
     {
-        // Assign backing fields BEFORE InitializeComponent so the BAML
-        // parser's pre-Connect event wireups (e.g. ComboBox SelectionChanged
-        // via inline `SelectionChanged="..."`) find `_working` and
-        // `_liveUpdateTimer` already initialised. The Slider ValueChanged
-        // handlers are NOT subscribed via XAML attr (intentionally) --- the
-        // explicit subscribe happens at the END of PopulateUi() below so
-        // the Slider coerce during InitializeComponent can't write through
-        // to `_working` and clobber the saved Scale/Opacity.
+        InitializeComponent();
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
+        // Deep clone to avoid mutating original until user confirms
         var json = JsonSerializer.Serialize(original);
         _working = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
         _snapshotBeforeEdit = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
 
-        _liveUpdateTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(LiveUpdateDebounceMs) };
+        DataContext = _working;
+        SetupLiveUpdateDebounce();
+        PopulateUi();
+
+        this.Closed += SettingsWindow_Closed;
+    }
+
+    private void SetupLiveUpdateDebounce()
+    {
+        _liveUpdateTimer = new System.Windows.Threading.DispatcherTimer
+        {
+            Interval = TimeSpan.FromMilliseconds(LiveUpdateDebounceMs)
+        };
         _liveUpdateTimer.Tick += (s, e) =>
         {
-            _liveUpdateTimer.Stop();
+            _liveUpdateTimer?.Stop();
             ApplyChangesLive();
         };
-
-        InitializeComponent();
-        PopulateUi();
-        SelectSection("Home");
-
-        this.Closing += SettingsWindow_Closing;
-        this.ContentRendered += Window_ContentRendered;
-
-        // Set the rail's logical collapsed/expanded state (hamburger
-        // IsChecked + text Visibility) but NOT the Width. The actual
-        // rail animation runs in Window_ContentRendered after the
-        // window is first shown, so the user sees a smooth fade-in
-        // animation instead of an instant snap to the persisted state.
-        ApplyInitialRailState();
-
-        // Start with the window invisible; Window_ContentRendered will
-        // animate it to visible. Combined with the rail animation
-        // above, this gives a polished first-show experience.
-        Opacity = 0;
-    }
-
-    // ---------------------------------------------------------------------
-    // Section routing
-    // ---------------------------------------------------------------------
-
-    private void NavRail_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not WnControls.RadioButton rb || rb.Tag is not string tag) return;
-        SelectSection(tag);
-    }
-
-    private void HomeCard_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is WnControls.Button btn && btn.Tag is string tag)
-        {
-            SelectSection(tag);
-        }
-    }
-
-    /// <summary>
-    /// Hamburger toggle in the nav rail header. Drives
-    /// AnimateRailWidth between RailWidthExpanded (200px) and
-    /// RailWidthCollapsed (48px) so the rail matches the kil0bit
-    /// NavigationView's left-pane collapse / expand behaviour. State
-    /// is held in the ToggleButton's IsChecked (true = collapsed).
-    /// </summary>
-    private void BtnToggleRail_Click(object sender, RoutedEventArgs e)
-    {
-        bool collapse = BtnToggleRail.IsChecked == true;
-        AnimateRailWidth(collapse ? RailWidthCollapsed : RailWidthExpanded, collapse);
-
-        // Persist the new state to both _working (so a subsequent
-        // live update carries it) and _original (so the next
-        // SettingsWindow opening reads the correct value). The
-        // standard cancel-via-X path in SettingsWindow_Closing
-        // reverts _original to the pre-edit snapshot, which would
-        // otherwise undo the rail toggle --- that handler
-        // special-cases NavRailCollapsed to preserve it across the
-        // revert. We treat the rail state as window UI chrome, not
-        // as a user-configurable setting, so it should survive a
-        // cancel.
-        _working.General.NavRailCollapsed  = collapse;
-        _original.General.NavRailCollapsed = collapse;
-        _original.Save();
-    }
-
-    /// <summary>
-    /// First-show fade-in. Animates the window's Opacity from 0 to 1
-    /// over 250ms (CubicEase EaseInOut), and if the persisted rail
-    /// state is collapsed, also animates LeftRailBorder.Width from
-    /// the XAML default 200px to the collapsed 48px. The user sees a
-    /// smooth window-appearing animation with the rail collapsing in
-    /// place if needed. Fires only once --- the handler unsubscribes
-    /// itself on first invocation.
-    /// </summary>
-    private void Window_ContentRendered(object? sender, EventArgs e)
-    {
-        ContentRendered -= Window_ContentRendered; // only animate once
-
-        var fadeIn = new DoubleAnimation
-        {
-            From          = 0,
-            To            = 1,
-            Duration      = TimeSpan.FromMilliseconds(250),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
-        };
-        BeginAnimation(Window.OpacityProperty, fadeIn);
-
-        if (_working.General.NavRailCollapsed)
-        {
-            var railAnimation = new DoubleAnimation
-            {
-                To            = RailWidthCollapsed,
-                Duration      = TimeSpan.FromMilliseconds(250),
-                EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
-            };
-            LeftRailBorder.BeginAnimation(Border.WidthProperty, railAnimation);
-        }
-    }
-
-    /// <summary>
-    /// Snap the rail to its persisted collapsed/expanded state on
-    /// first show. Sets the logical state (hamburger IsChecked + text
-    /// Visibility) but NOT the Width --- the actual rail animation
-    /// runs in Window_ContentRendered after the window is first
-    /// shown, so the user sees a smooth fade-in animation instead of
-    /// an instant snap to the persisted state. Called once from the
-    /// ctor after <c>InitializeComponent</c> so the named elements
-    /// exist.
-    /// </summary>
-    private void ApplyInitialRailState()
-    {
-        if (!_working.General.NavRailCollapsed) return;
-
-        BtnToggleRail.IsChecked = true;
-        SetRailCollapsedState(Visibility.Collapsed);
-    }
-
-    /// <summary>
-    /// Animates LeftRailBorder's Width with a 150ms cubic ease and
-    /// toggles Visibility on the nav text labels in lock-step. On
-    /// collapse: text labels are hidden immediately so they cannot
-    /// overflow the shrinking 48px rail. On expand: text labels stay
-    /// hidden during the animation and are revealed on the Completed
-    /// event, so the user sees a clean snap from collapsed to fully
-    /// expanded with no peek of a 1-2 character sliver poking out of
-    /// the narrow column in the early frames.
-    /// </summary>
-    private void AnimateRailWidth(double targetWidth, bool collapse)
-    {
-        if (collapse) SetRailCollapsedState(Visibility.Collapsed);
-
-        var animation = new DoubleAnimation
-        {
-            To          = targetWidth,
-            Duration    = TimeSpan.FromMilliseconds(RailAnimationDurationMs),
-            EasingFunction = new CubicEase { EasingMode = EasingMode.EaseInOut },
-        };
-        if (!collapse) animation.Completed += ExpandAnimation_Completed;
-        LeftRailBorder.BeginAnimation(Border.WidthProperty, animation);
-    }
-
-    /// <summary>
-    /// Reveal the nav text labels + the WinMeters title once the
-    /// expand animation has finished. Guarded on BtnToggleRail.IsChecked
-    /// so a rapid collapse mid-expand (which cancels the expand
-    /// animation and reuses no events) doesn't accidentally re-show
-    /// the labels.
-    /// </summary>
-    private void ExpandAnimation_Completed(object? sender, EventArgs e)
-    {
-        if (BtnToggleRail.IsChecked == true) return; // user cancelled expansion
-        SetRailCollapsedState(Visibility.Visible);
-    }
-
-    /// <summary>
-    /// Single source of truth for the 6 visibility targets that toggle
-    /// in lock-step with the rail collapse / expand animation: the
-    /// WinMeters title and the 5 nav item labels. If a future 6th
-    /// nav item lands here, only this method needs editing.
-    /// </summary>
-    private void SetRailCollapsedState(Visibility visibility)
-    {
-        RailTitle.Visibility         = visibility;
-        NavHomeText.Visibility       = visibility;
-        NavGeneralText.Visibility    = visibility;
-        NavMonitoringText.Visibility = visibility;
-        NavAppearanceText.Visibility = visibility;
-        NavAboutText.Visibility      = visibility;
-    }
-
-    /// <summary>
-    /// Switches the visible section (Home / General / Monitoring / Appearance / About)
-    /// and mirrors the selection in the nav rail. Public so MainWindow's RMB-menu
-    /// About entry (and any future deep-link entry point) can call
-    /// OpenSettingsAndNavigateTo("About") and land on the right tab without
-    /// re-creating the dialog. Reentrancy-guarded by <c>_isNavigating</c> so the
-    /// nav-rail RadioButton SelectionChanged callbacks can't recurse into this
-    /// method while it's mid-flight.
-    /// </summary>
-    public void SelectSection(string sectionName)
-    {
-        if (string.IsNullOrEmpty(sectionName) || _isNavigating) return;
-        _isNavigating = true;
-        try
-        {
-            SectionHome.Visibility       = Visibility.Collapsed;
-            SectionGeneral.Visibility    = Visibility.Collapsed;
-            SectionMonitoring.Visibility = Visibility.Collapsed;
-            SectionAppearance.Visibility = Visibility.Collapsed;
-            SectionAbout.Visibility      = Visibility.Collapsed;
-
-            switch (sectionName)
-            {
-                case "Home":       SectionHome.Visibility       = Visibility.Visible; break;
-                case "General":    SectionGeneral.Visibility    = Visibility.Visible; break;
-                case "Monitoring": SectionMonitoring.Visibility = Visibility.Visible; break;
-                case "Appearance": SectionAppearance.Visibility = Visibility.Visible; break;
-                case "About":      SectionAbout.Visibility      = Visibility.Visible; break;
-            }
-
-            WnControls.RadioButton? match = sectionName switch
-            {
-                "Home"       => NavHome,
-                "General"    => NavGeneral,
-                "Monitoring" => NavMonitoring,
-                "Appearance" => NavAppearance,
-                "About"      => NavAbout,
-                _ => null
-            };
-            if (match is not null && match.IsChecked != true)
-                match.IsChecked = true;
-        }
-        finally
-        {
-            _isNavigating = false;
-        }
-    }
-
-    // ---------------------------------------------------------------------
-    // UI population orchestrator
-    // ---------------------------------------------------------------------
-
-    private void PopulateUi()
-    {
-        _hasValidationError = false;
-        PopulateGeneralToggles();
-        PopulateAppearance();
-        PopulateDisks();
-        PopulateNetworkInterfaces();
-        PopulateMeterOrder();
-        PopulateAbout();
-        PopulateMetrics();
-        // Idempotent event attach. The XAML-side `ValueChanged="..."` attr
-        // is intentionally omitted (SettingsWindow.xaml's SliderScale and
-        // SliderOpacity) so the BAML Connect step does NOT wire those
-        // handlers during InitializeComponent --- the Slider coerce firing
-        // ValueChanged there would otherwise write through to `_working`
-        // and clobber the saved Scale/Opacity. Subscribe-then-set keeps
-        // the Reset-all path's second PopulateUi() reseat from double-tap
-        // (same rationale as PopulateMetrics' card handlers below; the
-        // -= on a never-subscribed event is a safe no-op on a C# event).
-        SliderScale.ValueChanged   -= SliderScale_ValueChanged;
-        SliderScale.ValueChanged   += SliderScale_ValueChanged;
-        SliderOpacity.ValueChanged -= SliderOpacity_ValueChanged;
-        SliderOpacity.ValueChanged += SliderOpacity_ValueChanged;
-        PopulateNavTooltips();
-    }
-
-    /// <summary>
-    /// Walks the visual tree to find a WinMetersToggleSwitch CheckBox with
-    /// the given Tag. Toggles on the General / Sub-Meter pages are tagged
-    /// by their canonical short key (LockPosition, ShowCpuTemp, etc.); we
-    /// scan descendants of the SettingsWindow so we don't have to enumerate
-    /// each card positionally. Used by <c>SettingsWindow.General.cs</c>
-    /// <see cref="PopulateGeneralToggles"/>.
-    /// </summary>
-    private WnControls.CheckBox? FindToggleByTag(string tag)
-    {
-        return FindVisualChildren<WnControls.CheckBox>(this)
-            .FirstOrDefault(t => (t.Tag as string) == tag);
-    }
-
-    /// <summary>
-    /// Generic descendant walker used by <see cref="FindToggleByTag"/> on
-    /// the General page. Lives on Core so future per-section helpers
-    /// (e.g. an Appearance page swatch finder) can reuse it without
-    /// duplicating the recursion.
-    /// </summary>
-    private static IEnumerable<T> FindVisualChildren<T>(DependencyObject parent) where T : DependencyObject
-    {
-        int count = VisualTreeHelper.GetChildrenCount(parent);
-        for (int i = 0; i < count; i++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(parent, i);
-            if (child is T match) yield return match;
-            foreach (var grand in FindVisualChildren<T>(child)) yield return grand;
-        }
-    }
-
-    // ---------------------------------------------------------------------
-    // Generic toggle / slider handlers
-    // ---------------------------------------------------------------------
-
-    private void GenericToggle_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not WnControls.CheckBox ts || ts.Tag is not string tag) return;
-        bool value = ts.IsChecked == true;
-
-        switch (tag)
-        {
-            case "LockPosition":         _working.Window.LockPosition = value; break;
-            case "SnapToTaskbar":        _working.Window.StickToTaskbar = value; break;
-            case "HideInFullscreen":     _working.General.HideInFullscreen = value; break;
-            case "KeepOnTop":            _working.General.KeepOnTop = value; break;
-            case "Time24H":              _working.General.Time24H = value; break;
-            case "EnableHardwareMonitor": _working.General.EnableHardwareMonitor = value; break;
-            case "CombineLogicalCores":  _working.General.CombineLogicalCores = value; break;
-            // ShowCpuTemp / ShowGpuTemp / ShowHardwareLoad / ShowTime are
-            // also dispatched through GenericToggle_Click because the Time
-            // toggle on the Monitoring page sits in a direct CheckBox
-            // (no MetricCard wrapper) and uses Click="GenericToggle_Click"
-            // directly. ApplySubMeterToggle is a pure field-setter shared
-            // with Card_SubMeterToggleChanged so the per-MetricCard path
-            // (routed via SubMeterToggleChanged) and the direct-CheckBox
-            // path stay identically synchronized. The post-switch
-            // TriggerLiveUpdate below fires the debounce timer once per
-            // GenericToggle_Click invocation.
-            case "ShowCpuTemp":
-            case "ShowGpuTemp":
-            case "ShowHardwareLoad":
-            case "ShowTime":
-                ApplySubMeterToggle(tag, value);
-                break; // fall through to post-switch TriggerLiveUpdate
-        }
-        TriggerLiveUpdate();
-    }
-
-    /// <summary>
-    /// Pure field-setter for the four sub-meter visibility toggles
-    /// (CPU Temp / GPU Temp / H/W Load / Show Time). Both the per-
-    /// MetricCard path (raised from MetricCard.xaml.cs SubMeterToggleBase_Click
-    /// via SubMeterToggleChanged) and the direct CheckBox path on the
-    /// Monitoring page call this helper, so a new sub-meter tag only
-    /// needs to be added in one place rather than two parallel switch
-    /// statements. Unknown tags are silently no-op'd. Callers drive
-    /// <see cref="TriggerLiveUpdate"/> themselves, which keeps each
-    /// call-site's debounce semantics intact (the per-card path fires
-    /// once after the helper, the per-CheckBox path falls through to
-    /// the existing post-switch TriggerLiveUpdate in GenericToggle_Click).
-    /// </summary>
-    private void ApplySubMeterToggle(string tag, bool value)
-    {
-        switch (tag)
-        {
-            case "ShowCpuTemp":       _working.Visibility.ShowCpuTemp       = value; break;
-            case "ShowGpuTemp":       _working.Visibility.ShowGpuTemp       = value; break;
-            case "ShowHardwareLoad":  _working.Visibility.ShowHardwareLoad  = value; break;
-            case "ShowTime":          _working.Visibility.ShowTime          = value; break;
-        }
-    }
-
-    private void SliderScale_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        _working.General.Scale = e.NewValue;
-        // Live-update the right-aligned value badge. FormatScaleValue
-        // lives on SettingsWindow.Appearance.cs (single source of truth
-        // for the badge-string format); same-class method call resolves
-        // across the partial-class files without an extra using.
-        ScaleValueText.Text = FormatScaleValue(e.NewValue);
-        TriggerLiveUpdate();
-    }
-
-    private void SliderOpacity_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        _working.General.Opacity = e.NewValue;
-        // Live-update the right-aligned value badge. FormatOpacityValue
-        // lives on SettingsWindow.Appearance.cs (single source of truth
-        // for the badge-string format); same-class method call resolves
-        // across the partial-class files without an extra using.
-        OpacityValueText.Text = FormatOpacityValue(e.NewValue);
-        TriggerLiveUpdate();
-    }
-
-    // ---------------------------------------------------------------------
-    // Footer handlers: Save, Reset, Quit
-    // ---------------------------------------------------------------------
-
-    private void BtnSave_Click(object sender, RoutedEventArgs e)
-    {
-        // Block save while any MetricCard has an unresolved validation
-        // error. The corresponding inline error messages are already
-        // visible next to the offending input; jumping to Monitoring so
-        // the user lands on the broken card.
-        if (_hasValidationError)
-        {
-            System.Windows.MessageBox.Show(this,
-                "One or more per-meter values are invalid. Fix the highlighted inputs before saving.",
-                "Validation Error",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
-            SelectSection("Monitoring");
-            return;
-        }
-
-        ApplyMeterOrderToWorking();
-        CopyWorkingToOriginal();
-        _original.Save();
-        // Flag WasSaved and Close --- do NOT set WPF Window.DialogResult.
-        // MainWindow shows this window modeless via Show() (see
-        // MainWindow.OpenSettingsAndNavigateTo), and the WPF DialogResult
-        // setter only accepts writes when the window was opened via
-        // ShowDialog(). Setting it from a Show()'d window throws
-        // InvalidOperationException. The MainWindow.Closed subscriber and
-        // SettingsWindow_Closing both read WasSaved instead.
-        _userSaved = true;
-        Close();
-    }
-
-    private void BtnResetAll_Click(object sender, RoutedEventArgs e)
-    {
-        var result = System.Windows.MessageBox.Show(
-            this,
-            "Reset all settings to factory defaults?\n\nThis will revert general, monitoring, appearance, color, and rate preferences. The action cannot be undone.",
-            "Reset All Settings",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes) return;
-
-        var defaults = new AppSettings();
-        _working.General      = defaults.General;
-        _working.Window       = defaults.Window;
-        _working.Colors       = defaults.Colors;
-        _working.Visibility   = defaults.Visibility;
-        _working.Rates        = defaults.Rates;
-        _working.MaxValues    = defaults.MaxValues;
-        _working.SectionColors = defaults.SectionColors;
-
-        PopulateUi();
-        TriggerLiveUpdate();
-    }
-
-    private void BtnQuit_Click(object sender, RoutedEventArgs e)
-    {
-        BtnSave_Click(sender, e); // persist first
-        System.Windows.Application.Current.Shutdown();
-    }
-
-    private void SettingsWindow_Closing(object? sender, System.ComponentModel.CancelEventArgs e)
-    {
-        // Same DialogResult caveat as BtnSave_Click: MainWindow shows this
-        // window modeless via Show() so the WPF DialogResult property is
-        // null on close. Read our own _userSaved bool (set by
-        // BtnSave_Click) instead of the WPF property to skip the snapshot
-        // revert on a successful save.
-        if (_userSaved) return;
-
-        // Preserve the nav rail collapse state across the cancel
-        // revert. The standard snapshot-restore below would clobber
-        // it because the snapshot predates the toggle --- but the
-        // rail state is window UI chrome, not a user-configurable
-        // setting, so a close-via-X should NOT undo it.
-        bool savedRailState = _original.General.NavRailCollapsed;
-
-        try
-        {
-            var restored = JsonSerializer.Deserialize<AppSettings>(
-                JsonSerializer.Serialize(_snapshotBeforeEdit)) ?? new AppSettings();
-            _original.General      = restored.General;
-            _original.Window       = restored.Window;
-            _original.Colors       = restored.Colors;
-            _original.Visibility   = restored.Visibility;
-            _original.Rates        = restored.Rates;
-            _original.MaxValues    = restored.MaxValues;
-            _original.SectionColors = restored.SectionColors;
-            if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
-        }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow cancel-revert: {ex}");
-        }
-
-        _original.General.NavRailCollapsed = savedRailState;
-    }
-
-    private void CopyWorkingToOriginal()
-    {
-        _original.General      = _working.General;
-        _original.Window       = _working.Window;
-        _original.Colors       = _working.Colors;
-        _original.Visibility   = _working.Visibility;
-        _original.Rates        = _working.Rates;
-        _original.MaxValues    = _working.MaxValues;
-        _original.SectionColors = _working.SectionColors;
     }
 
     private void TriggerLiveUpdate()
     {
-        _liveUpdateTimer.Stop();
-        _liveUpdateTimer.Start();
+        _liveUpdateTimer?.Stop();
+        _liveUpdateTimer?.Start();
+    }
+
+    private void SettingsWindow_Closed(object? sender, EventArgs e)
+    {
+        _liveUpdateTimer?.Stop();
+        // DispatcherTimer doesn't implement IDisposable in WPF
+
+        // Unsubscribe all event handlers to prevent memory leaks
+        foreach (var handler in _sliderValueHandlers)
+        {
+            SliderOpacity.ValueChanged -= handler;
+            SliderScale.ValueChanged -= handler;
+        }
+
+        foreach (var handler in _checkboxHandlers)
+        {
+            foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
+            {
+                chk.Checked -= handler;
+                chk.Unchecked -= handler;
+            }
+        }
+
+        foreach (var handler in _rateTextChangedHandlers)
+        {
+            TxtRateCpu.TextChanged -= handler;
+            TxtRateRam.TextChanged -= handler;
+            TxtRateDisk.TextChanged -= handler;
+            TxtRateNet.TextChanged -= handler;
+            TxtRateCpuTemp.TextChanged -= handler;
+            TxtRateGpuTemp.TextChanged -= handler;
+            TxtRateGpuDedicated.TextChanged -= handler;
+            TxtRateGpuShared.TextChanged -= handler;
+        }
+
+        foreach (var handler in _ratePreviewTextHandlers)
+        {
+            TxtRateCpu.PreviewTextInput -= handler;
+            TxtRateRam.PreviewTextInput -= handler;
+            TxtRateDisk.PreviewTextInput -= handler;
+            TxtRateNet.PreviewTextInput -= handler;
+            TxtRateCpuTemp.PreviewTextInput -= handler;
+            TxtRateGpuTemp.PreviewTextInput -= handler;
+            TxtRateGpuDedicated.PreviewTextInput -= handler;
+            TxtRateGpuShared.PreviewTextInput -= handler;
+        }
+    }
+
+    private void PopulateUi()
+    {
+        PopulateSliders();
+        PopulateVisibilityCheckboxes();
+        PopulateRateTextboxes();
+        PopulateColors();
+        PopulateDisks();
+        PopulateNetworkInterfaces();
+        PopulateMeterOrder();
+    }
+
+    private void PopulateSliders()
+    {
+        // Opacity
+        SliderOpacity.Value = _working.General.Opacity;
+        TxtOpacity.Text = _working.General.Opacity.ToString("F2");
+        var opacityHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
+        {
+            TxtOpacity.Text = SliderOpacity.Value.ToString("F2");
+            TriggerLiveUpdate();
+        });
+        SliderOpacity.ValueChanged += opacityHandler;
+        _sliderValueHandlers.Add(opacityHandler);
+
+        // Scale
+        SliderScale.Value = _working.General.Scale;
+        TxtScale.Text = _working.General.Scale.ToString("F2");
+        var scaleHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
+        {
+            TxtScale.Text = SliderScale.Value.ToString("F2");
+            TriggerLiveUpdate();
+        });
+        SliderScale.ValueChanged += scaleHandler;
+        _sliderValueHandlers.Add(scaleHandler);
+    }
+
+    private void PopulateVisibilityCheckboxes()
+    {
+        ChkCpu.IsChecked = _working.Visibility.ShowCpu;
+        ChkRam.IsChecked = _working.Visibility.ShowRam;
+        ChkDisk.IsChecked = _working.Visibility.ShowDisk;
+        ChkNet.IsChecked = _working.Visibility.ShowNet;
+        ChkCpuTemp.IsChecked = _working.Visibility.ShowCpuTemp;
+        ChkGpuTemp.IsChecked = _working.Visibility.ShowGpuTemp;
+        ChkHardwareLoad.IsChecked = _working.Visibility.ShowHardwareLoad;
+        ChkGpuDedicated.IsChecked = _working.Visibility.ShowGpuDedicated;
+        ChkGpuShared.IsChecked = _working.Visibility.ShowGpuShared;
+        ChkCombineCpu.IsChecked = _working.General.CombineLogicalCores;
+        ChkTime.IsChecked = _working.Visibility.ShowTime;
+        ChkTime24H.IsChecked = _working.General.Time24H;
+
+        var checkHandler = new RoutedEventHandler((s, e) => TriggerLiveUpdate());
+        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
+        {
+            chk.Checked += checkHandler;
+            chk.Unchecked += checkHandler;
+            _checkboxHandlers.Add(checkHandler);
+        }
+    }
+
+    private void PopulateRateTextboxes()
+    {
+        var rateMap = new Dictionary<WnControls.TextBox, string>
+        {
+            { TxtRateCpu, nameof(_working.Rates.Cpu) },
+            { TxtRateRam, nameof(_working.Rates.Ram) },
+            { TxtRateDisk, nameof(_working.Rates.Disk) },
+            { TxtRateNet, nameof(_working.Rates.Net) },
+            { TxtRateCpuTemp, nameof(_working.Rates.CpuTemp) },
+            { TxtRateGpuTemp, nameof(_working.Rates.GpuTemp) },
+            { TxtRateGpuDedicated, nameof(_working.Rates.GpuDedicated) },
+            { TxtRateGpuShared, nameof(_working.Rates.GpuShared) }
+        };
+
+        // Set initial values
+        foreach (var (tb, prop) in rateMap)
+        {
+            var value = prop switch
+            {
+                nameof(_working.Rates.Cpu) => _working.Rates.Cpu ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.Ram) => _working.Rates.Ram ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.Disk) => _working.Rates.Disk ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.Net) => _working.Rates.Net ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.CpuTemp) => _working.Rates.CpuTemp ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.GpuTemp) => _working.Rates.GpuTemp ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.GpuDedicated) => _working.Rates.GpuDedicated ?? _working.General.RefreshRateMs,
+                nameof(_working.Rates.GpuShared) => _working.Rates.GpuShared ?? _working.General.RefreshRateMs,
+                _ => _working.General.RefreshRateMs
+            };
+            tb.Text = value.ToString();
+        }
+
+        // Setup validation and input filtering
+        var textChangedHandler = new TextChangedEventHandler((s, e) =>
+        {
+            if (s is WnControls.TextBox tb)
+            {
+                var errorBlock = tb.Parent is WnControls.StackPanel panel && panel.Children.Count >= 3
+                    ? panel.Children[2] as TextBlock
+                    : null;
+                if (ValidateRate(tb, errorBlock))
+                    TriggerLiveUpdate();
+            }
+        });
+
+        var previewTextHandler = new TextCompositionEventHandler((s, e) =>
+        {
+            e.Handled = !string.IsNullOrEmpty(e.Text) && !e.Text.All(char.IsDigit);
+        });
+
+        foreach (var tb in rateMap.Keys)
+        {
+            tb.TextChanged += textChangedHandler;
+            tb.PreviewTextInput += previewTextHandler;
+            _rateTextChangedHandlers.Add(textChangedHandler);
+            _ratePreviewTextHandlers.Add(previewTextHandler);
+        }
+
+        // Setup error display references
+        SetupRateError(TxtRateCpu, ErrRateCpu);
+        SetupRateError(TxtRateRam, ErrRateRam);
+        SetupRateError(TxtRateDisk, ErrRateDisk);
+        SetupRateError(TxtRateNet, ErrRateNet);
+        SetupRateError(TxtRateCpuTemp, ErrRateCpuTemp);
+        SetupRateError(TxtRateGpuTemp, ErrRateGpuTemp);
+        SetupRateError(TxtRateGpuDedicated, ErrRateGpuDedicated);
+        SetupRateError(TxtRateGpuShared, ErrRateGpuShared);
+
+        ValidateAll();
+    }
+
+    private void SetupRateError(WnControls.TextBox tb, TextBlock err)
+    {
+        // Store error reference for validation
+        tb.Tag = err;
+    }
+
+    private void PopulateColors()
+    {
+        ColorsPanel.Children.Clear();
+
+        var colorProperties = new[]
+        {
+            ("Background", (Action<string>)(v => _working.Colors.Background = v)),
+            ("Border", (Action<string>)(v => _working.Colors.Border = v)),
+            ("CpuSys", (Action<string>)(v => _working.Colors.CpuSys = v)),
+            ("CpuUser", (Action<string>)(v => _working.Colors.CpuUser = v)),
+            ("RAM", (Action<string>)(v => _working.Colors.RamPie = v)),
+            ("RamBorder", (Action<string>)(v => _working.Colors.RamBorder = v)),
+            ("VRAM", (Action<string>)(v => _working.Colors.GpuDedicatedPie = v)),
+            ("SRAM", (Action<string>)(v => _working.Colors.GpuSharedPie = v)),
+            ("CpuTemp", (Action<string>)(v => _working.Colors.CpuTemp = v)),
+            ("GpuTemp", (Action<string>)(v => _working.Colors.GpuTemp = v)),
+            ("DiskRead", (Action<string>)(v => _working.Colors.DiskRead = v)),
+            ("DiskWrite", (Action<string>)(v => _working.Colors.DiskWrite = v)),
+            ("NetDown", (Action<string>)(v => _working.Colors.NetDown = v)),
+            ("NetUp", (Action<string>)(v => _working.Colors.NetUp = v)),
+            ("Time", (Action<string>)(v => _working.Colors.TimeText = v))
+        };
+
+        foreach (var (name, setter) in colorProperties)
+        {
+            AddColorEditor(name, setter);
+        }
+    }
+
+    private void AddColorEditor(string name, Action<string> setter)
+    {
+        string GetHex() => name switch
+        {
+            "Background" => _working.Colors.Background,
+            "Border" => _working.Colors.Border,
+            "CpuSys" => _working.Colors.CpuSys,
+            "CpuUser" => _working.Colors.CpuUser,
+            "RAM" => _working.Colors.RamPie,
+            "RamBorder" => _working.Colors.RamBorder,
+            "VRAM" => _working.Colors.GpuDedicatedPie,
+            "SRAM" => _working.Colors.GpuSharedPie,
+            "CpuTemp" => _working.Colors.CpuTemp,
+            "GpuTemp" => _working.Colors.GpuTemp,
+            "DiskRead" => _working.Colors.DiskRead,
+            "DiskWrite" => _working.Colors.DiskWrite,
+            "NetDown" => _working.Colors.NetDown,
+            "NetUp" => _working.Colors.NetUp,
+            "Time" => _working.Colors.TimeText,
+            _ => "#000000"
+        };
+
+        var panel = new StackPanel
+        {
+            Width = 200,
+            Margin = new Thickness(4),
+            Orientation = System.Windows.Controls.Orientation.Horizontal
+        };
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = name,
+            Width = 60,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 10
+        });
+
+        var rect = new WnShapes.Rectangle
+        {
+            Width = 20,
+            Height = 20,
+            Stroke = System.Windows.Media.Brushes.Black,
+            StrokeThickness = 1,
+            Margin = new Thickness(6, 0, 6, 0),
+            Fill = ColorHelper.ParseBrush(GetHex()),
+            Cursor = System.Windows.Input.Cursors.Hand
+        };
+        rect.MouseLeftButtonUp += (s, e) => OpenColorPicker(rect, setter, GetHex);
+        panel.Children.Add(rect);
+
+        var txt = new TextBlock
+        {
+            Text = GetHex(),
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 10,
+            MinWidth = 70
+        };
+        panel.Children.Add(txt);
+
+        ColorsPanel.Children.Add(panel);
+    }
+
+    private void OpenColorPicker(WnShapes.Rectangle rect, Action<string> setter, Func<string> getCurrentHex)
+    {
+        try
+        {
+#if !DESIGN_TIME
+            using var dlg = new WnForms.ColorDialog
+            {
+                Color = ColorHelper.ToDrawingColor(getCurrentHex()),
+                FullOpen = true
+            };
+
+            if (dlg.ShowDialog() == WnForms.DialogResult.OK)
+            {
+                var hex = ColorHelper.ToHexString(dlg.Color);
+                setter(hex);
+                rect.Fill = ColorHelper.FromDrawingColor(dlg.Color);
+
+                // Update the text block
+                if (rect.Parent is StackPanel parent && parent.Children.Count >= 3)
+                {
+                    (parent.Children[2] as TextBlock)?.SetText(hex);
+                }
+
+                TriggerLiveUpdate();
+            }
+#else
+            rect.Fill = ColorHelper.ParseBrush(getCurrentHex());
+#endif
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow.OpenColorPicker: {ex}");
+        }
+    }
+
+    private void PopulateDisks()
+    {
+        try
+        {
+            using var mgr = new Monitors.MonitorManager();
+            var disks = mgr.GetDiskInstances();
+
+            ComboDisk.ItemsSource = disks;
+            SelectComboItem(ComboDisk, _working.General.DiskInstanceName);
+
+            ComboDisk.SelectionChanged += (s, e) =>
+            {
+                if (ComboDisk.SelectedItem is string sel)
+                {
+                    _working.General.DiskInstanceName = sel;
+                    TriggerLiveUpdate();
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"PopulateDisks: {ex}");
+        }
+    }
+
+    private void PopulateNetworkInterfaces()
+    {
+        try
+        {
+            var interfaces = new List<string> { "(All Interfaces)" };
+            foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+            {
+                if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback)
+                    continue;
+                interfaces.Add(nic.Name);
+            }
+
+            ComboNetwork.ItemsSource = interfaces;
+
+            var selectedNet = string.IsNullOrWhiteSpace(_working.General.NetworkInterfaceName)
+                ? "(All Interfaces)"
+                : _working.General.NetworkInterfaceName;
+            SelectComboItem(ComboNetwork, selectedNet);
+
+            ComboNetwork.SelectionChanged += (s, e) =>
+            {
+                if (ComboNetwork.SelectedItem is string sel)
+                {
+                    _working.General.NetworkInterfaceName =
+                        (sel == "(All Interfaces)") ? null : sel;
+                    TriggerLiveUpdate();
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"PopulateNetworkInterfaces: {ex}");
+        }
+    }
+
+    private void SelectComboItem(WnControls.ComboBox combo, string? value)
+    {
+        combo.SelectedItem = value;
+        if (combo.SelectedIndex == -1 && combo.Items.Count > 0)
+            combo.SelectedIndex = 0;
+    }
+
+    private void PopulateMeterOrder()
+    {
+        var displayItems = new ObservableCollection<MeterOrderItem>();
+        bool hwAdded = false;
+
+        foreach (var key in _working.General.MeterOrder)
+        {
+            if (key is "CpuTemp" or "GpuTemp")
+            {
+                if (!hwAdded)
+                {
+                    displayItems.Add(new MeterOrderItem { Key = "H/W Temps", Name = FriendlyNames["H/W Temps"] });
+                    hwAdded = true;
+                }
+            }
+            else
+            {
+                displayItems.Add(new MeterOrderItem
+                {
+                    Key = key,
+                    Name = FriendlyNames.GetValueOrDefault(key, key)
+                });
+            }
+        }
+
+        ListMeterOrder.ItemsSource = displayItems;
+    }
+
+    private void BtnMoveUp_Click(object sender, RoutedEventArgs e)
+    {
+        int index = ListMeterOrder.SelectedIndex;
+        if (index > 0 && ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
+        {
+            list.Move(index, index - 1);
+            TriggerLiveUpdate();
+        }
+    }
+
+    private void BtnMoveDown_Click(object sender, RoutedEventArgs e)
+    {
+        int index = ListMeterOrder.SelectedIndex;
+        if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list
+            && index >= 0 && index < list.Count - 1)
+        {
+            list.Move(index, index + 1);
+            TriggerLiveUpdate();
+        }
+    }
+
+    private void BtnOk_Click(object sender, RoutedEventArgs e)
+    {
+        if (!ValidateAll())
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                $"One or more refresh rates are invalid. Fix the highlighted values (minimum {Constants.Timing.MinValidationRateMs} ms) before saving.",
+                "Validation Error",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+            return;
+        }
+
+        ApplyValuesToWorking();
+        CopyWorkingToOriginal();
+        _original.Save();
+
+        // Compat shim: flip WasSaved so MainWindow.OpenSettingsAndNavigateTo's Closed
+        // subscriber calls ApplySettings(). The legacy DialogResult setter is intentionally
+        // dropped -- it InvalidOperationException-throws on modeless Show()'d windows, and
+        // MainWindow creates this dialog as modeless so the user can still drag the bar.
+        WasSaved = true;
+        Close();
+    }
+
+    private void BtnCancel_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _original.General = _snapshotBeforeEdit.General;
+            _original.Window = _snapshotBeforeEdit.Window;
+            _original.Colors = _snapshotBeforeEdit.Colors;
+            _original.Visibility = _snapshotBeforeEdit.Visibility;
+            _original.Rates = _snapshotBeforeEdit.Rates;
+
+            if (Owner is MainWindow mw)
+                mw.ApplySettingsLive(_original);
+        }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow.CancelRevert: {ex}");
+        }
+
+        // WasSaved stays at its default false here -- no explicit flip needed (matches the
+        // initial property state). DialogResult setter removed (it's been removed on the OK
+        // path too) because it InvalidOperationException-throws on modeless Show()'d windows;
+        // MainWindow reads WasSaved via its Closed subscriber instead. See BtnOk_Click for
+        // the broader avoid-DialogResult reasoning.
+        Close();
     }
 
     private void ApplyChangesLive()
     {
-        if (!IsLoaded) return;
+        if (!ValidateAll()) return;
+
+        ApplyValuesToWorking();
         CopyWorkingToOriginal();
-        if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
+
+        if (Owner is MainWindow mw)
+            mw.ApplySettingsLive(_original);
     }
 
-    /// <summary>
-    /// Per-meter order record. The <c>MeterOrder</c> list on
-    /// <c>AppSettings.General</c> stores raw keys (Cpu / GpuDedicated /
-    /// GpuShared / Ram / Net / Disk / CpuTemp / GpuTemp / Time); the
-    /// ListBox uses an observable collection of these items so adding,
-    /// removing, and reordering produces animated list transitions.
-    /// Used by the Monitoring partial file (<c>PopulateMeterOrder</c>,
-    /// <c>BtnMoveUp_Click</c>, <c>BtnMoveDown_Click</c>,
-    /// <c>ApplyMeterOrderToWorking</c>).
-    /// </summary>
+    private void ApplyValuesToWorking()
+    {
+        _working.General.Opacity = SliderOpacity.Value;
+        _working.General.Scale = SliderScale.Value;
+
+        _working.Rates.Cpu = ParseNullableInt(TxtRateCpu.Text);
+        _working.Rates.Ram = ParseNullableInt(TxtRateRam.Text);
+        _working.Rates.Disk = ParseNullableInt(TxtRateDisk.Text);
+        _working.Rates.Net = ParseNullableInt(TxtRateNet.Text);
+        _working.Rates.CpuTemp = ParseNullableInt(TxtRateCpuTemp.Text);
+        _working.Rates.GpuTemp = ParseNullableInt(TxtRateGpuTemp.Text);
+        _working.Rates.GpuDedicated = ParseNullableInt(TxtRateGpuDedicated.Text);
+        _working.Rates.GpuShared = ParseNullableInt(TxtRateGpuShared.Text);
+
+        _working.Visibility.ShowCpu = ChkCpu.IsChecked == true;
+        _working.Visibility.ShowRam = ChkRam.IsChecked == true;
+        _working.Visibility.ShowDisk = ChkDisk.IsChecked == true;
+        _working.Visibility.ShowNet = ChkNet.IsChecked == true;
+        _working.Visibility.ShowCpuTemp = ChkCpuTemp.IsChecked == true;
+        _working.Visibility.ShowGpuTemp = ChkGpuTemp.IsChecked == true;
+        _working.Visibility.ShowHardwareLoad = ChkHardwareLoad.IsChecked == true;
+        _working.Visibility.ShowGpuDedicated = ChkGpuDedicated.IsChecked == true;
+        _working.Visibility.ShowGpuShared = ChkGpuShared.IsChecked == true;
+        _working.General.CombineLogicalCores = ChkCombineCpu.IsChecked == true;
+        _working.Visibility.ShowTime = ChkTime.IsChecked == true;
+        _working.General.Time24H = ChkTime24H.IsChecked == true;
+
+        if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
+        {
+            var newOrder = new List<string>();
+            foreach (var item in list)
+            {
+                if (item.Key == "H/W Temps")
+                {
+                    newOrder.Add("CpuTemp");
+                    newOrder.Add("GpuTemp");
+                }
+                else
+                {
+                    newOrder.Add(item.Key);
+                }
+            }
+            _working.General.MeterOrder = newOrder;
+        }
+    }
+
+    private static int? ParseNullableInt(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return null;
+        return int.TryParse(s, out var v) ? v : null;
+    }
+
+    private bool ValidateRate(WnControls.TextBox tb, TextBlock? err)
+    {
+        var s = tb.Text?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(s))
+        {
+            ClearError(tb, err);
+            return true;
+        }
+
+        if (!int.TryParse(s, out var v))
+        {
+            ShowError(tb, err, "Invalid number");
+            return false;
+        }
+
+        if (v < Constants.Timing.MinValidationRateMs)
+        {
+            ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms");
+            return false;
+        }
+
+        ClearError(tb, err);
+        return true;
+    }
+
+    private bool ValidateAll()
+    {
+        return
+            ValidateRate(TxtRateCpu, ErrRateCpu) &&
+            ValidateRate(TxtRateRam, ErrRateRam) &&
+            ValidateRate(TxtRateDisk, ErrRateDisk) &&
+            ValidateRate(TxtRateNet, ErrRateNet) &&
+            ValidateRate(TxtRateCpuTemp, ErrRateCpuTemp) &&
+            ValidateRate(TxtRateGpuTemp, ErrRateGpuTemp) &&
+            ValidateRate(TxtRateGpuDedicated, ErrRateGpuDedicated) &&
+            ValidateRate(TxtRateGpuShared, ErrRateGpuShared);
+    }
+
+    private void ShowError(WnControls.TextBox tb, TextBlock? err, string message)
+    {
+        err?.SetText(message);
+        err?.SetValue(VisibilityProperty, Visibility.Visible);
+        tb.BorderBrush = System.Windows.Media.Brushes.Red;
+        tb.ToolTip = message;
+    }
+
+    private void ClearError(WnControls.TextBox tb, TextBlock? err)
+    {
+        err?.SetText(string.Empty);
+        err?.SetValue(VisibilityProperty, Visibility.Collapsed);
+        tb.ClearValue(BorderBrushProperty);
+        tb.ToolTip = null;
+    }
+
+    private void CopyWorkingToOriginal()
+    {
+        _original.General = _working.General;
+        _original.Window = _working.Window;
+        _original.Colors = _working.Colors;
+        _original.Visibility = _working.Visibility;
+        _original.Rates = _working.Rates;
+    }
+
+    // Helper class for meter order display
     private class MeterOrderItem
     {
         public string Key { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
+}
 
-    /// <summary>
-    /// Per-meter wiring record. Holds lambdas that read/write the three
-    /// settings sub-objects (Visibility.X / Rates.X /
-    /// MetricCard.SectionColorHex). Keeps PopulateMetrics / card-event
-    /// handlers one-liners. Adding a new meter = one MetricBinding entry
-    /// + one &lt;ctrl:MetricCard&gt; XAML element. MaxValueRemoved:
-    /// WriteMaxValue / ReadMaxValue lambdas dropped in the same commit
-    /// as the MetricCard Max-value TextBox removal; AppSettings.MaxValues
-    /// still exists for any future consumer-side wiring.
-    /// </summary>
-    private sealed record MetricBinding(
-        string MetricKey,
-        string RateKey,
-        Action<AppSettings, bool>  WriteIsShown,
-        Func<AppSettings, bool>    ReadIsShown,
-        Action<AppSettings, int?>  WriteRefreshRate,
-        Func<AppSettings, int?>    ReadRefreshRate);
+// Extension method to avoid type casting
+internal static class SettingsWindowExtensions
+{
+    public static void SetText(this TextBlock tb, string text) => tb.Text = text;
 }

@@ -1,0 +1,65 @@
+{
+  "Recommendation": "Exit WinMeters before changing these settings!",
+  "General": {
+    "RefreshRateMs": 1000,
+    "Opacity": 1,
+    "Scale": 1,
+    "StartWithWindows": false,
+    "NetworkInterfaceName": "Ethernet",
+    "DiskInstanceName": "_Total",
+    "CombineLogicalCores": true,
+    "MeterOrder": [
+      "Cpu",
+      "CpuTemp",
+      "GpuTemp",
+      "Ram",
+      "Disk",
+      "Net"
+    ],
+    "EnableHardwareMonitor": true
+  },
+  "Window": {
+    "LockPosition": false,
+    "DockOnTaskbar": false,
+    "PositionX": 352.66666666666663,
+    "PositionY": 1396,
+    "Height": 0
+  },
+  "Colors": {
+    "Background": "#FF202020",
+    "Border": "#44FFFFFF",
+    "BorderThickness": 0,
+    "CpuBorderThickness": 0.5,
+    "RamBorderThickness": 0.5,
+    "Separator": "#00FFFFFF",
+    "Label": "#AAAAAA",
+    "CpuSys": "#44FF44",
+    "CpuUser": "#FF4444",
+    "CpuTrack": "#28FFFFFF",
+    "RamPie": "#FFA500",
+    "RamBorder": "#FF000000",
+    "DiskRead": "#44FF44",
+    "DiskWrite": "#FF4444",
+    "NetDown": "#44FF44",
+    "NetUp": "#FF4444",
+    "CpuTemp": "#ffae6bff",
+    "GpuTemp": "#4ECDC4"
+  },
+  "Visibility": {
+    "ShowCpu": true,
+    "ShowRam": true,
+    "ShowDisk": true,
+    "ShowNet": true,
+    "ShowCpuTemp": true,
+    "ShowGpuTemp": true,
+    "ShowHardwareLoad": true
+  },
+  "Rates": {
+    "Cpu": 1000,
+    "Ram": 1000,
+    "Disk": 1000,
+    "Net": 1000,
+    "CpuTemp": 1000,
+    "GpuTemp": 1000
+  }
+}
