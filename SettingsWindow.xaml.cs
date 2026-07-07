@@ -88,15 +88,17 @@ public partial class SettingsWindow : Window
         Services.ThemeService.InitializeDarkMode();
 
 
-        // Background matches the native Win32 HMENU that the bar's RMB
-        // handler paints, pulled directly from COLOR_MENU via GetSysColor
-        // so the dialog lands on whatever chrome the OS draws for the
-        // context menu at the moment -- dark, light, or custom accent
-        // alike -- without this code having to branch on theme. Assigning
-        // null on failure clears the local DP value and falls through to
-        // the WPF Window theme default (a better fallback than
-        // Brushes.Transparent, which would make the dialog genuinely
-        // see-through and surface whatever is behind it).
+        // Paint the SettingsWindow with ThemeBgBrush from the merged
+        // Themes/WinMetersTheme.xaml dictionary — the dialog no longer
+        // samples the live OS menu chrome (that trade-off was the
+        // explicit "Maximal recode" choice). The dialog lands on a
+        // consistent dark chrome regardless of OS theme state. The bar's
+        // RMB popup remains OS-painted via uxtheme via
+        // Services.ThemeService.InitializeDarkMode (kept above).
+        // Assigning null on lookup failure clears the local DP value
+        // and falls through to the WPF Window theme default (a better
+        // fallback than Brushes.Transparent, which would make the dialog
+        // genuinely see-through and surface whatever is behind it).
         this.Background = ColorHelper.ThemeBrush("ThemeBgBrush");
         // ALSO paint the RootGrid with the same brush so the dialog's
         // visible client area is definitely dark. WPF's Window template
@@ -115,11 +117,11 @@ public partial class SettingsWindow : Window
         // Foreground inherits via the WPF Visual tree -- sets the text
         // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
         // RateLabelStyle, ErrorTextStyle), CheckBox.Content, Button.Content,
-        // ComboBox item, and ListBoxItem label to COLOR_MENUTEXT, which
-        // matches the non-selected text color the bar's RMB popup uses.
-        // Explicit per-element brushes (ErrorTextStyle's Red, the color-
-        // picker rectangles' black borders etc.) are unaffected because
-        // they're applied directly on the elements they belong to.
+        // ComboBox item, and ListBoxItem label to ThemeTextBrush (white)
+        // from the merged Themes/WinMetersTheme.xaml dictionary. Explicit
+        // per-element brushes (ErrorTextStyle's Red, the color-picker
+        // rectangles' black borders etc.) are unaffected because they're
+        // applied directly on the elements they belong to.
         this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
@@ -919,17 +921,22 @@ public partial class SettingsWindow : Window
 
     /// <summary>
     /// Builds a <see cref="ListBoxItem"/> style whose IsSelected trigger
-    /// paints COLOR_HIGHLIGHT background + COLOR_HIGHLIGHTTEXT foreground
-    /// -- the same combination the OS uses to paint a highlighted native
-    /// HMENU entry. Assign this to <see cref="ListBox.ItemContainerStyle"/>
-    /// on a ListBox so the selected item visually mirrors a hovered /
-    /// keyboard-focused native menu item. Falls through to the WPF default
-    /// style if the OS brush queries fail (very old Windows); that mirrors
-    /// the same fallback policy as <see cref="ColorHelper.GetMenuBackgroundBrush"/>
-    /// (don't crash the dialog open on a missing brush). Brush variables
+    /// paints ThemeAccentBrush background + ThemeTextBrush foreground
+    /// — the same combination the App-level dialog chrome uses
+    /// (SettingsWindow + AboutWindow source their Background /
+    /// Foreground from the merged Themes/WinMetersTheme.xaml
+    /// dictionary, so the selected ListBox entry reads like a hovered
+    /// / keyboard-focused native menu item against that chrome). Assign
+    /// this to <see cref="ListBox.ItemContainerStyle"/> on a ListBox so
+    /// the selected item visually mirrors a focused menu entry. Falls
+    /// through to the WPF default style if the theme brush lookup fails
+    /// (very unlikely — ThemeAccentBrush + ThemeTextBrush are defined
+    /// in WinMetersTheme.xaml); that mirrors the same fallback policy
+    /// as <see cref="ColorHelper.ThemeBrush(string)"/>. Brush variables
     /// are declared inside the helper because we capture them in setter
-    /// values -- declaring them outside would let a half-computed pair
-    /// (one brush populated, the other null) leak into the trigger graph.
+    /// values — declaring them outside would let a half-computed pair
+    /// (one brush populated, the other null) leak into the trigger
+    /// graph.
     /// </summary>
     private static Style CreateMenuListBoxItemStyle()
     {
@@ -937,18 +944,21 @@ public partial class SettingsWindow : Window
         var hl = ColorHelper.ThemeBrush("ThemeAccentBrush");
         var hlt = ColorHelper.ThemeBrush("ThemeTextBrush");
 
-        // Native HMENU items light up on hover, not on click-selection.
-        // Two triggers share the same setters so a hovered (but not yet
-        // selected) entry paints COLOR_HIGHLIGHT background +
-        // COLOR_HIGHLIGHTTEXT foreground exactly like a selected entry
-        // would, matching the bar's RMB popup behavior. When both
-        // conditions are true at once (mouse-over a selected entry),
-        // WPF applies the setters twice -- idempotent, no flicker.
-        // WPF MultiTrigger only supports AND; iterating two separate
-        // Trigger instances is the OR pattern. Falls through to the
-        // WPF default style if the OS brush queries fail (very old
-        // Windows); that mirrors the same fallback policy as
-        // ColorHelper.GetMenuBackgroundBrush + the Background setter.
+        // Dialog-list items highlight on hover AND on selection, not
+        // just selection like the WPF default. Two Trigger instances
+        // share the same setters so a hovered (but not yet selected)
+        // entry paints ThemeAccentBrush background + ThemeTextBrush
+        // foreground exactly like a selected entry would — a focused-
+        // item affordance that matches the App-level dialog chrome.
+        // When both conditions are true at once (mouse-over a selected
+        // entry), WPF applies the setters twice — idempotent, no
+        // flicker. WPF MultiTrigger only supports AND; iterating two
+        // separate Trigger instances is the OR pattern. Falls through
+        // to the WPF default style if the theme brush lookup fails
+        // (very unlikely — ThemeAccentBrush + ThemeTextBrush are
+        // defined in WinMetersTheme.xaml); that mirrors the same
+        // fallback policy as the Window.Background / RootGrid.Background
+        // setters above.
         if (hl is not null && hlt is not null)
         {
             foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
