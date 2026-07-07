@@ -76,8 +76,8 @@ namespace WinMeters.Monitors
 
 
         // Core Counters
-        private List<PerformanceCounter> _coreCounters = new List<PerformanceCounter>();
-        private List<PerformanceCounter> _coreUserCounters = new List<PerformanceCounter>();
+        private List<PerformanceCounter> _coreCounters = new();
+        private List<PerformanceCounter> _coreUserCounters = new();
 
         /// <summary>Number of logical CPU cores being monitored.</summary>
         public int LogicalCoreCount => _coreCounters.Count;
@@ -200,43 +200,33 @@ namespace WinMeters.Monitors
         {
             try
             {
-                // Try to read the BIOS-configurable dedicated GPU memory from registry.
-                // On some systems, the "Dedicated GPU Memory" shown in Windows Settings
-                // is configurable in BIOS (e.g., Dell OptiPlex, HP ZWorkstation).
-                // The shared pool = total RAM - dedicated GPU memory reservation.
-                // Windows registry path: HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Video
+                // Log a diagnostic if a discrete GPU with >= 2 GB VRAM is present.
+                // The shared pool formula below is independent of dedicated VRAM size;
+                // this block only reads AdapterRAM (the only column we actually use).
                 try
                 {
                     using var searcher = new ManagementObjectSearcher(
-                        "SELECT AdapterRAM, DedicatedMemory, VirtualMemoryLimit FROM Win32_VideoController");
+                        "SELECT AdapterRAM FROM Win32_VideoController");
                     long maxAdapterRam = 0;
                     foreach (ManagementObject mo in searcher.Get())
                     {
-                        if (mo["AdapterRAM"] is long adapterRam && adapterRam > maxAdapterRam)
-                            maxAdapterRam = adapterRam;
+                        if (mo["AdapterRAM"] != null && long.TryParse(mo["AdapterRAM"].ToString(), out long v) && v > maxAdapterRam)
+                            maxAdapterRam = v;
                     }
-                    // Note: the inner WMI query above is intentionally a probing no-op; on systems
-                // where the discrete GPU carries >= 2 GB of VRAM, the shared pool is unconstrained
-                // by it and we fall through to the dynamic formula below.
-
-                // For shared (system) memory available to GPU:
-                    // not constrained by it — use the dynamic formula below.
-                    if (maxAdapterRam > 0 && maxAdapterRam >= 2L * 1024 * 1024 * 1024)
+                    if (maxAdapterRam >= 2L * 1024 * 1024 * 1024)
                     {
-                        WinMeters.Log.D($"GetGpuSharedCapacityFromWmi: detected discrete GPU with {maxAdapterRam / (1024.0*1024.0*1024.0):F1} GB VRAM");
+                        WinMeters.Log.D($"GetGpuSharedCapacityFromWmi: detected discrete GPU with {maxAdapterRam / (1024.0 * 1024.0 * 1024.0):F1} GB VRAM");
                     }
                 }
                 catch { }
 
-                // For shared (system) memory available to GPU:
-                // - Windows dynamically allows GPU to use system RAM as shared pool.
-                // - The actual limit depends on system architecture (32-bit vs 64-bit) and BIOS settings.
-                // - On 64-bit Windows, the shared pool can be up to 50% of total RAM (capped at 32GB).
-                // - On systems with very large RAM (64GB+), cap at 32GB to match Windows behavior.
+                // Windows dynamically allows the GPU to use system RAM as a shared pool.
+                // On 64-bit Windows the shared pool can be up to 50 % of total RAM, capped
+                // at 32 GB on very large-memory systems to match Windows behavior.
                 double totalRamBytes = GetTotalRamMb() * 1024.0 * 1024.0;
                 double sharedTotal = Math.Min(totalRamBytes * 0.5, 32L * 1024 * 1024 * 1024);
 
-                WinMeters.Log.D($"GetGpuSharedCapacityFromWmi: using {sharedTotal / (1024.0*1024.0*1024.0):F2} GB (50% of system RAM, capped at 32GB)");
+                WinMeters.Log.D($"GetGpuSharedCapacityFromWmi: using {sharedTotal / (1024.0 * 1024.0 * 1024.0):F2} GB (50% of system RAM, capped at 32GB)");
                 return sharedTotal;
             }
             catch (Exception ex)
@@ -448,10 +438,12 @@ namespace WinMeters.Monitors
             try
             {
                 var availableMb = _memCounter.NextValue();
-                var totalMb = GetTotalMemoryInMb();
-                if (totalMb > 0)
+                // Use the cached total RAM value (set once at startup via GlobalMemoryStatusEx).
+                // Total physical RAM never changes at runtime, so there is no reason to call
+                // GetTotalMemoryInMb() (a P/Invoke) on every timer tick.
+                if (_cachedTotalRamMb > 0)
                 {
-                    RamUsage = ((totalMb - availableMb) / totalMb) * 100.0;
+                    RamUsage = ((_cachedTotalRamMb - availableMb) / _cachedTotalRamMb) * 100.0;
                 }
                 else
                 {
@@ -481,6 +473,13 @@ namespace WinMeters.Monitors
                 long now = DateTime.UtcNow.Ticks;
                 if (_cachedPhysicalDiskCategory == null || (now - _lastDiskCacheTicks) > Constants.Timing.CacheValidityTicks)
                 {
+                    // PerformanceCounterCategory (net10.0-windows) is a lightweight metadata
+                    // wrapper around category names/instance lists — it does not open any
+                    // live perf-counter handle (those live on PerformanceCounter instances)
+                    // and does not implement IDisposable on this TFM. Replacing the field
+                    // reference is safe; the previous instance is reclaimed by GC once
+                    // unreachable. The CacheValidityTicks guard (30s in 100ns ticks) keeps
+                    // the registry lookup rate bounded.
                     _cachedPhysicalDiskCategory = new PerformanceCounterCategory("PhysicalDisk");
                     _lastDiskCacheTicks = now;
                 }

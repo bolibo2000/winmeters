@@ -115,7 +115,16 @@ namespace WinMeters.Monitors
 
             try
             {
-                // Reset GPU memory values before each update to prevent stale data
+                // Reset all sensor values before each update to prevent stale data from
+                // persisting if a sensor disappears or temporarily stops reporting.
+                CpuTemperature = null;
+                CpuLoad = null;
+                CpuFanSpeed = null;
+                CpuPackagePower = null;
+                GpuTemperature = null;
+                GpuFanSpeed = null;
+                GpuPower = null;
+                GpuLoad = null;
                 GpuDedicatedMemoryUsage = null;
                 GpuSharedMemoryUsage = null;
                 GpuDedicatedMemoryUsed = null;
