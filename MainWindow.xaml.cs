@@ -1237,12 +1237,8 @@ namespace WinMeters
         }
 
         /// <summary>
-        /// Opens Settings (cmd 1001 from the popup menu; also called
-        /// from the tray icon's left-double-click handler). Kept as a
-        /// thin wrapper around <see cref="OpenSettings"/>
-        /// so the tray icon's old RoutedEventArgs-style invocation
-        /// (<c>MenuItem_Settings_Click(this, new RoutedEventArgs())</c>)
-        /// keeps working.
+        /// Thin shell-event wrapper around <see cref="OpenSettings"/>
+        /// that keeps the tray icon's RoutedEventArgs-style invocation working.
         /// </summary>
         private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
         {
