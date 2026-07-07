@@ -399,11 +399,20 @@ namespace WinMeters
             }
         }
 
-        protected override void OnSourceInitialized(EventArgs e)
-        {
-            base.OnSourceInitialized(e);
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
 
-            var helper = new WindowInteropHelper(this);
+        // Cold-open path: opt THIS PROCESS into dark mode before any
+        // future syscolor-derived brush read inside MainWindow. Mirrors
+        // the same call in SettingsWindow.ctor; the bar's popup-time
+        // ApplyMenuChromeMode re-applies the right value immediately
+        // before TrackPopupMenuEx anyway, so this cold-open call
+        // doesn't fight any popup-time reset. See Services.ThemeService
+        // for the Win10 1903 per-process uxtheme quirk that drives this.
+        Services.ThemeService.InitializeDarkMode();
+
+        var helper = new WindowInteropHelper(this);
             var source = HwndSource.FromHwnd(helper.Handle);
             if (source is null) return;
 

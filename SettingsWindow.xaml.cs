@@ -86,24 +86,12 @@ public partial class SettingsWindow : Window
         // is what makes the SettingsWindow open with a near-white
         // background the very first time the user opens the dialog -- the
         // bar's popup flips PreferredAppMode process-wide on every right-
-        // click so opening the bar RMB first would mask the bug). Mirrors
-        // MainWindow.xaml.cs::ApplyMenuChromeMode. Wrapped in a try/catch
-        // so older Windows that don't export uxtheme ordinal #138
-        // (ShouldSystemUseDarkMode, pre-1903) fall through to the
-        // GetSysColor result the OS gives without it -- still better
-        // than a no-op crash that loses the dialog.
-        try
-        {
-            if (NativeMethods.ShouldSystemUseDarkMode() != 0)
-            {
-                NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
-                NativeMethods.FlushMenuThemes();
-            }
-        }
-        catch (System.Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow ctor (dark-mode setup): {ex.Message}");
-        }
+        // click so opening the bar RMB first would mask the bug). The
+        // extraction into ThemeService.InitializeDarkMode() means future
+        // cold-open sites (MainWindow itself, any future dialog) can
+        // opt in with a single call.
+        Services.ThemeService.InitializeDarkMode();
+
 
         // Background matches the native Win32 HMENU that the bar's RMB
         // handler paints, pulled directly from COLOR_MENU via GetSysColor
