@@ -132,6 +132,27 @@ public class AppSettings
         if (!Has(rawJson, "Time24H"))   settings.General.Time24H       = true;
         if (!Has(rawJson, "TimeText"))  settings.Colors.TimeText       = "#FFD54F";
 
+        // Migrate Colors.Background default from "#FF202020" (opaque
+        // dark) to "#CC202020" (translucent dark) so the bar's
+        // MainBorder matches the new ThemeBarBgBrush + the original
+        // MainWindow.xaml translucent intent (see git log / blame
+        // for the corresponding commit on
+        // feature/metriccard-and-wpfui-toggle). Users who never
+        // customised Background saw the opaque pre-recode default;
+        // rebasing their explicit "#FF202020" to "#CC202020" on next
+        // load avoids a silent visual change at upgrade. Users who
+        // DID customise to any other hex keep their value untouched
+        // — case-insensitive equality against the legacy default is
+        // the gate, so hand-edited settings.json files with lowercase
+        // "#ff202020" still rebase while anything else passes through
+        // unchanged.
+        if (Has(rawJson, "Background"))
+        {
+            string? legacyBg = TryReadString(rawJson, "Background");
+            if (string.Equals(legacyBg, "#FF202020", StringComparison.OrdinalIgnoreCase))
+                settings.Colors.Background = "#CC202020";
+        }
+
         EnsureMeterOrderEntry(settings.General.MeterOrder, "Time", afterKey: null);
 
         // StickToTaskbar / monitor migration — old files used DockOnTaskbar + WindowMode;

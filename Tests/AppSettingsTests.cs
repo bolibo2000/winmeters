@@ -158,6 +158,74 @@ public class AppSettingsTests
         Assert.Equal("Time", settings.General.MeterOrder[^1]);
     }
 
+    [Fact]
+    public void MigrateSettings_RebasesLegacyBackgroundDefault()
+    {
+        // Built off the AppliesMissingFieldDefaults JSON shape so the
+        // only "present" Color field is the legacy Background ->
+        // exercises the rebase guard without hauling in unrelated
+        // Colors defaults. Pre-recode JSON had "Background":"#FF202020"
+        // as the property initializer's default; a legacy user with
+        // that value in their settings.json file should land on the
+        // new translucent "#CC202020" on the next load.
+        const string raw = "{\"Colors\":{\"Background\":\"#FF202020\"}}";
+        var settings = JsonSerializer.Deserialize<AppSettings>(raw)!;
+
+        InvokeMigrate(settings, raw);
+
+        Assert.Equal("#CC202020", settings.Colors.Background);
+    }
+
+    [Fact]
+    public void MigrateSettings_PreservesCustomBackgroundWhenNotLegacyDefault()
+    {
+        // User picked opaque black #000000FF — clearly not the legacy
+        // default, the migration rule's case-insensitive equality
+        // gate must leave it untouched. The whole point of the gate
+        // is to avoid clobbering users who picked their own hex.
+        const string raw = "{\"Colors\":{\"Background\":\"#000000FF\"}}";
+        var settings = JsonSerializer.Deserialize<AppSettings>(raw)!;
+
+        InvokeMigrate(settings, raw);
+
+        Assert.Equal("#000000FF", settings.Colors.Background);
+    }
+
+    [Fact]
+    public void MigrateSettings_RebasesLegacyBackgroundDefaultCaseInsensitive()
+    {
+        // Hand-edited JSON with lowercase hex — rare but possible if
+        // a user opens settings.json in Notepad, types their own
+        // value, then drops back. The case-insensitive gate covers
+        // this so the rebase succeeds for hand-edited files alongside
+        // the JsonSerializer-emitted canonical upper case.
+        const string raw = "{\"Colors\":{\"Background\":\"#ff202020\"}}";
+        var settings = JsonSerializer.Deserialize<AppSettings>(raw)!;
+
+        InvokeMigrate(settings, raw);
+
+        Assert.Equal("#CC202020", settings.Colors.Background);
+    }
+
+    [Fact]
+    public void MigrateSettings_AppliesNewBackgroundDefaultWhenAbsent()
+    {
+        // A minimal JSON that omits the Colors.Background key. The
+        // property initializer on ColorSettings fills it with
+        // "#CC202020" on construction; MigrateSettings does not touch
+        // the value because Has(rawJson, "Background") returns false.
+        // This pins the property-initializer fallback so a future
+        // refactor that flips the default back to "#FF202020" (or
+        // inverts the absent-vs-present detection) fails loudly
+        // rather than regressing first-launch users silently.
+        const string raw = "{\"Colors\":{}}";
+        var settings = JsonSerializer.Deserialize<AppSettings>(raw)!;
+
+        InvokeMigrate(settings, raw);
+
+        Assert.Equal("#CC202020", settings.Colors.Background);
+    }
+
     /// <summary>
     /// Invokes the private <c>AppSettings.MigrateSettings</c> via reflection. The method
     /// takes a raw JSON token so we control which fields appear "present" vs missing.
