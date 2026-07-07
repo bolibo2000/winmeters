@@ -552,6 +552,9 @@ namespace WinMeters
         /// the user is currently running.
         /// </summary>
         public const int COLOR_MENU = 4;
+        public const int COLOR_MENUTEXT = 7;
+        public const int COLOR_HIGHLIGHT = 13;
+        public const int COLOR_HIGHLIGHTTEXT = 14;
 
         /// <summary>
         /// Returns the red / green / blue components of one of the system

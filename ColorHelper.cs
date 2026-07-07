@@ -140,20 +140,63 @@ namespace WinMeters
         /// real complaint.
         /// </summary>
         public static SolidColorBrush? GetMenuBackgroundBrush()
+            => GetSysColorBrush(NativeMethods.COLOR_MENU);
+
+        /// <summary>
+        /// Foreground of non-selected menu items. Used as
+        /// <see cref="System.Windows.Window.Foreground"/> in SettingsWindow
+        /// so every text-bearing child (TextBlocks, CheckBox.Content,
+        /// Button.Content, ComboBox items, ListBoxItem labels) inherits a
+        /// color matching the native HMENU's non-selected item text.
+        /// </summary>
+        public static SolidColorBrush? GetMenuTextBrush()
+            => GetSysColorBrush(NativeMethods.COLOR_MENUTEXT);
+
+        /// <summary>
+        /// Background of selected / highlighted menu items. Used as the
+        /// ListBoxItem.IsSelected background in SettingsWindow so the
+        /// selected entry in the meter-order list reads like a highlighted
+        /// native HMENU entry (the same color the OS paints when the user
+        /// hovers / keyboard-focuses a menu item).
+        /// </summary>
+        public static SolidColorBrush? GetHighlightBrush()
+            => GetSysColorBrush(NativeMethods.COLOR_HIGHLIGHT);
+
+        /// <summary>
+        /// Foreground of selected / highlighted menu items. Companion to
+        /// <see cref="GetHighlightBrush"/> - used as the ListBoxItem.IsSelected
+        /// foreground so the selected meter text reads with the same
+        /// contrast the native HMENU uses for highlighted entries.
+        /// </summary>
+        public static SolidColorBrush? GetHighlightTextBrush()
+            => GetSysColorBrush(NativeMethods.COLOR_HIGHLIGHTTEXT);
+
+        /// <summary>
+        /// Shared extraction path: reads <paramref name="sysColorIndex"/>
+        /// from USER32!GetSysColor, unpacks COLORREF (0x00BBGGRR) into RGB,
+        /// constructs a frozen WPF SolidColorBrush (safe to bind from any
+        /// WPF dispatcher context -- no inheritance-context churn, no
+        /// thread-affinity trap), and returns it. Logs and returns null on
+        /// the rare OS call failure so callers can simply null-coalesce.
+        /// Frozen brushes are the canonical way to bind a logically-immutable
+        /// color to a DependencyProperty; we Freeze() before returning so
+        /// WPF accepts the brush without re-checking IsFrozen on every bind.
+        /// </summary>
+        private static SolidColorBrush? GetSysColorBrush(int sysColorIndex)
         {
             try
             {
-                // Win32 GetSysColor returns COLORREF (0x00BBGGRR); FromRgb
-                // is the canonical shorthand for fully-opaque RGB.
-                int colorref = NativeMethods.GetSysColor(NativeMethods.COLOR_MENU);
+                int colorref = NativeMethods.GetSysColor(sysColorIndex);
                 byte r = (byte)(colorref & 0xFF);
                 byte g = (byte)((colorref >> 8) & 0xFF);
                 byte b = (byte)((colorref >> 16) & 0xFF);
-                return new SolidColorBrush(WpfColor.FromRgb(r, g, b));
+                var brush = new SolidColorBrush(WpfColor.FromRgb(r, g, b));
+                brush.Freeze();
+                return brush;
             }
             catch (System.Exception ex)
             {
-                WinMeters.Log.D($"ColorHelper.GetMenuBackgroundBrush: {ex.Message}");
+                WinMeters.Log.D($"ColorHelper.GetSysColorBrush({sysColorIndex}): {ex.Message}");
                 return null;
             }
         }

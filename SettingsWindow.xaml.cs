@@ -87,6 +87,16 @@ public partial class SettingsWindow : Window
         // see-through and surface whatever is behind it).
         this.Background = ColorHelper.GetMenuBackgroundBrush();
 
+        // Foreground inherits via the WPF Visual tree -- sets the text
+        // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
+        // RateLabelStyle, ErrorTextStyle), CheckBox.Content, Button.Content,
+        // ComboBox item, and ListBoxItem label to COLOR_MENUTEXT, which
+        // matches the non-selected text color the bar's RMB popup uses.
+        // Explicit per-element brushes (ErrorTextStyle's Red, the color-
+        // picker rectangles' black borders etc.) are unaffected because
+        // they're applied directly on the elements they belong to.
+        this.Foreground = ColorHelper.GetMenuTextBrush();
+
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
         // Deep clone to avoid mutating original until user confirms
@@ -96,6 +106,16 @@ public partial class SettingsWindow : Window
 
         DataContext = _working;
         SetupLiveUpdateDebounce();
+
+        // Apply the menu-themed ListBoxItem container style to the meter-
+        // order list BEFORE PopulateUi fills it so every MeterOrderItem
+        // lands on the styled template. The IsSelected trigger paints the
+        // selected entry with COLOR_HIGHLIGHT background + COLOR_HIGHLIGHT
+        // TEXT foreground -- the same combination the OS paints for a
+        // highlighted native HMENU entry, so visually the selected meter
+        // looks like the user is hovering an unselected native menu item.
+        ListMeterOrder.ItemContainerStyle = CreateMenuListBoxItemStyle();
+
         PopulateUi();
 
         this.Closed += SettingsWindow_Closed;
@@ -871,6 +891,51 @@ public partial class SettingsWindow : Window
     /// </summary>
     private static string FormatScaleValue(double v) =>
         v.ToString("F2", CultureInfo.InvariantCulture) + "\u00d7";
+
+    /// <summary>
+    /// Builds a <see cref="ListBoxItem"/> style whose IsSelected trigger
+    /// paints COLOR_HIGHLIGHT background + COLOR_HIGHLIGHTTEXT foreground
+    /// -- the same combination the OS uses to paint a highlighted native
+    /// HMENU entry. Assign this to <see cref="ListBox.ItemContainerStyle"/>
+    /// on a ListBox so the selected item visually mirrors a hovered /
+    /// keyboard-focused native menu item. Falls through to the WPF default
+    /// style if the OS brush queries fail (very old Windows); that mirrors
+    /// the same fallback policy as <see cref="ColorHelper.GetMenuBackgroundBrush"/>
+    /// (don't crash the dialog open on a missing brush). Brush variables
+    /// are declared inside the helper because we capture them in setter
+    /// values -- declaring them outside would let a half-computed pair
+    /// (one brush populated, the other null) leak into the trigger graph.
+    /// </summary>
+    private static Style CreateMenuListBoxItemStyle()
+    {
+        var style = new Style(typeof(ListBoxItem));
+        var hl = ColorHelper.GetHighlightBrush();
+        var hlt = ColorHelper.GetHighlightTextBrush();
+        if (hl is not null && hlt is not null)
+        {
+            // Native HMENU items light up on hover, not on click-selection.
+            // Two triggers share the same setters so a hovered (but not yet
+            // selected) entry paints COLOR_HIGHLIGHT background +
+            // COLOR_HIGHLIGHTTEXT foreground exactly like a selected entry
+            // would, matching the bar's RMB popup behavior. When both
+            // conditions are true at once (mouse-over a selected entry),
+            // WPF applies the setters twice -- idempotent, no flicker.
+            // WPF MultiTrigger only supports AND; iterating two separate
+            // Trigger instances is the OR pattern.
+            foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
+            {
+                var trigger = new Trigger
+                {
+                    Property = triggerProperty,
+                    Value = true,
+                };
+                trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
+                trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
+                style.Triggers.Add(trigger);
+            }
+        }
+        return style;
+    }
 }
 
 // Extension method to avoid type casting
