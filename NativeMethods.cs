@@ -540,6 +540,33 @@ namespace WinMeters
 
         #endregion
 
+        #region System Color
+
+        /// <summary>
+        /// COLOR_MENU (= 4) — index used with <see cref="GetSysColor"/> to
+        /// read the OS's current menu-background brush. Win32 returns this
+        /// as a COLORREF (0x00BBGGRR). Used by ColorHelper.GetMenuBackgroundBrush
+        /// to make the SettingsWindow background match the native HMENU that
+        /// the bar's RMB popup paints, so the two surfaces look uniform
+        /// regardless of which Windows theme (dark / light / custom accent)
+        /// the user is currently running.
+        /// </summary>
+        public const int COLOR_MENU = 4;
+
+        /// <summary>
+        /// Returns the red / green / blue components of one of the system
+        /// system colors as a COLORREF-encoded <see cref="int"/> (low byte = R,
+        /// middle byte = G, high byte = B; top byte reserved / 0). Callers
+        /// convert to WPF Brushes via Color.FromArgb(255, r, g, b). The
+        /// return is a built-in Win32 API value -- changes immediately when
+        /// the OS theme flips, no round-trip through a Win32 Brush / HBRUSH
+        /// reference needed (which would leak handles).
+        /// </summary>
+        [DllImport("user32.dll")]
+        public static extern int GetSysColor(int nIndex);
+
+        #endregion
+
         #region Types
 
         /// <summary>

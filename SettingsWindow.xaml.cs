@@ -76,6 +76,17 @@ public partial class SettingsWindow : Window
     public SettingsWindow(AppSettings original)
     {
         InitializeComponent();
+
+        // Background matches the native Win32 HMENU that the bar's RMB
+        // handler paints, pulled directly from COLOR_MENU via GetSysColor
+        // so the dialog lands on the user's existing chrome -- dark / light
+        // / custom-accent alike -- without this code having to branch on
+        // theme. Assigning null on failure clears the local DP value and
+        // falls through to the WPF Window theme default (a better fallback
+        // than Brushes.Transparent, which would make the dialog genuinely
+        // see-through and surface whatever is behind it).
+        this.Background = ColorHelper.GetMenuBackgroundBrush();
+
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
         // Deep clone to avoid mutating original until user confirms

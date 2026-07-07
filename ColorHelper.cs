@@ -113,5 +113,49 @@ namespace WinMeters
                 return null;
             }
         }
+
+        /// <summary>
+        /// Returns a SolidColorBrush matching the OS's current menu-background
+        /// brush, sampled live from <c>USER32!GetSysColor(COLOR_MENU)</c>. This
+        /// is the exact same brush the OS uses to paint the native Win32 HMENU
+        /// that the bar's RMB popup displays, so the WPF SettingsWindow dialog
+        /// lands on the user's existing chrome without any styling code of its
+        /// own. Folds the dark / light theme choice (and any custom accent the
+        /// user has configured in Windows Personalization) into a single
+        /// read at dialog-open time.
+        ///
+        /// Returns <c>null</c> (no exception escaped) only if the OS call fails
+        /// outright - rare, but covers very old Windows versions where the
+        /// GetSysColor ordinal behaves differently. Callers should null-coalesce
+        /// on the result so a missing brush falls back to the WPF Window
+        /// default background instead of throwing.
+        ///
+        /// One-shot read: the brush is sampled exactly once at dialog ctor and
+        /// cached on the Window.BACKGROUND dependency property. If the user
+        /// switcheS the system theme while the dialog is open the menu chrome
+        /// differs from the dialog background until the dialog is reopened.
+        /// Living with that mismatch is acceptable (settings dialogs are short
+        /// lived and the theme toggle mid-edit is an uncommon event); a
+        /// WM_SETTINGCHANGE hook could close the gap if it ever becomes a
+        /// real complaint.
+        /// </summary>
+        public static SolidColorBrush? GetMenuBackgroundBrush()
+        {
+            try
+            {
+                // Win32 GetSysColor returns COLORREF (0x00BBGGRR); FromRgb
+                // is the canonical shorthand for fully-opaque RGB.
+                int colorref = NativeMethods.GetSysColor(NativeMethods.COLOR_MENU);
+                byte r = (byte)(colorref & 0xFF);
+                byte g = (byte)((colorref >> 8) & 0xFF);
+                byte b = (byte)((colorref >> 16) & 0xFF);
+                return new SolidColorBrush(WpfColor.FromRgb(r, g, b));
+            }
+            catch (System.Exception ex)
+            {
+                WinMeters.Log.D($"ColorHelper.GetMenuBackgroundBrush: {ex.Message}");
+                return null;
+            }
+        }
     }
 }
