@@ -18,6 +18,43 @@ namespace WinMeters
         private static readonly SolidColorBrush _transparentBrush =
             new SolidColorBrush(WpfColor.FromArgb(0, 0, 0, 0));
 
+        // Forced-dark brushes pairing with the theme-sampling ones above. The user picked
+        // "always dark, hardcoded brushes" so the SettingsWindow never falls back to the
+        // system theme even on Windows light-mode installations. The four values mirror
+        // a typical Windows 10 dark-mode menu: a near-black slate for the background,
+        // crisp white for non-selected text, the standard Win10 accent blue for the
+        // highlighted-item keyline, and white text on top of that accent. All four are
+        // frozen at static-init time so they're safe to bind through a Style setter or
+        // assign to a Window DP without dispatcher-thread context or DP-setter checks.
+        private static readonly SolidColorBrush _darkMenuBackground =
+            Frozen(new SolidColorBrush(WpfColor.FromRgb(0x20, 0x20, 0x20)));
+        private static readonly SolidColorBrush _darkMenuText =
+            Frozen(new SolidColorBrush(WpfColor.FromRgb(0xFF, 0xFF, 0xFF)));
+        private static readonly SolidColorBrush _darkHighlight =
+            Frozen(new SolidColorBrush(WpfColor.FromRgb(0x00, 0x78, 0xD7)));
+        private static readonly SolidColorBrush _darkHighlightText =
+            Frozen(new SolidColorBrush(WpfColor.FromRgb(0xFF, 0xFF, 0xFF)));
+
+        /// <summary>Background brush (#202020). Used as <see cref="System.Windows.Window.Background"/> by the SettingsWindow so the dialog lands on dark slate regardless of the user's OS theme.</summary>
+        public static SolidColorBrush DarkMenuBackgroundBrush => _darkMenuBackground;
+        /// <summary>Text-foreground brush (#FFFFFF). Mirrors COLOR_MENUTEXT in Win10 dark mode; inherits through the WPF Visual tree from <c>this.Foreground</c>.</summary>
+        public static SolidColorBrush DarkMenuTextBrush => _darkMenuText;
+        /// <summary>Highlighted-item background brush (#0078D7). Standard Win10 accent blue. Used as the ListBoxItem.IsSelected / IsMouseOver Background so the meter-order entry reads with the look of a highlighted native menu item.</summary>
+        public static SolidColorBrush DarkHighlightBrush => _darkHighlight;
+        /// <summary>Highlighted-item text-foreground brush (#FFFFFF). Used as the companion Foreground to DarkHighlightBrush on selected / hovered ListBoxItem entries.</summary>
+        public static SolidColorBrush DarkHighlightTextBrush => _darkHighlightText;
+
+        // Tiny helper called from field initializers above so we don't repeat the
+        // Freeze() dance four times. Frozen brushes are required for cross-thread
+        // brush sharing (the SettingsWindow ctor runs on the WPF UI thread but the
+        // brushes are also captured inside the IsMouseOver / IsSelected style
+        // triggers that WPF may re-applied on background dispatcher work).
+        private static SolidColorBrush Frozen(SolidColorBrush brush)
+        {
+            brush.Freeze();
+            return brush;
+        }
+
         /// <summary>
         /// Parses a hex color string into a SolidColorBrush.
         /// </summary>

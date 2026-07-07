@@ -77,25 +77,26 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
 
-        // Background matches the native Win32 HMENU that the bar's RMB
-        // handler paints, pulled directly from COLOR_MENU via GetSysColor
-        // so the dialog lands on the user's existing chrome -- dark / light
-        // / custom-accent alike -- without this code having to branch on
-        // theme. Assigning null on failure clears the local DP value and
-        // falls through to the WPF Window theme default (a better fallback
-        // than Brushes.Transparent, which would make the dialog genuinely
-        // see-through and surface whatever is behind it).
-        this.Background = ColorHelper.GetMenuBackgroundBrush();
+        // Forced-dark chrome: the user picked "always dark, hardcoded
+        // brushes" over "follow system theme via GetSysColor". The
+        // SettingsWindow now lands on the same visual identity as the
+        // bar's RMB popup when Windows dark mode paints it (#202020
+        // background, #FFFFFF text, #0078D7 highlight) regardless of
+        // the OS theme. The GetSysColor-based brushes from commit
+        // c8a609d remain available in ColorHelper for any future caller
+        // who wants them -- this commit just redirects this dialog.
+        // Assign nullable brushes fallback ignored: dark brushes are
+        // hardcoded frozen singletons (no failure mode exists).
+        this.Background = ColorHelper.DarkMenuBackgroundBrush;
 
         // Foreground inherits via the WPF Visual tree -- sets the text
         // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
         // RateLabelStyle, ErrorTextStyle), CheckBox.Content, Button.Content,
-        // ComboBox item, and ListBoxItem label to COLOR_MENUTEXT, which
-        // matches the non-selected text color the bar's RMB popup uses.
+        // ComboBox item, and ListBoxItem label to DarkMenuTextBrush.
         // Explicit per-element brushes (ErrorTextStyle's Red, the color-
         // picker rectangles' black borders etc.) are unaffected because
         // they're applied directly on the elements they belong to.
-        this.Foreground = ColorHelper.GetMenuTextBrush();
+        this.Foreground = ColorHelper.DarkMenuTextBrush;
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
@@ -909,32 +910,77 @@ public partial class SettingsWindow : Window
     private static Style CreateMenuListBoxItemStyle()
     {
         var style = new Style(typeof(ListBoxItem));
-        var hl = ColorHelper.GetHighlightBrush();
-        var hlt = ColorHelper.GetHighlightTextBrush();
-        if (hl is not null && hlt is not null)
+        var hl = ColorHelper.DarkHighlightBrush;
+        var hlt = ColorHelper.DarkHighlightTextBrush;
+
+        // Native HMENU items light up on hover, not on click-selection.
+        // Two triggers share the same setters so a hovered (but not yet
+        // selected) entry paints Win10 dark-mode highlight (#0078D7)
+        // background + white (#FFFFFF) foreground exactly like a
+        // selected entry would, matching the bar's RMB popup behavior.
+        // When both conditions are true at once (mouse-over a selected
+        // entry), WPF applies the setters twice -- idempotent, no
+        // flicker. WPF MultiTrigger only supports AND; iterating two
+        // separate Trigger instances is the OR pattern. Brushes are
+        // hardcoded frozen singletons, so the null guards from commit
+        // c8a609d are no longer needed.
+        foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
         {
-            // Native HMENU items light up on hover, not on click-selection.
-            // Two triggers share the same setters so a hovered (but not yet
-            // selected) entry paints COLOR_HIGHLIGHT background +
-            // COLOR_HIGHLIGHTTEXT foreground exactly like a selected entry
-            // would, matching the bar's RMB popup behavior. When both
-            // conditions are true at once (mouse-over a selected entry),
-            // WPF applies the setters twice -- idempotent, no flicker.
-            // WPF MultiTrigger only supports AND; iterating two separate
-            // Trigger instances is the OR pattern.
-            foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
+            var trigger = new Trigger
             {
-                var trigger = new Trigger
-                {
-                    Property = triggerProperty,
-                    Value = true,
-                };
-                trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
-                trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
-                style.Triggers.Add(trigger);
+                Property = triggerProperty,
+                Value = true,
+            };
+            trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
+            trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
+            style.Triggers.Add(trigger);
+        }
+
+        return style;
+    }
+
+    /// <summary>
+    /// Opt the SettingsWindow's HWND into the modern dark-chrome title bar
+    /// so the OS-drawn non-client area matches the WPF content area's
+    /// forced-dark brush (commits c8a609d + upcoming foreground-dark).
+    /// Distinct from uxtheme's SetPreferredAppMode(FORCE_DARK) used by the
+    /// bar's RMB popup to dark an HMENU: this is the DWM-attribute path
+    /// for window-title darkness, available since Windows 10 1903.
+    /// On Windows 8 / 8.1 / pre-1903 builds the call is still made but
+    /// HRESULTs back as a no-op-with-error -- WinMeters.Log.D captures
+    /// it so the dialog still opens with whatever default chrome the
+    /// older OS gives, instead of crashing the Show().
+    /// </summary>
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+
+        try
+        {
+            var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            if (hwnd == IntPtr.Zero) return;
+
+            int useDark = 1;
+            int hr = NativeMethods.DwmSetWindowAttribute(
+                hwnd,
+                NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE,
+                ref useDark,
+                sizeof(int));
+
+            // DwmSetWindowAttribute returns S_OK (0) on success; non-zero
+            // HRESULT means the OS rejected the request (older build,
+            // pre-1903 without the attribute). WinMeters.Log.D it so we
+            // don't alert the user -- the dialog still opens, just with
+            // the OS-default light title bar.
+            if (hr != 0)
+            {
+                WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE) returned HRESULT 0x{hr:X8}.");
             }
         }
-        return style;
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: {ex.Message}");
+        }
     }
 }
 

@@ -339,6 +339,18 @@ namespace WinMeters
         /// <summary>DWMWA_TRANSITIONS_FORCEDISABLED — disable DWM transition animations for this HWND.</summary>
         public const int DWMWA_TRANSITIONS_FORCEDISABLED = 3;
 
+        /// <summary>
+        /// DWMWA_USE_IMMERSIVE_DARK_MODE — opt the HWND's title bar /
+        /// non-client area into dark chrome. Distinct from uxtheme's
+        /// SetPreferredAppMode(FORCE_DARK) (which the bar's RMB popup
+        /// uses to dark the HMENU); this is the modern Win32 DWM attribute
+        /// path for title-bar dark, available since Windows 10 1903. Pass
+        /// the bool as 0 (light) or 1 (dark). SettingsWindow calls this
+        /// from OnSourceInitialized so its OS-drawn title bar matches the
+        /// WPF content area's dark background brush.
+        /// </summary>
+        public const int DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
         #endregion
 
         #region User Notification State
