@@ -141,7 +141,8 @@
                         <CheckBox x:Name="ChkCpuTemp" Content="CPU _Temp" Style="{StaticResource CheckBoxStyle}" TabIndex="17"/>
                         <CheckBox x:Name="ChkGpuTemp" Content="_GPU Temp" Style="{StaticResource CheckBoxStyle}" TabIndex="18"/>
                         <CheckBox x:Name="ChkHardwareLoad" Content="H/W _Load" Style="{StaticResource CheckBoxStyle}" TabIndex="21"/>
-                        
+                        <CheckBox x:Name="ChkEnableHardwareMonitor" Content="Enable _Hardware Monitor" Style="{StaticResource CheckBoxStyle}" TabIndex="26"/>
+
                     </StackPanel>
                 </WrapPanel>
 

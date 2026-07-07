@@ -12,10 +12,13 @@ public class AppSettings
     public VisibilitySettings Visibility { get; set; } = new();
     public RateSettings Rates { get; set; } = new();
     public MaxValueSettings MaxValues { get; set; } = new();
-    // WinMeters-style per-meter section color. One swatch per meter (driven
-    // by the new MetricCard on the Monitoring page) replaces the legacy
-    // 14 swatches that lived on the Appearance page. Defaults were chosen
-    // for maximum hue separation on a dark ThemeBgBrush background.
+    // Per-meter section color tokens, keyed by the canonical meter short key
+    // (Cpu / Ram / Gpu / Net / Disk). One entry per meter -- replaces the older
+    // 14-swatch combo editor that lived on the Appearance page. Defaults were
+    // chosen for maximum hue separation on a dark background. Persisted across
+    // saves so any future per-meter colour affordance can drop in without
+    // touching settings.json -- the current SettingsWindow does not edit these
+    // directly, but the renderer honours them via Settings.Colors.
     public Dictionary<string, string> SectionColors { get; set; } = new(StringComparer.Ordinal)
     {
         ["Cpu"]  = "#FFFF6B6B",
@@ -70,10 +73,12 @@ public class AppSettings
 
     private static void MigrateSettings(AppSettings settings, string rawJson)
     {
-        // New MaxValues / SectionColors keys introduced with the MetricCard
-        // refactor. Older settings.json files lack these tokens so they keep
-        // their existing defaults. Visibility/Rate/Color legacy fields are
-        // untouched — MeterCard reads from them backward-compatibly.
+        // Older settings.json files lack the MaxValues / SectionColors keys
+        // (added in the per-meter refactor) -- seed them with the current
+        // defaults so the bar's per-meter normalization + section-color
+        // state never crashes on stale files. Visibility / Rate / Color
+        // legacy fields are the renderer's source of truth and stay
+        // untouched here.
         if (!Has(rawJson, "MaxValues"))
         {
             settings.MaxValues = new MaxValueSettings();
@@ -351,11 +356,13 @@ public class AppSettings
     }
 
     /// <summary>
-    /// Per-meter max-value pairs (one per logical meter) that normalise the
-    /// bar's normalised fill. CPU/RAM/GPU are percentage-bounded (default
-    /// 100); Net and Disk are absolute (KB/s) and start at zero so the user
-    /// can grow them via the new MetricCard MaxValue textbox on the
-    /// Monitoring page.
+    /// Per-meter max-value pairs (one per logical meter) used to normalise the
+    /// bar fill when one is configured. CPU / RAM / GPU default to 100
+    /// (percentage-bounded); Net and Disk default to 0 (absolute KB/s -- the
+    /// bar grows them at runtime based on the user's read / write activity).
+    /// Retained on the data model so any future per-meter Max affordance can
+    /// drop in without touching settings.json -- no SettingsWindow UI edits
+    /// these directly today.
     /// </summary>
     public class MaxValueSettings
     {

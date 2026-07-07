@@ -198,22 +198,52 @@ namespace WinMeters
             return menu;
         }
 
-        private void InitializeHardwareMonitor()
-        {
-            if (!_settings.General.EnableHardwareMonitor) return;
+    private void InitializeHardwareMonitor()
+    {
+        // Idempotent: called from ctor once at launch. ApplyHardwareMonitor does the same
+        // up/down from then on as the user toggles the Enable Hardware Monitor checkbox
+        // in SettingsWindow and re-saves -- the ctor call here just covers the launch-time
+        // case so a first-launch user with EnableHardwareMonitor=true gets sensors wired up
+        // BEFORE their first Timer_Tick.
+        if (_hardwareMonitor is not null) return;
+        if (!_settings.General.EnableHardwareMonitor) return;
 
-            try
-            {
-                _hardwareMonitor = new Monitors.HardwareMonitorService(
-                    enableCpu: true,
-                    enableGpu: true,
-                    enableMotherboard: true);
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"Failed to initialize hardware monitor: {ex.Message}");
-            }
+        try
+        {
+            _hardwareMonitor = new Monitors.HardwareMonitorService(
+                enableCpu: true,
+                enableGpu: true,
+                enableMotherboard: true);
         }
+        catch (Exception ex)
+        {
+            WinMeters.Log.D($"Failed to initialize hardware monitor: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Bring the HardwareMonitorService up or down in lock-step with
+    /// <c>_settings.General.EnableHardwareMonitor</c>. Called whenever settings change
+    /// (ApplySettings / ApplySettingsLive) so flipping the Enable Hardware Monitor
+    /// checkbox in SettingsWindow takes effect immediately on dialog close rather
+    /// than requiring a manual app restart. The dispose branch nulls the field so
+    /// MainWindow_Closed's <c>_hardwareMonitor?.Dispose()</c> becomes a safe no-op.
+    /// </summary>
+    private void ApplyHardwareMonitor()
+    {
+        if (_settings.General.EnableHardwareMonitor)
+        {
+            // Reuse InitializeHardwareMonitor's create branch (idempotent via the
+            // _hardwareMonitor is not null guard) -- single source of truth for
+            // the service constructor.
+            InitializeHardwareMonitor();
+        }
+        else if (_hardwareMonitor is not null)
+        {
+            _hardwareMonitor.Dispose();
+            _hardwareMonitor = null;
+        }
+    }
 
         #region Initialization & Loading
 
@@ -1223,6 +1253,10 @@ namespace WinMeters
             // so the AppBarService / WindowPlacementService read from the new instance.
             _appBarService?.BindSettings(_settings);
             _placementService.BindSettings(_settings);
+            // Re-init / shut down the LibreHardwareMonitorService to match the new
+            // EnableHardwareMonitor setting -- needed when the user toggled the
+            // checkbox in SettingsWindow since the previous launch.
+            ApplyHardwareMonitor();
             ClearCaches();
             ApplySettingsInternal();
             // Re-apply positioning in case the user changed WindowMode / MonitorIndex
@@ -1238,6 +1272,12 @@ namespace WinMeters
             _settings = settings;
             _appBarService?.BindSettings(_settings);
             _placementService.BindSettings(_settings);
+            // Also bring the LibreHardwareMonitorService up/down on the live path so
+            // the sensor data updates immediately while the user is editing the
+            // EnableHardwareMonitor checkbox in the open dialog. ApplySettings (the
+            // post-save path called after BtnOk_Click) calls the same method so
+            // the code path is identical regardless of caller.
+            ApplyHardwareMonitor();
             ClearCaches();
             ApplySettingsInternal();
             // ApplyWindowMode is called by SettingsWindow.ApplyChangesLive directly

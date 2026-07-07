@@ -195,8 +195,14 @@ public partial class SettingsWindow : Window
         ChkCombineCpu.IsChecked = _working.General.CombineLogicalCores;
         ChkTime.IsChecked = _working.Visibility.ShowTime;
         ChkTime24H.IsChecked = _working.General.Time24H;
+        ChkEnableHardwareMonitor.IsChecked = _working.General.EnableHardwareMonitor;
 
         var checkHandler = new RoutedEventHandler((s, e) => TriggerLiveUpdate());
+        // ChkEnableHardwareMonitor intentionally NOT subscribed here -- toggling it triggers
+        // initialization / shutdown of the LibreHardwareMonitorService in MainWindow, which
+        // only runs after the dialog commits via BtnOk_Click + ApplySettingsLive. Subscribing
+        // it to TriggerLiveUpdate would cause spurious hardware-monitor churn on every ticked
+        // live-preview during scroll / hover interactions before the user actually saves.
         foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H })
         {
             chk.Checked += checkHandler;
@@ -612,6 +618,7 @@ public partial class SettingsWindow : Window
         _working.General.CombineLogicalCores = ChkCombineCpu.IsChecked == true;
         _working.Visibility.ShowTime = ChkTime.IsChecked == true;
         _working.General.Time24H = ChkTime24H.IsChecked == true;
+        _working.General.EnableHardwareMonitor = ChkEnableHardwareMonitor.IsChecked == true;
 
         if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
         {
