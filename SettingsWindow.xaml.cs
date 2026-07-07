@@ -72,19 +72,22 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
 
-        // Opt this process into dark mode BEFORE sampling COLOR_MENU /
-        // COLOR_MENUTEXT / COLOR_HIGHLIGHT / COLOR_HIGHLIGHTTEXT. Win10
-        // 1903's per-process uxtheme-aware COLOR_MENU translation only
-        // returns the OS-painted dark value when PreferredAppMode is set
-        // to FORCE_DARK first; otherwise GetSysColor(COLOR_MENU) returns
-        // the legacy light-mode value even on a dark-themed system (this
-        // is what makes the SettingsWindow open with a near-white
-        // background the very first time the user opens the dialog -- the
-        // bar's popup flips PreferredAppMode process-wide on every right-
-        // click so opening the bar RMB first would mask the bug). The
+        // Opt this process into dark mode so the OS-painted chrome (the
+        // title bar's DWMWA_USE_IMMERSIVE_DARK_MODE attribute, the bar's
+        // RMB popup HMENU) lands on the dark variant. Win10 1903's
+        // per-process uxtheme-aware PreferredAppMode translation only
+        // honours the dark value when PreferredAppMode is set to
+        // FORCE_DARK first; otherwise the title bar / HMENU paint the
+        // legacy light-mode chrome even on a dark-themed system. The
         // extraction into ThemeService.InitializeDarkMode() means future
         // cold-open sites (MainWindow itself, any future dialog) can
-        // opt in with a single call.
+        // opt in with a single call. Note: the dialog's WPF content
+        // area no longer samples COLOR_MENU / COLOR_MENUTEXT / etc.
+        // (the Maximal recode retired ColorHelper.GetMenuBackgroundBrush
+        // and friends); it paints from the merged
+        // Themes/WinMetersTheme.xaml dictionary via
+        // ColorHelper.ThemeBrush("ThemeBgBrush") /
+        // ColorHelper.ThemeBrush("ThemeTextBrush") / etc.
         Services.ThemeService.InitializeDarkMode();
 
 
@@ -137,10 +140,14 @@ public partial class SettingsWindow : Window
         // Apply the menu-themed ListBoxItem container style to the meter-
         // order list BEFORE PopulateUi fills it so every MeterOrderItem
         // lands on the styled template. The IsSelected trigger paints the
-        // selected entry with COLOR_HIGHLIGHT background + COLOR_HIGHLIGHT
-        // TEXT foreground -- the same combination the OS paints for a
-        // highlighted native HMENU entry, so visually the selected meter
-        // looks like the user is hovering an unselected native menu item.
+        // selected entry with ThemeAccentBrush background + ThemeTextBrush
+        // foreground -- the same combination the OS-painted HMENU hover
+        // state uses in spirit (accent for the highlighted row, white
+        // text for the label), so visually the selected meter reads as
+        // the user is hovering an unselected native menu item. The
+        // brushes are pulled from the merged Themes/WinMetersTheme.xaml
+        // dictionary via ColorHelper.ThemeBrush("ThemeAccentBrush") and
+        // ColorHelper.ThemeBrush("ThemeTextBrush").
         ListMeterOrder.ItemContainerStyle = CreateMenuListBoxItemStyle();
 
         PopulateUi();
@@ -980,18 +987,20 @@ public partial class SettingsWindow : Window
     /// <summary>
     /// Opt the SettingsWindow's HWND into the modern dark-chrome title bar
     /// so the OS-drawn non-client area matches the WPF content area's
-    /// follow-OS-theme brush (this.Background etc., sampled live at
-    /// dialog ctor). Distinct from uxtheme's SetPreferredAppMode(FORCE_DARK)
-    /// used by the bar's RMB popup to force-dark an HMENU: this is the
-    /// DWM-attribute path for title-bar darkness, available since
-    /// Windows 10 1903. The WPF content-area brushes track COLOR_MENU /
-    /// COLOR_MENUTEXT / COLOR_HIGHLIGHT / COLOR_HIGHLIGHTTEXT at dialog
-    /// open via GetSysColor; the title bar stays forced-dark so the title
-    /// bar strip doesn't paint a jarring light stripe above a content
-    /// area that's #1F1F1F in dark themed Windows. Best-effort: if the
-    /// DWM call fails (older Windows), WinMeters.Log.D captures the
-    /// HRESULT and the dialog opens with whatever default chrome the
-    /// older OS gives, instead of crashing the Show().
+    /// follow-OS-theme brush (this.Background etc., sourced from
+    /// ThemeBgBrush via ColorHelper.ThemeBrush at dialog ctor). Distinct
+    /// from uxtheme's SetPreferredAppMode(FORCE_DARK) used by the bar's
+    /// RMB popup to force-dark an HMENU: this is the DWM-attribute path
+    /// for title-bar darkness, available since Windows 10 1903. The
+    /// WPF content-area brushes track the merged
+    /// Themes/WinMetersTheme.xaml dictionary (ThemeBgBrush /
+    /// ThemeTextBrush / ThemeAccentBrush / etc.) at dialog ctor via
+    /// ColorHelper.ThemeBrush; the title bar stays forced-dark so the
+    /// title bar strip doesn't paint a jarring light stripe above a
+    /// content area that's #1F1F1F in dark themed Windows. Best-effort:
+    /// if the DWM call fails (older Windows), WinMeters.Log.D captures
+    /// the HRESULT and the dialog opens with whatever default chrome
+    /// the older OS gives, instead of crashing the Show().
     /// </summary>
     protected override void OnSourceInitialized(EventArgs e)
     {

@@ -18,12 +18,14 @@ namespace WinMeters;
 /// itself is dumb -- it pops up, presents its content, and closes on
 /// BtnOk_Click.
 ///
-/// Dark-chrome parity with SettingsWindow: opt-in
-/// PreferredAppMode(FORCE_DARK) BEFORE sampling GetSysColor so Win10 11
-/// actually returns the dark brush from COLOR_MENU; explicit RootGrid
-/// Background so WPF's Window template can't mask it; DWM-attribute
+/// Dark-chrome parity with SettingsWindow: ThemeBgBrush / ThemeTextBrush
+/// from the merged Themes/WinMetersTheme.xaml dictionary (via
+/// <c>ColorHelper.ThemeBrush</c>); explicit RootGrid Background so WPF's
+/// Window template can't mask it; DWM-attribute
 /// DWMWA_USE_IMMERSIVE_DARK_MODE on the title bar so the OS-drawn
-/// non-client area matches the WPF content area.
+/// non-client area matches the WPF content area; PreferredAppMode
+/// (FORCE_DARK) opt-in via <c>Services.ThemeService.InitializeDarkMode</c>
+/// so the bar's RMB popup HMENU stays dark while this dialog is open.
 ///
 /// Lifetime: 1 ctor call per OpenAboutWindow invocation. No
 /// subscriptions to retain, no debounce timers, no per-control handler
@@ -38,22 +40,27 @@ public partial class AboutWindow : Window
     {
         InitializeComponent();
 
-        // Opt this process into dark mode BEFORE sampling COLOR_MENU so
-        // Win10 1903+'s per-process uxtheme-aware COLOR_MENU translation
-        // returns the OS-painted dark value. Mirrors the same call in
-        // SettingsWindow.ctor and MainWindow.OnSourceInitialized. See
-        // Services.ThemeService for the Win10 1903 quirk that drives this.
+        // Opt this process into dark mode so the OS-painted chrome (the
+        // bar's RMB popup HMENU; the title bar's DWMWA_USE_IMMERSIVE_DARK_MODE
+        // attribute) lands on the dark variant. Win10 1903+'s per-process
+        // uxtheme-aware PreferredAppMode translation only honours the dark
+        // value when PreferredAppMode is set to FORCE_DARK first; mirrors
+        // the same call in SettingsWindow.ctor and
+        // MainWindow.OnSourceInitialized. See Services.ThemeService for
+        // the Win10 1903 quirk that drives this.
         Services.ThemeService.InitializeDarkMode();
 
-        // Background and foreground track the current OS-native context
-        // menu chrome (COLOR_MENU / COLOR_MENUTEXT) so the dialog lands
-        // on the same paint the bar's RMB popup uses, regardless of
-        // whether the OS is in dark or light theme. Assigning null on
-        // failure clears the local DP value and falls through to the
-        // WPF Window theme default (better fallback than
-        // Brushes.Transparent, which would make the dialog see-through).
-        // RootGrid.Background explicit to defend against WPF Window
-        // template masking the dialog's visible client area.
+        // Background and foreground track the merged
+        // Themes/WinMetersTheme.xaml dictionary (ThemeBgBrush /
+        // ThemeTextBrush via ColorHelper.ThemeBrush) -- the Maximal
+        // recode retired the COLOR_MENU / COLOR_MENUTEXT live-sampling
+        // path in favour of a single source of truth in the theme.
+        // Assigning null on lookup failure clears the local DP value
+        // and falls through to the WPF Window theme default (better
+        // fallback than Brushes.Transparent, which would make the
+        // dialog see-through). RootGrid.Background explicit to defend
+        // against WPF Window template masking the dialog's visible
+        // client area.
         var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
         this.Background = menuBackground;
         RootGrid.Background = menuBackground;

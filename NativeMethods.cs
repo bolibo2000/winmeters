@@ -556,12 +556,16 @@ namespace WinMeters
 
         /// <summary>
         /// COLOR_MENU (= 4) — index used with <see cref="GetSysColor"/> to
-        /// read the OS's current menu-background brush. Win32 returns this
-        /// as a COLORREF (0x00BBGGRR). Used by ColorHelper.GetMenuBackgroundBrush
-        /// to make the SettingsWindow background match the native HMENU that
-        /// the bar's RMB popup paints, so the two surfaces look uniform
-        /// regardless of which Windows theme (dark / light / custom accent)
-        /// the user is currently running.
+        /// read the OS's current menu-background brush as a COLORREF
+        /// (0x00BBGGRR). No longer consumed by WinMeters at runtime: the
+        /// Maximal recode retired <c>ColorHelper.GetMenuBackgroundBrush</c>
+        /// and the SettingsWindow / AboutWindow dialogs now paint their
+        /// WPF content area from <c>ThemeBgBrush</c> in the merged
+        /// <c>Themes/WinMetersTheme.xaml</c> dictionary via
+        /// <c>ColorHelper.ThemeBrush("ThemeBgBrush")</c>. Constant retained
+        /// here for any future code that wants to opt back into live OS
+        /// menu chrome sampling. See <see cref="ColorHelper.ThemeBrush(string)"/>
+        /// for the current single-source-of-truth path.
         /// </summary>
         public const int COLOR_MENU = 4;
         public const int COLOR_MENUTEXT = 7;
