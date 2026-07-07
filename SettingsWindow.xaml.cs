@@ -77,26 +77,26 @@ public partial class SettingsWindow : Window
     {
         InitializeComponent();
 
-        // Forced-dark chrome: the user picked "always dark, hardcoded
-        // brushes" over "follow system theme via GetSysColor". The
-        // SettingsWindow now lands on the same visual identity as the
-        // bar's RMB popup when Windows dark mode paints it (#202020
-        // background, #FFFFFF text, #0078D7 highlight) regardless of
-        // the OS theme. The GetSysColor-based brushes from commit
-        // c8a609d remain available in ColorHelper for any future caller
-        // who wants them -- this commit just redirects this dialog.
-        // Assign nullable brushes fallback ignored: dark brushes are
-        // hardcoded frozen singletons (no failure mode exists).
-        this.Background = ColorHelper.DarkMenuBackgroundBrush;
+        // Background matches the native Win32 HMENU that the bar's RMB
+        // handler paints, pulled directly from COLOR_MENU via GetSysColor
+        // so the dialog lands on whatever chrome the OS draws for the
+        // context menu at the moment -- dark, light, or custom accent
+        // alike -- without this code having to branch on theme. Assigning
+        // null on failure clears the local DP value and falls through to
+        // the WPF Window theme default (a better fallback than
+        // Brushes.Transparent, which would make the dialog genuinely
+        // see-through and surface whatever is behind it).
+        this.Background = ColorHelper.GetMenuBackgroundBrush();
 
         // Foreground inherits via the WPF Visual tree -- sets the text
         // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
         // RateLabelStyle, ErrorTextStyle), CheckBox.Content, Button.Content,
-        // ComboBox item, and ListBoxItem label to DarkMenuTextBrush.
+        // ComboBox item, and ListBoxItem label to COLOR_MENUTEXT, which
+        // matches the non-selected text color the bar's RMB popup uses.
         // Explicit per-element brushes (ErrorTextStyle's Red, the color-
         // picker rectangles' black borders etc.) are unaffected because
         // they're applied directly on the elements they belong to.
-        this.Foreground = ColorHelper.DarkMenuTextBrush;
+        this.Foreground = ColorHelper.GetMenuTextBrush();
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
@@ -910,30 +910,34 @@ public partial class SettingsWindow : Window
     private static Style CreateMenuListBoxItemStyle()
     {
         var style = new Style(typeof(ListBoxItem));
-        var hl = ColorHelper.DarkHighlightBrush;
-        var hlt = ColorHelper.DarkHighlightTextBrush;
+        var hl = ColorHelper.GetHighlightBrush();
+        var hlt = ColorHelper.GetHighlightTextBrush();
 
         // Native HMENU items light up on hover, not on click-selection.
         // Two triggers share the same setters so a hovered (but not yet
-        // selected) entry paints Win10 dark-mode highlight (#0078D7)
-        // background + white (#FFFFFF) foreground exactly like a
-        // selected entry would, matching the bar's RMB popup behavior.
-        // When both conditions are true at once (mouse-over a selected
-        // entry), WPF applies the setters twice -- idempotent, no
-        // flicker. WPF MultiTrigger only supports AND; iterating two
-        // separate Trigger instances is the OR pattern. Brushes are
-        // hardcoded frozen singletons, so the null guards from commit
-        // c8a609d are no longer needed.
-        foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
+        // selected) entry paints COLOR_HIGHLIGHT background +
+        // COLOR_HIGHLIGHTTEXT foreground exactly like a selected entry
+        // would, matching the bar's RMB popup behavior. When both
+        // conditions are true at once (mouse-over a selected entry),
+        // WPF applies the setters twice -- idempotent, no flicker.
+        // WPF MultiTrigger only supports AND; iterating two separate
+        // Trigger instances is the OR pattern. Falls through to the
+        // WPF default style if the OS brush queries fail (very old
+        // Windows); that mirrors the same fallback policy as
+        // ColorHelper.GetMenuBackgroundBrush + the Background setter.
+        if (hl is not null && hlt is not null)
         {
-            var trigger = new Trigger
+            foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
             {
-                Property = triggerProperty,
-                Value = true,
-            };
-            trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
-            trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
-            style.Triggers.Add(trigger);
+                var trigger = new Trigger
+                {
+                    Property = triggerProperty,
+                    Value = true,
+                };
+                trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
+                trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
+                style.Triggers.Add(trigger);
+            }
         }
 
         return style;
@@ -942,13 +946,17 @@ public partial class SettingsWindow : Window
     /// <summary>
     /// Opt the SettingsWindow's HWND into the modern dark-chrome title bar
     /// so the OS-drawn non-client area matches the WPF content area's
-    /// forced-dark brush (commits c8a609d + upcoming foreground-dark).
-    /// Distinct from uxtheme's SetPreferredAppMode(FORCE_DARK) used by the
-    /// bar's RMB popup to dark an HMENU: this is the DWM-attribute path
-    /// for window-title darkness, available since Windows 10 1903.
-    /// On Windows 8 / 8.1 / pre-1903 builds the call is still made but
-    /// HRESULTs back as a no-op-with-error -- WinMeters.Log.D captures
-    /// it so the dialog still opens with whatever default chrome the
+    /// follow-OS-theme brush (this.Background etc., sampled live at
+    /// dialog ctor). Distinct from uxtheme's SetPreferredAppMode(FORCE_DARK)
+    /// used by the bar's RMB popup to force-dark an HMENU: this is the
+    /// DWM-attribute path for title-bar darkness, available since
+    /// Windows 10 1903. The WPF content-area brushes track COLOR_MENU /
+    /// COLOR_MENUTEXT / COLOR_HIGHLIGHT / COLOR_HIGHLIGHTTEXT at dialog
+    /// open via GetSysColor; the title bar stays forced-dark so the title
+    /// bar strip doesn't paint a jarring light stripe above a content
+    /// area that's #1F1F1F in dark themed Windows. Best-effort: if the
+    /// DWM call fails (older Windows), WinMeters.Log.D captures the
+    /// HRESULT and the dialog opens with whatever default chrome the
     /// older OS gives, instead of crashing the Show().
     /// </summary>
     protected override void OnSourceInitialized(EventArgs e)
