@@ -18,25 +18,20 @@ namespace WinMeters;
 /// </summary>
 public partial class SettingsWindow : Window
 {
-    // Compat shims preserved from the modernized SettingsWindow: MainWindow.OpenSettingsAndNavigateTo
-    // opens this dialog modeless via Show() and reads WasSaved on Closed to decide whether to
-    // ApplySettings, plus calls SelectSection("About") from the RMB-tray About entry. The single-
-    // page .WM.old layout has no nav-rail sections, so SelectSection is a no-op. WasSaved is
-    // flipped to true in BtnOk_Click right before Close(); BtnCancel_Click keeps it at the
-    // default false (the explicit set is defensive). The legacy DialogResult setter is removed
-    // below because it InvalidOperationException-throws on modeless Show()'d windows and the
+    // Compat shims preserved from the modernized SettingsWindow: MainWindow.OpenSettings
+    // opens this dialog modeless via Show() and reads WasSaved on Closed to decide whether
+    // to ApplySettings. The single-page .WM.old layout has no nav-rail sections, so the
+    // legacy SelectSection("About") compat shim was removed -- its only caller, the RMB
+    // About entry, was rewired in commit a64acb6 to open the dedicated AboutWindow
+    // instead of routing to this dialog. The legacy DialogResult setter is removed below
+    // because it InvalidOperationException-throws on modeless Show()'d windows and the
     // MainWindow pair-up doesn't read DialogResult anyway (replaced by WasSaved here).
+
+    // WasSaved: flipped to true in BtnOk_Click right before Close(); BtnCancel_Click
+    // keeps it at the default false (the explicit set is defensive).
 
     /// <summary>True iff the user clicked OK and the dialog committed its edits to _original.</summary>
     public bool WasSaved { get; private set; }
-
-    /// <summary>
-    /// No-op in the single-page .WM.old layout -- the modernized version had a 4-section nav
-    /// rail (Home / General / Monitoring / Appearance) that this dialog has no equivalent for.
-    /// Kept as a compat shim so the tray-icon RMB About entry still resolves on
-    /// MainWindow.OpenSettingsAndNavigateTo without throwing on a missing method.
-    /// </summary>
-    public void SelectSection(string sectionName) { /* single-page dialog has no sections */ }
 
     private readonly AppSettings _original;
     private readonly AppSettings _working;
@@ -670,7 +665,7 @@ public partial class SettingsWindow : Window
         CopyWorkingToOriginal();
         _original.Save();
 
-        // Compat shim: flip WasSaved so MainWindow.OpenSettingsAndNavigateTo's Closed
+        // Compat shim: flip WasSaved so MainWindow.OpenSettings's Closed
         // subscriber calls ApplySettings(). The legacy DialogResult setter is intentionally
         // dropped -- it InvalidOperationException-throws on modeless Show()'d windows, and
         // MainWindow creates this dialog as modeless so the user can still drag the bar.

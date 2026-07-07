@@ -907,7 +907,7 @@ namespace WinMeters
             switch (cmd)
             {
                 case NativeMethods.IDM_SETTINGS:
-                    OpenSettingsAndNavigateTo(null);
+                    OpenSettings();
                     break;
 
                 case NativeMethods.IDM_TASKMGR:
@@ -916,19 +916,10 @@ namespace WinMeters
 
                 case NativeMethods.IDM_ABOUT:
                     // Cmd 1003 (About) opens the dedicated AboutWindow --
-                    // brand wordmark + version + credentials, single OK
-                    // button. The previous routing (OpenSettingsAndNavigateTo
-                    // ("About")) was a holdover from the .Kil0bit / .WM.old
-                    // menu structure where the same Settings dialog had an
-                    // embedded About section. The modernized single-page
-                    // SettingsWindow no longer has nav-rail sections, so
-                    // SelectSection("About") was a no-op and the About
-                    // invocation simply opened the full Settings dialog --
-                    // confusing, because the user clicked "About" expecting
-                    // a brief read-only info dialog and got the per-meter
-                    // configuration surface instead. OpenAboutWindow gives
-                    // the menu entry its own dialog with single-instance
-                    // gate (same pattern as OpenSettingsAndNavigateTo).
+                    // brand wordmark + version + predecessor row, single
+                    // OK button. Single-instance gate via the parallel
+                    // OpenAboutWindow helper; see that method for the
+                    // shared OpenSettings / OpenAboutWindow pattern.
                     OpenAboutWindow();
                     break;
 
@@ -1189,15 +1180,12 @@ namespace WinMeters
         }
 
         /// <summary>
-        /// Opens the Settings dialog as a modeless owned window and
-        /// (optionally) jumps to a specific section. Used by both the
-        /// RMB-menu Settings entry (no section) and the RMB-menu About
-        /// entry ("About" section), matching .Kilobit/OverlayWindow.cs
-        /// where cmd 1003 (About) opens Settings and auto-selects the
-        /// About section.
+        /// Opens the Settings dialog as a modeless owned window. Used by
+        /// both the RMB-menu Settings entry (cmd 1001) and the tray
+        /// icon's left-double-click handler.
         ///
         /// Single-instance gate: if Settings is already open, just
-        /// reactivate it (and re-navigate if a section was requested).
+        /// reactivate it.
         /// Without this gate, switching from modal ShowDialog to modeless
         /// Show lets an impatient user spawn N independent SettingsWindow
         /// instances, each holding a private clone of _settings (the JSON
@@ -1215,15 +1203,11 @@ namespace WinMeters
         /// it's up), and the WPF DialogResult setter throws when called on
         /// a Show()'d window.
         /// </summary>
-        private void OpenSettingsAndNavigateTo(string? sectionName)
+        private void OpenSettings()
         {
             if (_existingSettingsWindow is { } existing)
             {
                 existing.Activate();
-                if (!string.IsNullOrEmpty(sectionName))
-                {
-                    existing.SelectSection(sectionName);
-                }
                 return;
             }
 
@@ -1249,30 +1233,26 @@ namespace WinMeters
                 }
             };
 
-            if (!string.IsNullOrEmpty(sectionName))
-            {
-                dlg.SelectSection(sectionName);
-            }
             dlg.Show();
         }
 
         /// <summary>
         /// Opens Settings (cmd 1001 from the popup menu; also called
         /// from the tray icon's left-double-click handler). Kept as a
-        /// thin wrapper around <see cref="OpenSettingsAndNavigateTo"/>
+        /// thin wrapper around <see cref="OpenSettings"/>
         /// so the tray icon's old RoutedEventArgs-style invocation
         /// (<c>MenuItem_Settings_Click(this, new RoutedEventArgs())</c>)
         /// keeps working.
         /// </summary>
         private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
         {
-            OpenSettingsAndNavigateTo(null);
+            OpenSettings();
         }
 
         /// <summary>
         /// Opens the dedicated AboutWindow (cmd 1003 from the popup
         /// menu). Single-instance gate with the same semantics as
-        /// <see cref="OpenSettingsAndNavigateTo"/>: if About is already
+        /// <see cref="OpenSettings"/>: if About is already
         /// open, just reactivate it (no second MainWindow.OpenAboutWindow
         /// invocations ever spawn a parallel instance). AboutWindow has
         /// no model-time selection state to persist, so no Closed
