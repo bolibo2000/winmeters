@@ -43,6 +43,18 @@
         <Style x:Key="CheckBoxStyle" TargetType="CheckBox">
             <Setter Property="FontSize" Value="9"/>
             <Setter Property="Margin" Value="4"/>
+            <!--
+                Window.Foreground is set to ThemeTextBrush (white) in the
+                ctor, but WPF's default ContentPresenter style overrides
+                that with SystemColors.ControlTextBrushKey (which evaluates
+                to black on systems where WPF hasn't picked up the dark
+                theme). Setting Foreground explicitly on the CheckBox
+                beats ContentPresenter's default-style setter, so the
+                label text paints white. ThemeTextBrush (rather than the
+                literal "White") keeps the value tied to the theme so a
+                future recolour of ThemeTextBrush propagates here.
+            -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="RateGroupStyle" TargetType="StackPanel">
             <Setter Property="Width" Value="130"/>
@@ -69,7 +81,12 @@
                         <TextBlock x:Name="TxtScale" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="1.0×"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" FontSize="10" VerticalAlignment="Center" TabIndex="25"/>
+                        <!-- Explicit Foreground because ChkTime24H has no Style
+                             reference (the other 15 CheckBoxes in this window
+                             pick up the white label via the local CheckBoxStyle's
+                             Foreground setter, but ChkTime24H opts out of that
+                             style to keep its slightly larger FontSize=10). -->
+                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextBrush}" TabIndex="25"/>
                     </StackPanel>
                 </WrapPanel>
 
