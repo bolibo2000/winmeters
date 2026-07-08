@@ -23,6 +23,16 @@
             <Setter Property="HorizontalContentAlignment" Value="Right"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="Margin" Value="0,2"/>
+            <!--
+                WPF's default TextBox style pins Foreground to
+                SystemColors.ControlTextBrushKey (same WPF-default-style
+                override that hits the CheckBox labels and the ComboBox
+                text; see the CheckBoxStyle comment above for the full
+                precedence-chain explanation). Setting Foreground here
+                to ThemeTextBrush forces the typed rate values to render
+                white on the dark chrome.
+            -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="RateLabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10"/>
@@ -39,6 +49,18 @@
         <Style x:Key="ComboBoxStyle" TargetType="ComboBox">
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="Width" Value="120"/>
+            <!--
+                WPF's default ComboBox style pins Foreground to
+                SystemColors.ControlTextBrushKey (same WPF-default-style
+                override that hits the CheckBox labels; see the
+                CheckBoxStyle comment above for the full precedence-
+                chain explanation). The selected item text and the
+                dropdown popup items both render through this
+                Foreground, so a missing setter means the disk-drive
+                name + the network-interface name would paint black on
+                the dark chrome. ThemeTextBrush forces them to white.
+            -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="CheckBoxStyle" TargetType="CheckBox">
             <Setter Property="FontSize" Value="9"/>
@@ -192,14 +214,26 @@
                 <!-- Disk -->
                 <TextBlock Text="Disk" Style="{StaticResource SectionHeaderStyle}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Drive R/W:" FontSize="10" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    <!-- Explicit Foreground because the TextBlock has no
+                         Style reference (the other section header + rate
+                         label TextBlocks inherit white from the local
+                         SectionHeaderStyle / RateLabelStyle / SliderLabelStyle
+                         via the WPF property-inheritance chain, but those
+                         styles also lack a Foreground setter, so they only
+                         get white because WPF's default TextBlock style
+                         doesn't override the inherited value either. This
+                         TextBlock is set explicitly to be defensive in
+                         case the WPF default style ever changes). -->
+                    <TextBlock Text="Drive R/W:" FontSize="10" Foreground="{DynamicResource ThemeTextBrush}" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                     <ComboBox x:Name="ComboDisk" Style="{StaticResource ComboBoxStyle}" TabIndex="11"/>
                 </StackPanel>
 
                 <!-- Network -->
                 <TextBlock Text="Network" Style="{StaticResource SectionHeaderStyle}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
-                    <TextBlock Text="Interface:" FontSize="10" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    <!-- Explicit Foreground; see the Drive R/W: TextBlock
+                         comment above for the rationale. -->
+                    <TextBlock Text="Interface:" FontSize="10" Foreground="{DynamicResource ThemeTextBrush}" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                     <ComboBox x:Name="ComboNetwork" Width="160" Style="{StaticResource ComboBoxStyle}" TabIndex="12"/>
                 </StackPanel>
 
@@ -212,17 +246,29 @@
                     </Grid.ColumnDefinitions>
                     <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                        <Button x:Name="BtnMoveUp" Content="↑" Margin="2" Width="40" Click="BtnMoveUp_Click"/>
-                        <Button x:Name="BtnMoveDown" Content="↓" Margin="2" Width="40" Click="BtnMoveDown_Click"/>
+                        <!-- Explicit Foreground on the 2 meter-order arrow
+                             buttons; same WPF-default-style override as the
+                             3 footer buttons above. The Unicode arrows
+                             (U+2191 / U+2193) would otherwise render black
+                             on the dark chrome. -->
+                        <Button x:Name="BtnMoveUp" Content="↑" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnMoveUp_Click"/>
+                        <Button x:Name="BtnMoveDown" Content="↓" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnMoveDown_Click"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>
         </ScrollViewer>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button x:Name="BtnReset" Content="_Reset to defaults" Width="100" Margin="6" Click="BtnReset_Click" TabIndex="27"/>
-            <Button Width="90" Margin="6" Click="BtnOk_Click" IsDefault="True" TabIndex="13">_OK</Button>
-            <Button Width="90" Margin="6" Click="BtnCancel_Click" IsCancel="True" TabIndex="14">_Cancel</Button>
+            <!-- Explicit Foreground on the 3 footer buttons because they
+                 have no Style reference; WPF's default Button style pins
+                 Foreground to SystemColors.ControlTextBrushKey (same
+                 WPF-default-style override that hits the CheckBox
+                 labels; see the CheckBoxStyle comment above for the
+                 full precedence-chain explanation). The button label
+                 text would otherwise paint black on the dark chrome. -->
+            <Button x:Name="BtnReset" Content="_Reset to defaults" Width="100" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnReset_Click" TabIndex="27"/>
+            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnOk_Click" IsDefault="True" TabIndex="13">_OK</Button>
+            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnCancel_Click" IsCancel="True" TabIndex="14">_Cancel</Button>
         </StackPanel>
     </Grid>
 </Window>
