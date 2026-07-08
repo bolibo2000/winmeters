@@ -489,13 +489,126 @@
         the Thumb, Track, and RepeatButton parts the gesture handlers
         walk; without BasedOn those are null and PointerPressed on the
         track throws NullReferenceException.
+        Custom WinMetersSliderTemplate below replaces the default
+        template so the Thumb.Background + Thumb.BorderBrush +
+        Track.DecreaseRepeatButton.Background + Track.IncreaseRepeatButton.Background
+        and TickBar.Fill all reach theme brushes via TemplateBinding.
+        WPF's default Slider template hardcodes those brushes to
+        SystemColors.ControlBrushKey + SystemColors.ControlLightLightBrushKey
+        which paint white against the dark ThemeBgBrush chrome. The template
+        here mirrors the WinMetersCheckBoxTemplate precedent (commit 723e317):
+        Grid with TopTickBar / Track (containing DecreaseRepeatButton +
+        IncreaseRepeatButton + Thumb) / BottomTickBar inside an OuterBorder.
+        DecreaseRepeatButton Background reaches the Foreground setter (so the
+        filled portion of the track paints the accent teal); the
+        IncreaseRepeatButton Background reaches the Slider Background setter
+        (so the unfilled portion blends into the dark chrome); the Thumb
+        Background + BorderBrush + Foreground cascade through together
+        via the IsMouseOver trigger so hover flips the thumb to ThemeAccentBrush
+        + BorderBrush to ThemeCardBorderBrush. TickBar.Fill uses TemplateBinding
+        Foreground so tick marks inherit the theme accent. MinHeight flows
+        through to the middle RowDefinition height.
     -->
+    <ControlTemplate x:Key="WinMetersSliderTemplate" TargetType="{x:Type Slider}">
+        <Border x:Name="OuterBorder"
+                Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="1">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="{TemplateBinding MinHeight}"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TickBar x:Name="TopTickBar"
+                         Grid.Row="0"
+                         Fill="{TemplateBinding Foreground}"
+                         Height="4"
+                         Visibility="Collapsed"
+                         Placement="Top"/>
+                <TickBar x:Name="BottomTickBar"
+                         Grid.Row="2"
+                         Fill="{TemplateBinding Foreground}"
+                         Height="4"
+                         Visibility="Collapsed"
+                         Placement="Bottom"/>
+                <Track x:Name="PART_Track"
+                       Grid.Row="1"
+                       Orientation="Horizontal">
+                    <Track.DecreaseRepeatButton>
+                        <RepeatButton x:Name="DecreaseRepeatButton"
+                                          Background="{TemplateBinding Foreground}"
+                                          Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="{TemplateBinding Background}"/>
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.DecreaseRepeatButton>
+                    <Track.IncreaseRepeatButton>
+                        <RepeatButton x:Name="IncreaseRepeatButton"
+                                          Background="{TemplateBinding Background}"
+                                          Focusable="False">
+                            <RepeatButton.Template>
+                                <ControlTemplate TargetType="RepeatButton">
+                                    <Border Background="{TemplateBinding Background}"/>
+                                </ControlTemplate>
+                            </RepeatButton.Template>
+                        </RepeatButton>
+                    </Track.IncreaseRepeatButton>
+                    <Track.Thumb>
+                        <Thumb x:Name="Thumb"
+                              Width="12" Height="18"
+                              Background="{TemplateBinding Foreground}"
+                              BorderBrush="{TemplateBinding BorderBrush}"
+                              BorderThickness="1"
+                              Focusable="False">
+                            <Thumb.Template>
+                                <ControlTemplate TargetType="Thumb">
+                                    <Border Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="{TemplateBinding BorderThickness}"/>
+                                </ControlTemplate>
+                            </Thumb.Template>
+                        </Thumb>
+                    </Track.Thumb>
+                </Track>
+            </Grid>
+        </Border>
+        <ControlTemplate.Triggers>
+            <Trigger Property="TickPlacement" Value="TopLeft">
+                <Setter TargetName="TopTickBar" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="BottomRight">
+                <Setter TargetName="BottomTickBar" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="TickPlacement" Value="Both">
+                <Setter TargetName="TopTickBar" Property="Visibility" Value="Visible"/>
+                <Setter TargetName="BottomTickBar" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="Thumb" Property="Background"
+                        Value="{DynamicResource ThemeAccentBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
     <Style x:Key="WinMetersSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
         <Setter Property="MinHeight" Value="24"/>
         <Setter Property="IsMoveToPointEnabled" Value="True"/>
+        <!--
+            Mount the custom WinMetersSliderTemplate above so the Thumb paint
+            (currently hardcoded to SystemColors.ControlBrushKey in the WPF
+            default Slider template) and the unfilled-track paint inherit the
+            theme Background / Foreground / BorderBrush setters below.
+        -->
+        <Setter Property="Template" Value="{StaticResource WinMetersSliderTemplate}"/>
     </Style>
 
     <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
