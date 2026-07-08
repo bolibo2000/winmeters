@@ -109,33 +109,22 @@
             -->
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
             <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
-        </Style>
-        <!--
-            Local shim: redirects to WinMetersCheckBox in
-            Themes/WinMetersTheme.xaml so the 15 element references
-            in this window (Style="{StaticResource CheckBoxStyle}")
-            keep working without churn. The canonical style lives
-            in the theme; new windows / future CheckBoxes should
-            reference "{StaticResource WinMetersCheckBox}" directly.
+        </Style>        <!--
+            ChkTime24H's only deviation from every other CheckBox in this
+            window is a slightly larger FontSize (10 vs the
+            WinMetersCheckBox default of 9), so derive the style rather
+            than restating the opt-out on every property. BasedOn on
+            WinMetersCheckBox inherits all properties symmetrically:
+            Margin=4 + Foreground=ThemeTextBrush + Background=ThemeBgBrush +
+            BorderBrush=ThemeCardBorderBrush + Template=WinMetersCheckBoxTemplate.
+            Setter triggers and resource references cascade through the
+            BasedOn chain. Future dark-chrome (or other styling) setters
+            added to WinMetersCheckBox propagate through to ChkTime24H
+            automatically. The child's FontSize=10 setter wins over the
+            parent's FontSize=9 setter per WPF's child-setter-beats-
+            parent-setter rule.
         -->
-        <Style x:Key="CheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}"/>
-
-        <!--
-            ChkTime24H's only deviation from the other 15 CheckBoxes is a
-            slightly larger FontSize (10 vs the WinMetersCheckBox default
-            of 9), so derive the style rather than restating the opt-out
-            on every property. The chain WinMetersCheckBox -> local
-            CheckBoxStyle shim -> TimeCheckBoxStyle inherits all properties
-            symmetrically: Margin=4 + Foreground=ThemeTextBrush +
-            Background=ThemeBgBrush + BorderBrush=ThemeCardBorderBrush +
-            Template=WinMetersCheckBoxTemplate. Setter triggers and
-            resource references cascade the same way. Future dark-chrome
-            (or other styling) setters added to WinMetersCheckBox propagate
-            through to ChkTime24H automatically. The child's FontSize=10
-            setter wins over the parent's FontSize=9 setter per WPF's
-            child-setter-beats-parent-setter rule.
-        -->
-        <Style x:Key="TimeCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource CheckBoxStyle}">
+        <Style x:Key="TimeCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}">
             <Setter Property="FontSize" Value="10"/>
         </Style>
         <Style x:Key="RateGroupStyle" TargetType="StackPanel">
@@ -238,26 +227,26 @@
                          destructive Reset before the user has explored the
                          visibility choices. -->
                     <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkLockPosition"      Content="_Lock Position"    Style="{StaticResource CheckBoxStyle}" TabIndex="28"/>
-                        <CheckBox x:Name="ChkHideInFullscreen"  Content="Hide in _Fullscreen" Style="{StaticResource CheckBoxStyle}" TabIndex="29"/>
-                        <CheckBox x:Name="ChkSnapToTaskbar"     Content="_Snap to Taskbar"  Style="{StaticResource CheckBoxStyle}" TabIndex="30"/>
-                        <CheckBox x:Name="ChkKeepOnTop"         Content="_Keep on Top"      Style="{StaticResource CheckBoxStyle}" TabIndex="31"/>
+                        <CheckBox x:Name="ChkLockPosition"      Content="_Lock Position"    Style="{StaticResource WinMetersCheckBox}" TabIndex="28"/>
+                        <CheckBox x:Name="ChkHideInFullscreen"  Content="Hide in _Fullscreen" Style="{StaticResource WinMetersCheckBox}" TabIndex="29"/>
+                        <CheckBox x:Name="ChkSnapToTaskbar"     Content="_Snap to Taskbar"  Style="{StaticResource WinMetersCheckBox}" TabIndex="30"/>
+                        <CheckBox x:Name="ChkKeepOnTop"         Content="_Keep on Top"      Style="{StaticResource WinMetersCheckBox}" TabIndex="31"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkCpu" Content="_CPU" Style="{StaticResource CheckBoxStyle}" TabIndex="6"/>
-                        <CheckBox x:Name="ChkRam" Content="_RAM" Style="{StaticResource CheckBoxStyle}" TabIndex="7"/>
-                        <CheckBox x:Name="ChkGpuDedicated" Content="_VRAM" Style="{StaticResource CheckBoxStyle}" TabIndex="22"/>
-                        <CheckBox x:Name="ChkGpuShared" Content="_SRAM" Style="{StaticResource CheckBoxStyle}" TabIndex="23"/>
-                        <CheckBox x:Name="ChkDisk" Content="_Disk" Style="{StaticResource CheckBoxStyle}" TabIndex="8"/>
-                        <CheckBox x:Name="ChkNet" Content="_Net" Style="{StaticResource CheckBoxStyle}" TabIndex="9"/>
-                        <CheckBox x:Name="ChkTime" Content="_Time" Style="{StaticResource CheckBoxStyle}" TabIndex="24"/>
+                        <CheckBox x:Name="ChkCpu" Content="_CPU" Style="{StaticResource WinMetersCheckBox}" TabIndex="6"/>
+                        <CheckBox x:Name="ChkRam" Content="_RAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="7"/>
+                        <CheckBox x:Name="ChkGpuDedicated" Content="_VRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="22"/>
+                        <CheckBox x:Name="ChkGpuShared" Content="_SRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="23"/>
+                        <CheckBox x:Name="ChkDisk" Content="_Disk" Style="{StaticResource WinMetersCheckBox}" TabIndex="8"/>
+                        <CheckBox x:Name="ChkNet" Content="_Net" Style="{StaticResource WinMetersCheckBox}" TabIndex="9"/>
+                        <CheckBox x:Name="ChkTime" Content="_Time" Style="{StaticResource WinMetersCheckBox}" TabIndex="24"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkCombineCpu" Content="Combine _Logical Cores" Style="{StaticResource CheckBoxStyle}" TabIndex="10"/>
-                        <CheckBox x:Name="ChkCpuTemp" Content="CPU _Temp" Style="{StaticResource CheckBoxStyle}" TabIndex="17"/>
-                        <CheckBox x:Name="ChkGpuTemp" Content="_GPU Temp" Style="{StaticResource CheckBoxStyle}" TabIndex="18"/>
-                        <CheckBox x:Name="ChkHardwareLoad" Content="H/W _Load" Style="{StaticResource CheckBoxStyle}" TabIndex="21"/>
-                        <CheckBox x:Name="ChkEnableHardwareMonitor" Content="Enable _Hardware Monitor" Style="{StaticResource CheckBoxStyle}" TabIndex="26"/>
+                        <CheckBox x:Name="ChkCombineCpu" Content="Combine _Logical Cores" Style="{StaticResource WinMetersCheckBox}" TabIndex="10"/>
+                        <CheckBox x:Name="ChkCpuTemp" Content="CPU _Temp" Style="{StaticResource WinMetersCheckBox}" TabIndex="17"/>
+                        <CheckBox x:Name="ChkGpuTemp" Content="_GPU Temp" Style="{StaticResource WinMetersCheckBox}" TabIndex="18"/>
+                        <CheckBox x:Name="ChkHardwareLoad" Content="H/W _Load" Style="{StaticResource WinMetersCheckBox}" TabIndex="21"/>
+                        <CheckBox x:Name="ChkEnableHardwareMonitor" Content="Enable _Hardware Monitor" Style="{StaticResource WinMetersCheckBox}" TabIndex="26"/>
 
                     </StackPanel>
                 </WrapPanel>
