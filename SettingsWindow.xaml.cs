@@ -91,46 +91,28 @@ public partial class SettingsWindow : Window
         Services.ThemeService.InitializeDarkMode();
 
 
-        // Paint the SettingsWindow with ThemeBgBrush from the merged
-        // Themes/WinMetersTheme.xaml dictionary — the dialog no longer
-        // samples the live OS menu chrome (that trade-off was the
-        // explicit "Maximal recode" choice). The dialog lands on a
-        // consistent dark chrome regardless of OS theme state. The bar's
-        // RMB popup remains OS-painted via uxtheme via
-        // Services.ThemeService.InitializeDarkMode (kept above).
-        // Assigning null on lookup failure clears the local DP value
-        // and falls through to the WPF Window theme default (a better
-        // fallback than Brushes.Transparent, which would make the dialog
-        // genuinely see-through and surface whatever is behind it).
-        //this.Background = ColorHelper.ThemeBrush("ThemeBgBrush");
-        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
-        // ALSO paint the RootGrid with the same brush so the dialog's
-        // visible client area is definitely dark. WPF's Window template
-        // can mask Window.Background on its own when the visible client
-        // area would otherwise show the Aero2 default chrome -- this
-        // explicit Grid brush closes that gap by guaranteeing the Grid
-        // (which fills the entire client area) paints the same brush
-        // instead of inheriting the (potentially-masked) Window chrome.
-        // Cached locally so the two DP assignments are guaranteed to
-        // hold the EXACT same instance -- keeps them in lockstep by
-        // design and halves the brush-allocation count.
+        // Single brush-resolution block: the dialog's Background (Window
+        // + RootGrid, the latter defending against WPF's Window template
+        // masking the visible client area) and Foreground (inherited by
+        // every CheckBox.Content, TextBlock, Button.Content, ComboBox
+        // item, and ListBoxItem label) both come from the merged
+        // Themes/WinMetersTheme.xaml dictionary. The Foreground lookup
+        // has a ?? Brushes.White fallback so a ThemeBrush miss can never
+        // clear the local Foreground DP and fall through to WPF's default
+        // SystemColors.WindowText (black on Windows). Cached locally so
+        // each DP set holds a single brush instance and Window / RootGrid
+        // paint the SAME brush (halves the brush-allocation count vs
+        // calling ThemeBrush("ThemeBgBrush") twice). The dialog no
+        // longer samples the live OS menu chrome (that trade-off was the
+        // explicit "Maximal recode" choice); it lands on a consistent
+        // dark chrome regardless of OS theme state. The bar's RMB popup
+        // remains OS-painted via uxtheme via the InitializeDarkMode call
+        // above.
         var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
-        RootGrid.Background = menuBackground;
+        var menuForeground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
         this.Background = menuBackground;
-
-        // Foreground inherits via the WPF Visual tree -- sets the text
-        // color of every TextBlock (SectionHeaderStyle, SliderLabelStyle,
-        // RateLabelStyle, ErrorTextStyle), CheckBox.Content, Button.Content,
-        // ComboBox item, and ListBoxItem label to ThemeTextBrush (white)
-        // from the merged Themes/WinMetersTheme.xaml dictionary. Explicit
-        // per-element brushes (ErrorTextStyle's Red, the color-picker
-        // rectangles' black borders etc.) are unaffected because they're
-        // applied directly on the elements they belong to. The
-        // ?? Brushes.White fallback is null-safe: a resource-lookup miss
-        // for ThemeTextBrush would clear the local Foreground DP and
-        // fall through to WPF's default SystemColors.WindowText (black
-        // on Windows), so the fallback guarantees white text regardless.
-        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
+        RootGrid.Background = menuBackground;
+        this.Foreground = menuForeground;
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
