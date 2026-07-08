@@ -161,8 +161,15 @@
                              reference (the other 15 CheckBoxes in this window
                              pick up the white label via the local CheckBoxStyle's
                              Foreground setter, but ChkTime24H opts out of that
-                             style to keep its slightly larger FontSize=10). -->
-                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextBrush}" TabIndex="25"/>
+                             style to keep its slightly larger FontSize=10).
+                             Explicit Background for the same reason: the local
+                             CheckBoxStyle's Background setter (round 2 of the
+                             dark-chrome fix) won't reach ChkTime24H either, so
+                             its glyph rectangle defaults to the system theme
+                             colour. ThemeBgBrush keeps it consistent with the
+                             other 15 CheckBoxes and the surrounding dark
+                             chrome. -->
+                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" TabIndex="25"/>
                     </StackPanel>
                 </WrapPanel>
 
