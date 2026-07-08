@@ -132,6 +132,25 @@
                  a future recolour propagates here. -->
             <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
         </Style>
+        <!--
+            ChkTime24H's only deviation from the other 15 CheckBoxes is a
+            slightly larger FontSize (10 vs the CheckBoxStyle default of 9),
+            so derive the style rather than restating the opt-out on every
+            property. BasedOn means new setters added to CheckBoxStyle in
+            future dark-chrome passes (or any other styling pass) cascade
+            through to ChkTime24H automatically, removing the per-element
+            Foreground + Background attribute bookkeeping that the pre-
+            refactor commit trail needed. The child's FontSize=10 setter
+            wins over the parent's FontSize=9 setter (WPF's child-setter-
+            beats-parent-setter rule applies identically to the
+            per-property WithinStyle precedence used by the existing
+            comment chain); Margin=4 + Foreground=ThemeTextBrush +
+            Background=ThemeBgBrush cascade through unchanged. Setter
+            triggers and resource references cascade the same way.
+        -->
+        <Style x:Key="TimeCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource CheckBoxStyle}">
+            <Setter Property="FontSize" Value="10"/>
+        </Style>
         <Style x:Key="RateGroupStyle" TargetType="StackPanel">
             <Setter Property="Width" Value="130"/>
             <Setter Property="Margin" Value="2"/>
@@ -157,19 +176,13 @@
                         <TextBlock x:Name="TxtScale" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="1.0×"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <!-- Explicit Foreground because ChkTime24H has no Style
-                             reference (the other 15 CheckBoxes in this window
-                             pick up the white label via the local CheckBoxStyle's
-                             Foreground setter, but ChkTime24H opts out of that
-                             style to keep its slightly larger FontSize=10).
-                             Explicit Background for the same reason: the local
-                             CheckBoxStyle's Background setter (round 2 of the
-                             dark-chrome fix) won't reach ChkTime24H either, so
-                             its glyph rectangle defaults to the system theme
-                             colour. ThemeBgBrush keeps it consistent with the
-                             other 15 CheckBoxes and the surrounding dark
-                             chrome. -->
-                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" FontSize="10" VerticalAlignment="Center" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" TabIndex="25"/>
+                        <!-- ChkTime24H uses TimeCheckBoxStyle (BasedOn=
+                             CheckBoxStyle with FontSize=10 override) so the
+                             Foreground + Background + Margin auto-applied to
+                             the other 15 CheckBoxes cascade through it as
+                             future dark-chrome setters are added to
+                             CheckBoxStyle. -->
+                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" Style="{StaticResource TimeCheckBoxStyle}" VerticalAlignment="Center" TabIndex="25"/>
                     </StackPanel>
                 </WrapPanel>
 
