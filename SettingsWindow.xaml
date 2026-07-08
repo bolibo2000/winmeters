@@ -29,6 +29,20 @@
         <Style x:Key="SliderStyle" TargetType="Slider">
             <Setter Property="Width" Value="100"/>
             <Setter Property="Margin" Value="4,0"/>
+            <!--
+                Round-3 dark-chrome pass: WPF's default Slider template uses
+                TemplateBinding Background for the track Border and
+                TemplateBinding Foreground for the tick TickBar. Both pins
+                default to system colours (ControlBrush/Window white for
+                Background, ControlTextBrushKey for ticks), so the slider
+                track paints white against the dark dialog chrome and the
+                tick marks render black on light themes. Setting both to
+                the Theme*Brush DynamicResources ties them to the merged
+                Themes/WinMetersTheme.xaml palette so a recolour propagates
+                here.
+            -->
+            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="RateTextBoxStyle" TargetType="TextBox">
             <Setter Property="Width" Value="55"/>
