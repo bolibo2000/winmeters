@@ -140,7 +140,7 @@
         Section header: kil0bit General / Monitoring / About titles
         (FontSize 28 Semibold, Margin 0 0 0 24). Reused in each Settings page.
     -->
-    <Style x:Key="WinMetersSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
+    <Style x:Key="WinMetersPageSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontSize" Value="28"/>
         <Setter Property="Margin" Value="0,0,0,24"/>
     </Style>
@@ -767,7 +767,7 @@
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
-    <Style x:Key="WinMetersSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+    <Style x:Key="WinMetersAccentSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
@@ -807,7 +807,7 @@
         entry) WPF applies the setters twice (idempotent, no flicker).
         The IsEnabled trigger covers the rare disabled row case via
         Opacity 0.5 (consistent with the WinMetersComboBoxItem /
-        WinMetersSlider / WinMetersCheckBox IsEnabled handling).
+        WinMetersAccentSlider / WinMetersCheckBox IsEnabled handling).
 
         BasedOn={StaticResource {x:Type ListBoxItem}} preserves the
         framework's ContentPresenter + selection wiring so the WPF
@@ -834,6 +834,162 @@
                 <Setter Property="Opacity" Value="0.5"/>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <!--
+        ================================================================
+        Settings dialog input styles
+        ================================================================
+
+        Compact, dialog-specific styles promoted out of
+        SettingsWindow.xaml's Window.Resources block so a future
+        window in the app opts into the same chrome with a single
+        StaticResource ref and no per-window shim layer. Each style
+        BasedOn's the closest theme-level relative (WinMetersTextBox
+        / WinMetersTextHeading / {x:Type Slider}) so the round-9
+        theme work (textbox caret/selection chrome, Segoe UI text
+        heading) carries through, then overrides just the
+        dialog-specific width / margin / font-size / alignment
+        values that the dialog layout needs.
+
+        Visual semantics are byte-equivalent to the previous
+        per-window shims: the WPF default Foreground / Background
+        property-inheritance chain still paints the same theme
+        brushes, and child setters (FontSize, Width, Margin, etc.)
+        win over the BasedOn parent's setters per WPF precedence.
+
+        Distinct from the theme's round-9 work:
+          * WinMetersPageSectionHeader (28pt Semibold kil0bit page
+            title) is a different visual scale from this
+            WinMetersSectionHeader (13pt Bold dialog section
+            header).
+          * WinMetersAccentSlider (round-9 accent slider with
+            MinHeight=24 + IsMoveToPointEnabled=True + the modern
+            WinMetersSliderTemplate) is a different visual /
+            interaction scale from this WinMetersSlider (WPF
+            default template + MinHeight=0 + IsMoveToPointEnabled=
+            False, matching the previous per-window SliderStyle
+            exactly).
+        The two pairs coexist so a caller picks the right scale
+        for the right context.
+    -->
+
+    <!--
+        WinMetersSectionHeader: settings-dialog section header (the
+        bold "General" / "Refresh Rates" / "Colors" / "Visibility" /
+        "Disk" / "Network" / "Meter Display Order" titles inside
+        the SettingsWindow). FontWeight=Bold + FontSize=13 +
+        Margin=0,6,0,4. Distinct from WinMetersPageSectionHeader
+        (28pt Semibold, used for the kil0bit page titles); this
+        smaller 13pt bold version is the legacy dialog's section
+        header scale. Future dialogs opt in with
+        Style="{StaticResource WinMetersSectionHeader}".
+    -->
+    <Style x:Key="WinMetersSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="FontSize" Value="13"/>
+        <Setter Property="Margin" Value="0,6,0,4"/>
+    </Style>
+
+    <!--
+        WinMetersSliderLabel: small label next to a settings-dialog
+        slider (the "Opacity:" / "Scale:" labels). FontSize=10 +
+        VerticalAlignment=Center. The Foreground + FontFamily +
+        default TextBlock focus wiring all cascade through from
+        the BasedOn WinMetersTextHeading.
+    -->
+    <Style x:Key="WinMetersSliderLabel" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+
+    <!--
+        WinMetersRateLabel: small label next to a settings-dialog
+        rate input (the "CPU:" / "RAM:" / "Disk:" / "Net:" /
+        "CPU Temp:" / "GPU Temp:" / "VRAM:" / "SRAM:" labels).
+        FontSize=10 + Width=65 + HorizontalAlignment=Left +
+        Margin=0,0,4,2. The Width=65 reserves enough space for
+        the longest label "CPU Temp:" / "GPU Temp:" at 10pt Segoe
+        UI; the Margin separates the label from the adjacent
+        rate textbox.
+    -->
+    <Style x:Key="WinMetersRateLabel" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
+        <Setter Property="FontWeight" Value="Normal"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="Width" Value="65"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="0,0,4,2"/>
+    </Style>
+
+    <!--
+        WinMetersErrorText: inline validation error text under a
+        settings-dialog rate input. Foreground=ThemeErrorBrush
+        (red) + FontSize=9 + Visibility=Collapsed (the rate
+        textbox shows it on validation failure via ShowError's
+        Visibility flip). Margin=0,-2,0,0 tucks it tightly under
+        the textbox without adding a vertical gap in the resting
+        (Collapsed) state.
+    -->
+    <Style x:Key="WinMetersErrorText" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeErrorBrush}"/>
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="Visibility" Value="Collapsed"/>
+        <Setter Property="Margin" Value="0,-2,0,0"/>
+    </Style>
+
+    <!--
+        WinMetersRateTextBox: settings-dialog rate input (the 8
+        numeric "Refresh Rates (ms)" textboxes). BasedOn the
+        theme-level WinMetersTextBox so the dialog rate inputs
+        inherit the modern textbox chrome (CaretBrush=ThemeAccentBrush
+        + SelectionBrush=ThemeAccentDimBrush + Foreground=ThemeTextBrush
+        + BorderBrush=ThemeCardBorderBrush + FontFamily=Segoe UI +
+        Padding=6,3 + MinHeight=26) for free. Overrides Width=55 +
+        FontSize=10 + HorizontalContentAlignment=Right +
+        HorizontalAlignment=Left + Margin=0,2 + Background=ThemeBgBrush
+        (NOT ThemeCardBgBrush — rate inputs sit inside the dialog body
+        which paints ThemeBgBrush, so blending matches the dialog
+        rather than the elevated card surface).
+    -->
+    <Style x:Key="WinMetersRateTextBox" TargetType="TextBox" BasedOn="{StaticResource WinMetersTextBox}">
+        <Setter Property="Width" Value="55"/>
+        <Setter Property="FontSize" Value="10"/>
+        <Setter Property="HorizontalContentAlignment" Value="Right"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <Setter Property="Margin" Value="0,2"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
+    </Style>
+
+    <!--
+        WinMetersSlider: settings-dialog slider (the Opacity + Scale
+        sliders at the top of the dialog). BasedOn the WPF default
+        Slider (NOT the theme-level WinMetersAccentSlider which
+        carries MinHeight=24 + IsMoveToPointEnabled=True + the
+        modern WinMetersSliderTemplate) so the dialog sliders keep
+        the WPF default MinHeight (0) and IsMoveToPointEnabled
+        (False), preserving the previous per-window SliderStyle
+        behaviour byte-for-byte. Overrides Width=100 + Margin=4,0
+        for the dialog's compact "label / slider / value-badge"
+        layout, Background=ThemeBgBrush + Foreground=ThemeTextBrush
+        so the rendered WPF default template paints the track
+        border dark (ThemeBgBrush via the template's
+        TemplateBinding Background) and the tick TickBar white
+        (ThemeTextBrush via the template's TemplateBinding
+        Foreground). The WPF default Slider template's Thumb
+        Background is hardcoded to SystemColors.ControlBrushKey
+        (NOT a TemplateBinding), so the thumb itself stays
+        system-colored (light grey on most Windows installs) —
+        the same visual the previous per-window SliderStyle
+        produced. A future commit can install
+        WinMetersSliderTemplate to upgrade the dialog sliders to
+        the modern flat thumb + accent track.
+    -->
+    <Style x:Key="WinMetersSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+        <Setter Property="Width" Value="100"/>
+        <Setter Property="Margin" Value="4,0"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
     </Style>
 
     <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the

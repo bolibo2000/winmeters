@@ -4,84 +4,19 @@
         Title="WinMeters Settings" Height="580" Width="540" WindowStartupLocation="CenterOwner"
         ResizeMode="NoResize" FocusManager.FocusedElement="{Binding ElementName=SliderOpacity}">
     <Window.Resources>
-        <Style x:Key="SectionHeaderStyle" TargetType="TextBlock">
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="13"/>
-            <Setter Property="Margin" Value="0,6,0,4"/>
-            <!--
-                Defensive Foreground setter: the WPF default TextBlock
-                style doesn't pin Foreground (so the section headers
-                currently inherit white from the Window via the WPF
-                property-inheritance chain), but a future WPF theme
-                change could break that. ThemeTextBrush pins the value
-                to the theme so a recolour propagates here. See the
-                CheckBoxStyle comment above for the full precedence
-                explanation.
-            -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        </Style>
-        <Style x:Key="SliderLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <!-- Defensive Foreground; see the SectionHeaderStyle comment. -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        </Style>
-        <Style x:Key="SliderStyle" TargetType="Slider">
-            <Setter Property="Width" Value="100"/>
-            <Setter Property="Margin" Value="4,0"/>
-            <!--
-                Round-3 dark-chrome pass: WPF's default Slider template uses
-                TemplateBinding Background for the track Border and
-                TemplateBinding Foreground for the tick TickBar. Both pins
-                default to system colours (ControlBrush/Window white for
-                Background, ControlTextBrushKey for ticks), so the slider
-                track paints white against the dark dialog chrome and the
-                tick marks render black on light themes. Setting both to
-                the Theme*Brush DynamicResources ties them to the merged
-                Themes/WinMetersTheme.xaml palette so a recolour propagates
-                here.
-            -->
-            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        </Style>
-        <Style x:Key="RateTextBoxStyle" TargetType="TextBox">
-            <Setter Property="Width" Value="55"/>
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="HorizontalContentAlignment" Value="Right"/>
-            <Setter Property="HorizontalAlignment" Value="Left"/>
-            <Setter Property="Margin" Value="0,2"/>
-            <!--
-                WPF's default TextBox style pins Foreground to
-                SystemColors.ControlTextBrushKey (same WPF-default-style
-                override that hits the CheckBox labels and the ComboBox
-                text; see the CheckBoxStyle comment above for the full
-                precedence-chain explanation). Setting Foreground here
-                to ThemeTextBrush forces the typed rate values to render
-                white on the dark chrome. The same WPF default style
-                ALSO pins Background to SystemColors.ControlBrush
-                (white), which would paint the typed-rate field as a
-                bright stripe against the dark dialog chrome. Setting
-                Background to ThemeBgBrush here makes the input blend
-                with the dialog so it reads as a sculpted-on rather than
-                a foreign-white control.
-            -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
-        </Style>
-        <Style x:Key="RateLabelStyle" TargetType="TextBlock">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Width" Value="65"/>
-            <Setter Property="HorizontalAlignment" Value="Left"/>
-            <Setter Property="Margin" Value="0,0,4,2"/>
-            <!-- Defensive Foreground; see the SectionHeaderStyle comment. -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        </Style>
-        <Style x:Key="ErrorTextStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="Red"/>
-            <Setter Property="FontSize" Value="9"/>
-            <Setter Property="Visibility" Value="Collapsed"/>
-            <Setter Property="Margin" Value="0,-2,0,0"/>
-        </Style>
+        <!--
+            Per-window shims (SectionHeaderStyle / SliderLabelStyle /
+            SliderStyle / RateTextBoxStyle / RateLabelStyle /
+            ErrorTextStyle) were promoted into Themes/WinMetersTheme.xaml
+            as theme-level WinMeters* styles (WinMetersSectionHeader /
+            WinMetersSliderLabel / WinMetersSlider / WinMetersRateTextBox
+            / WinMetersRateLabel / WinMetersErrorText). The Window.Resources
+            block now only contains the two local-specific shims
+            (TimeCheckBoxStyle for the 24-Hour Time checkbox's
+            FontSize=10 override, RateGroupStyle for the rate input
+            StackPanel width) that aren't useful to other windows.
+        -->
+
         <!--
             ChkTime24H's only deviation from every other CheckBox in this
             window is a slightly larger FontSize (10 vs the
@@ -114,14 +49,14 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Margin="4">
                 <!-- General -->
-                <TextBlock Text="General" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="General" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel Margin="0,2">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Opacity:" Style="{StaticResource SliderLabelStyle}" Width="45"/>                                                <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0" TickFrequency="0.1" IsSnapToTickEnabled="True" Style="{StaticResource SliderStyle}" TabIndex="0"/>
+                        <TextBlock Text="Opacity:" Style="{StaticResource WinMetersSliderLabel}" Width="45"/>                                                <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0" TickFrequency="0.1" IsSnapToTickEnabled="True" Style="{StaticResource WinMetersSlider}" TabIndex="0"/>
                         <TextBlock x:Name="TxtOpacity" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="100%"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0">
-                        <TextBlock Text="Scale:" Style="{StaticResource SliderLabelStyle}" Width="35"/>                                                <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0" Style="{StaticResource SliderStyle}" TabIndex="1"/>
+                        <TextBlock Text="Scale:" Style="{StaticResource WinMetersSliderLabel}" Width="35"/>                                                <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0" Style="{StaticResource WinMetersSlider}" TabIndex="1"/>
                         <TextBlock x:Name="TxtScale" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="1.0×"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
@@ -136,56 +71,56 @@
                 </WrapPanel>
 
                 <!-- Refresh Rates -->
-                <TextBlock Text="Refresh Rates (ms)" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Refresh Rates (ms)" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel Margin="0,2">
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="CPU:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateCpu" Style="{StaticResource RateTextBoxStyle}" TabIndex="2"/>
-                        <TextBlock x:Name="ErrRateCpu" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="CPU:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateCpu" Style="{StaticResource WinMetersRateTextBox}" TabIndex="2"/>
+                        <TextBlock x:Name="ErrRateCpu" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="RAM:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateRam" Style="{StaticResource RateTextBoxStyle}" TabIndex="3"/>
-                        <TextBlock x:Name="ErrRateRam" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="RAM:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateRam" Style="{StaticResource WinMetersRateTextBox}" TabIndex="3"/>
+                        <TextBlock x:Name="ErrRateRam" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="Disk:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateDisk" Style="{StaticResource RateTextBoxStyle}" TabIndex="4"/>
-                        <TextBlock x:Name="ErrRateDisk" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="Disk:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateDisk" Style="{StaticResource WinMetersRateTextBox}" TabIndex="4"/>
+                        <TextBlock x:Name="ErrRateDisk" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="Net:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateNet" Style="{StaticResource RateTextBoxStyle}" TabIndex="5"/>
-                        <TextBlock x:Name="ErrRateNet" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="Net:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateNet" Style="{StaticResource WinMetersRateTextBox}" TabIndex="5"/>
+                        <TextBlock x:Name="ErrRateNet" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="CPU Temp:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateCpuTemp" Style="{StaticResource RateTextBoxStyle}" TabIndex="15"/>
-                        <TextBlock x:Name="ErrRateCpuTemp" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="CPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateCpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="15"/>
+                        <TextBlock x:Name="ErrRateCpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="GPU Temp:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateGpuTemp" Style="{StaticResource RateTextBoxStyle}" TabIndex="16"/>
-                        <TextBlock x:Name="ErrRateGpuTemp" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="GPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateGpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="16"/>
+                        <TextBlock x:Name="ErrRateGpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="VRAM:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateGpuDedicated" Style="{StaticResource RateTextBoxStyle}" TabIndex="19"/>
-                        <TextBlock x:Name="ErrRateGpuDedicated" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="VRAM:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateGpuDedicated" Style="{StaticResource WinMetersRateTextBox}" TabIndex="19"/>
+                        <TextBlock x:Name="ErrRateGpuDedicated" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource RateGroupStyle}">
-                        <TextBlock Text="SRAM:" Style="{StaticResource RateLabelStyle}"/>
-                        <TextBox x:Name="TxtRateGpuShared" Style="{StaticResource RateTextBoxStyle}" TabIndex="20"/>
-                        <TextBlock x:Name="ErrRateGpuShared" Style="{StaticResource ErrorTextStyle}"/>
+                        <TextBlock Text="SRAM:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBox x:Name="TxtRateGpuShared" Style="{StaticResource WinMetersRateTextBox}" TabIndex="20"/>
+                        <TextBlock x:Name="ErrRateGpuShared" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                 </WrapPanel>
 
                 <!-- Colors -->
-                <TextBlock Text="Colors" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Colors" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel x:Name="ColorsPanel" Orientation="Horizontal" ItemHeight="28" ItemWidth="200"/>
 
                 <!-- Visibility -->
-                <TextBlock Text="Visibility" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Visibility" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel Margin="0,2">
                     <!-- Access behavior toggles (Lock Position / Hide in Fullscreen /
                          Snap to Taskbar / Keep on Top). These don't gate any meter's
@@ -225,7 +160,7 @@
                 </WrapPanel>
 
                 <!-- Disk -->
-                <TextBlock Text="Disk" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Disk" Style="{StaticResource WinMetersSectionHeader}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
                     <!-- Explicit Foreground because the TextBlock has no
                          Style reference (the other section header + rate
@@ -251,7 +186,7 @@
                 </StackPanel>
 
                 <!-- Network -->
-                <TextBlock Text="Network" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Network" Style="{StaticResource WinMetersSectionHeader}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
                     <!-- Explicit Foreground; see the Drive R/W: TextBlock
                          comment above for the rationale. -->
@@ -260,7 +195,7 @@
                 </StackPanel>
 
                 <!-- Meter Display Order -->
-                <TextBlock Text="Meter Display Order" Style="{StaticResource SectionHeaderStyle}"/>
+                <TextBlock Text="Meter Display Order" Style="{StaticResource WinMetersSectionHeader}"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
