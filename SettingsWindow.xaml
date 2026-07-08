@@ -111,155 +111,29 @@
             <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
         </Style>
         <!--
-            Custom CheckBox ControlTemplate so the checkmark + dash glyphs
-            inherit the local Foreground (ThemeTextBrush / white) instead of
-            WPF's Aero2 template's hardcoded SystemColors.ControlTextBrushKey
-            pin on the CheckMark Path. The Aero2 default tints the CheckMark
-            Path with Fill="{x:Static SystemColors.ControlTextBrushKey}"; the
-            level-4 Foreground setter on CheckBoxStyle only colours the
-            ContentPresenter label via property inheritance, so the
-            CheckMark glyph needs an explicit ControlTemplate to surface
-            the white. Stroke (not Fill) is correct for the open-line Data
-            ("M 0,5 L 2,7 L 7,0" / "M 0,0 L 7,0") because those are line
-            paths, not closed polygons Fill would paint.
-
-            OuterBorder Background = TemplateBinding Background so the
-            round-2 ThemeBgBrush setter on CheckBoxStyle flows through.
-            BorderBrush is set on CheckBoxStyle as ThemeCardBorderBrush
-            (the translucent 1px white in Themes/WinMetersTheme.xaml)
-            instead of the WPF default ControlDarkBrushKey system colour
-            (a darker system gray that would muddy against ThemeBgBrush).
-            StrokeThickness=2 + RenderOptions.EdgeMode="Aliased" keeps the
-            2px checkmark crisp. IsMouseOver Trigger paints OuterBorder
-            BorderBrush with ThemeAccentBrush (the project's signature
-            teal) instead of WPF's default HighlightBrushKey blue,
-            mirroring the meter-order ListBox SelectedItem trigger. The
-            IsEnabled false Trigger paints Foreground with WPF's
-            GrayTextBrushKey system colour for the dimmed affordance.
-
-            RecognizesAccessKey="True" on the ContentPresenter covers
-            underscore-prefixed labels (_CPU, _RAM, _Disk) so Alt+letter
-            highlights the matching CheckBox without an explicit
-            AccessText wrapper. The template is mounted via
-            Setter Property=Template on CheckBoxStyle and
-            TimeCheckBoxStyle inherits the new Template via its BasedOn
-            on CheckBoxStyle.
+            Local shim: redirects to WinMetersCheckBox in
+            Themes/WinMetersTheme.xaml so the 15 element references
+            in this window (Style="{StaticResource CheckBoxStyle}")
+            keep working without churn. The canonical style lives
+            in the theme; new windows / future CheckBoxes should
+            reference "{StaticResource WinMetersCheckBox}" directly.
         -->
-        <ControlTemplate x:Key="CheckBoxControlTemplate" TargetType="{x:Type CheckBox}">
-            <BulletDecorator Background="Transparent">
-                <BulletDecorator.Bullet>
-                    <Grid Width="13" Height="13">
-                        <Border x:Name="OuterBorder"
-                                BorderThickness="1"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"/>
-                        <Path x:Name="CheckMark"
-                              Stroke="{TemplateBinding Foreground}"
-                              StrokeThickness="2"
-                              Data="M 0,5 L 2,7 L 7,0"
-                              Stretch="None"
-                              Visibility="Collapsed"
-                              RenderOptions.EdgeMode="Aliased"/>
-                        <Path x:Name="InderminateMark"
-                              Stroke="{TemplateBinding Foreground}"
-                              StrokeThickness="2"
-                              Data="M 0,0 L 7,0"
-                              Stretch="None"
-                              Visibility="Collapsed"
-                              RenderOptions.EdgeMode="Aliased"/>
-                    </Grid>
-                </BulletDecorator.Bullet>
-                <ContentPresenter Margin="{TemplateBinding Padding}"
-                                  VerticalAlignment="Center"
-                                  HorizontalAlignment="Left"
-                                  RecognizesAccessKey="True"/>
-            </BulletDecorator>
-            <ControlTemplate.Triggers>
-                <Trigger Property="IsChecked" Value="True">
-                    <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
-                </Trigger>
-                <Trigger Property="IsChecked" Value="{x:Null}">
-                    <Setter TargetName="InderminateMark" Property="Visibility" Value="Visible"/>
-                </Trigger>
-                <Trigger Property="IsMouseOver" Value="True">
-                    <Setter TargetName="OuterBorder" Property="BorderBrush"
-                            Value="{DynamicResource ThemeAccentBrush}"/>
-                </Trigger>
-                <Trigger Property="IsEnabled" Value="False">
-                    <Setter Property="Foreground"
-                            Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
-                </Trigger>
-            </ControlTemplate.Triggers>
-        </ControlTemplate>
-        <Style x:Key="CheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
-            <Setter Property="FontSize" Value="9"/>
-            <Setter Property="Margin" Value="4"/>
-            <!--
-                Window.Foreground is set to ThemeTextBrush (white) in the
-                ctor, but WPF's default CheckBox style (Aero2) overrides
-                that with its own Foreground setter pinned to
-                SystemColors.ControlTextBrushKey — a system colour that
-                evaluates to black on systems where WPF hasn't picked up
-                the dark OS theme. That theme-style setter sits at
-                precedence level 6, which beats the inherited
-                Window.Foreground at level 7, so the inheritance gets
-                silently overridden and the label paints black. Setting
-                Foreground here on the local style is a Style setter at
-                level 4, which beats the default style at level 6 and
-                forces the CheckBox's Foreground to ThemeTextBrush. The
-                ContentPresenter inside the CheckBox's template then
-                inherits the white Foreground via property inheritance
-                (the default ContentPresenter style doesn't set
-                Foreground, so it falls through to the inherited value).
-                ThemeTextBrush (rather than the literal "White") keeps
-                the value tied to the theme so a future recolour of
-                ThemeTextBrush propagates here.
-            -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-            <!-- Defensive Background setter: WPF's default CheckBox template
-                 leaves the bullet interior transparent, but the surrounding
-                 hit-test rectangle of the glyph renders in the system theme
-                 background on some Windows themes (the user reports it as a
-                 bright stripe against the dark dialog chrome). Setting
-                 Background to ThemeBgBrush here keeps that area consistent
-                 with the dark chrome and matches the ThemeBgBrush that
-                 Window.Background + RootGrid.Background already source, so
-                 a future recolour propagates here. -->
-            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
-            <!--
-                BorderBrush matched to the bar's card surface (the
-                translucent 1px white ThemeCardBorderBrush from
-                Themes/WinMetersTheme.xaml) so the box outline reads
-                as a sub-theme stripe instead of the WPF default
-                ControlDarkBrushKey system colour (a darker gray that
-                would muddy against ThemeBgBrush). Pairs with the
-                IsMouseOver Trigger in CheckBoxControlTemplate that
-                flips to ThemeAccentBrush on hover.
-            -->
-            <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
-            <!--
-                Mount the custom CheckBoxControlTemplate so the
-                checkmark Path surfaces the white Foreground instead
-                of inheriting Aero2's hardcoded
-                SystemColors.ControlTextBrushKey pin.
-            -->
-            <Setter Property="Template" Value="{StaticResource CheckBoxControlTemplate}"/>
-        </Style>
+        <Style x:Key="CheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}"/>
+
         <!--
             ChkTime24H's only deviation from the other 15 CheckBoxes is a
-            slightly larger FontSize (10 vs the CheckBoxStyle default of 9),
-            so derive the style rather than restating the opt-out on every
-            property. BasedOn means new setters added to CheckBoxStyle in
-            future dark-chrome passes (or any other styling pass) cascade
-            through to ChkTime24H automatically, removing the per-element
-            Foreground + Background attribute bookkeeping that the pre-
-            refactor commit trail needed. The child's FontSize=10 setter
-            wins over the parent's FontSize=9 setter (WPF's child-setter-
-            beats-parent-setter rule applies identically to the
-            per-property WithinStyle precedence used by the existing
-            comment chain); Margin=4 + Foreground=ThemeTextBrush +
-            Background=ThemeBgBrush cascade through unchanged. Setter
-            triggers and resource references cascade the same way.
+            slightly larger FontSize (10 vs the WinMetersCheckBox default
+            of 9), so derive the style rather than restating the opt-out
+            on every property. The chain WinMetersCheckBox -> local
+            CheckBoxStyle shim -> TimeCheckBoxStyle inherits all properties
+            symmetrically: Margin=4 + Foreground=ThemeTextBrush +
+            Background=ThemeBgBrush + BorderBrush=ThemeCardBorderBrush +
+            Template=WinMetersCheckBoxTemplate. Setter triggers and
+            resource references cascade the same way. Future dark-chrome
+            (or other styling) setters added to WinMetersCheckBox propagate
+            through to ChkTime24H automatically. The child's FontSize=10
+            setter wins over the parent's FontSize=9 setter per WPF's
+            child-setter-beats-parent-setter rule.
         -->
         <Style x:Key="TimeCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource CheckBoxStyle}">
             <Setter Property="FontSize" Value="10"/>

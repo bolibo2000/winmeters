@@ -293,6 +293,100 @@
     </Style>
 
     <!--
+        WinMeters standard CheckBox: white checkmark + dash glyph against dark
+        chrome, teal outline on hover, dimmed Foreground when IsEnabled=False,
+        and keeps the WPF framework defaults (FocusVisualStyle, default
+        Padding, ContentAlignment) flowing through via BasedOn instead of
+        restating them per style.
+
+        The WPF framework default CheckBox template (Aero2) hardcodes
+        Fill="{x:Static SystemColors.ControlTextBrushKey}" on the CheckMark
+        Path, so any Foreground setter on the CheckBox only colours the
+        ContentPresenter label via property inheritance; the glyph itself
+        stays tinted by the system colour. This template replaces the default
+        so Stroke on the CheckMark + InderminateMark Path uses
+        TemplateBinding Foreground (the Data is open-line geometry, so
+        Stroke is the semantically correct Brush; aliased edge mode keeps
+        the 2px thickness crisp).
+
+        OuterBorder Background = TemplateBinding Background so the
+        Background setter on WinMetersCheckBox below flows through.
+        BorderBrush on WinMetersCheckBox = ThemeCardBorderBrush
+        (translucent 1px white) replaces WPF default ControlDarkBrushKey
+        system grey that would mud against ThemeBgBrush chrome. Hover state
+        paints OuterBorder BorderBrush with ThemeAccentBrush (the project signature
+        teal) instead of WPF default HighlightBrushKey blue, mirroring the
+        SelectedItem trigger on the meter-order ListBox. The IsEnabled false
+        Trigger re-tints Foreground with WPF default GrayTextBrushKey system
+        colour for the dimmed affordance.
+
+        RecognizesAccessKey="True" on the ContentPresenter parses
+        underscore-prefixed labels (_CPU, _RAM, _Disk) for Alt+letter access
+        without an explicit AccessText wrapper. Promoted out of
+        SettingsWindow.xaml so any future CheckBox in the app opts into the
+        same chrome with Style="{StaticResource WinMetersCheckBox}".
+    -->
+    <ControlTemplate x:Key="WinMetersCheckBoxTemplate" TargetType="{x:Type CheckBox}">
+        <BulletDecorator Background="Transparent">
+            <BulletDecorator.Bullet>
+                <Grid Width="13" Height="13">
+                    <Border x:Name="OuterBorder"
+                            BorderThickness="1"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"/>
+                    <Path x:Name="CheckMark"
+                          Stroke="{TemplateBinding Foreground}"
+                          StrokeThickness="2"
+                          Data="M 0,5 L 2,7 L 7,0"
+                          Stretch="None"
+                          Visibility="Collapsed"
+                          RenderOptions.EdgeMode="Aliased"/>
+                    <Path x:Name="InderminateMark"
+                          Stroke="{TemplateBinding Foreground}"
+                          StrokeThickness="2"
+                          Data="M 0,0 L 7,0"
+                          Stretch="None"
+                          Visibility="Collapsed"
+                          RenderOptions.EdgeMode="Aliased"/>
+                </Grid>
+            </BulletDecorator.Bullet>
+            <ContentPresenter Margin="{TemplateBinding Padding}"
+                              VerticalAlignment="Center"
+                              HorizontalAlignment="Left"
+                              RecognizesAccessKey="True"/>
+        </BulletDecorator>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsChecked" Value="True">
+                <Setter TargetName="CheckMark" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsChecked" Value="{x:Null}">
+                <Setter TargetName="InderminateMark" Property="Visibility" Value="Visible"/>
+            </Trigger>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter TargetName="OuterBorder" Property="BorderBrush"
+                        Value="{DynamicResource ThemeAccentBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Foreground"
+                        Value="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+    <!--
+        Setters: Foreground + Background + BorderBrush propagate the themed
+        dark chrome; Template wires WinMetersCheckBoxTemplate so the
+        checkmark + dash Path strokes inherit ThemeTextBrush white.
+    -->
+    <Style x:Key="WinMetersCheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
+        <Setter Property="FontSize" Value="9"/>
+        <Setter Property="Margin" Value="4"/>
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="Template" Value="{StaticResource WinMetersCheckBoxTemplate}"/>
+    </Style>
+
+    <!--
         WinMeters primary action button. Flat surface, white foreground, subtle
         accent border on hover. Used for the Save & Close button in the
         settings footer.
