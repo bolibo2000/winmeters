@@ -124,18 +124,13 @@ public partial class SettingsWindow : Window
         DataContext = _working;
         SetupLiveUpdateDebounce();
 
-        // Apply the menu-themed ListBoxItem container style to the meter-
-        // order list BEFORE PopulateUi fills it so every MeterOrderItem
-        // lands on the styled template. The IsSelected trigger paints the
-        // selected entry with ThemeAccentBrush background + ThemeTextBrush
-        // foreground -- the same combination the OS-painted HMENU hover
-        // state uses in spirit (accent for the highlighted row, white
-        // text for the label), so visually the selected meter reads as
-        // the user is hovering an unselected native menu item. The
-        // brushes are pulled from the merged Themes/WinMetersTheme.xaml
-        // dictionary via ColorHelper.ThemeBrush("ThemeAccentBrush") and
-        // ColorHelper.ThemeBrush("ThemeTextBrush").
-        ListMeterOrder.ItemContainerStyle = CreateMenuListBoxItemStyle();
+        // The ListBoxItem container style is set inline in SettingsWindow.xaml
+        // via ItemContainerStyle="{StaticResource WinMetersListBoxItem}" so no
+        // code-behind helper is required; the theme style paints the
+        // resting Foreground (ThemeTextBrush so labels render white) and
+        // the IsMouseOver + IsSelected highlight (ThemeAccentBrush
+        // background + ThemeTextBrush foreground) the same way the
+        // previous CreateMenuListBoxItemStyle helper did.
 
         PopulateUi();
 
@@ -912,77 +907,6 @@ public partial class SettingsWindow : Window
     /// </summary>
     private static string FormatScaleValue(double v) =>
         v.ToString("F2", CultureInfo.InvariantCulture) + "\u00d7";
-
-    /// <summary>
-    /// Builds a <see cref="ListBoxItem"/> style whose IsSelected trigger
-    /// paints ThemeAccentBrush background + ThemeTextBrush foreground
-    /// — the same combination the App-level dialog chrome uses
-    /// (SettingsWindow + AboutWindow source their Background /
-    /// Foreground from the merged Themes/WinMetersTheme.xaml
-    /// dictionary, so the selected ListBox entry reads like a hovered
-    /// / keyboard-focused native menu item against that chrome). Assign
-    /// this to <see cref="ListBox.ItemContainerStyle"/> on a ListBox so
-    /// the selected item visually mirrors a focused menu entry. Falls
-    /// through to the WPF default style if the theme brush lookup fails
-    /// (very unlikely — ThemeAccentBrush + ThemeTextBrush are defined
-    /// in WinMetersTheme.xaml); that mirrors the same fallback policy
-    /// as <see cref="ColorHelper.ThemeBrush(string)"/>. Brush variables
-    /// are declared inside the helper because we capture them in setter
-    /// values — declaring them outside would let a half-computed pair
-    /// (one brush populated, the other null) leak into the trigger
-    /// graph.
-    /// </summary>
-    private static Style CreateMenuListBoxItemStyle()
-    {
-        var style = new Style(typeof(ListBoxItem));
-        var hl = ColorHelper.ThemeBrush("ThemeAccentBrush");
-        var hlt = ColorHelper.ThemeBrush("ThemeTextBrush");
-
-        // Dialog-list items highlight on hover AND on selection, not
-        // just selection like the WPF default. Two Trigger instances
-        // share the same setters so a hovered (but not yet selected)
-        // entry paints ThemeAccentBrush background + ThemeTextBrush
-        // foreground exactly like a selected entry would — a focused-
-        // item affordance that matches the App-level dialog chrome.
-        // When both conditions are true at once (mouse-over a selected
-        // entry), WPF applies the setters twice — idempotent, no
-        // flicker. WPF MultiTrigger only supports AND; iterating two
-        // separate Trigger instances is the OR pattern. Falls through
-        // to the WPF default style if the theme brush lookup fails
-        // (very unlikely — ThemeAccentBrush + ThemeTextBrush are
-        // defined in WinMetersTheme.xaml); that mirrors the same
-        // fallback policy as the Window.Background / RootGrid.Background
-        // setters above.
-        if (hl is not null && hlt is not null)
-        {
-            // Default Foreground: WPF's default ListBoxItem style pins Foreground
-            // to SystemColors.ControlTextBrushKey (black on most Windows installs),
-            // which would paint the meter-order labels black against the
-            // ListBox's dark ThemeBgBrush background. Setting Foreground here to
-            // ThemeTextBrush (white) makes the labels readable in their resting
-            // (unselected / unhovered) state. The IsMouseOver + IsSelected
-            // triggers below override Foreground to the same ThemeTextBrush
-            // (idempotent) and add the ThemeAccentBrush Background for the
-            // highlight affordance; default Background is intentionally left
-            // unset so the ListBox's ThemeBgBrush shows through (avoids a
-            // bright stripe in the resting state).
-            style.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
-
-            foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
-            {
-                var trigger = new Trigger
-                {
-                    Property = triggerProperty,
-                    Value = true,
-                };
-                trigger.Setters.Add(new Setter(ListBoxItem.BackgroundProperty, hl));
-                trigger.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
-                style.Triggers.Add(trigger);
-            }
-        }
-
-        return style;
-    }
 
     /// <summary>
     /// Opt the SettingsWindow's HWND into the modern dark-chrome title bar

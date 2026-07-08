@@ -782,6 +782,60 @@
         <Setter Property="Template" Value="{StaticResource WinMetersSliderTemplate}"/>
     </Style>
 
+    <!--
+        WinMetersListBoxItem: themed ListBoxItem paint for dialog lists
+        (e.g. the meter-order reorder list in SettingsWindow). Paints
+        the WPF default ListBoxItem template (kept intact via BasedOn)
+        with theme brushes via Foreground / Background property setters
+        plus IsMouseOver + IsSelected + IsEnabled Triggers.
+
+        The default Foreground setter binds ThemeTextBrush (white) so
+        labels render white instead of WPF's default
+        SystemColors.ControlTextBrushKey (black on most Windows installs)
+        that would otherwise paint black against the dark ThemeBgBrush
+        ListBox chrome. The default Background setter is Transparent
+        so the ListBox's own ThemeBgBrush shows through in the resting
+        state (avoids a bright stripe).
+
+        Two Triggers (IsMouseOver + IsSelected) share the same setters
+        so a hovered (not yet selected) entry paints ThemeAccentBrush
+        background + ThemeTextBrush foreground exactly like a selected
+        entry. WPF's MultiTrigger only supports AND; iterating two
+        separate Trigger instances is the OR pattern, matching the
+        previous SettingsWindow.CreateMenuListBoxItemStyle C# helper.
+        When both conditions are true at once (mouse over a selected
+        entry) WPF applies the setters twice (idempotent, no flicker).
+        The IsEnabled trigger covers the rare disabled row case via
+        Opacity 0.5 (consistent with the WinMetersComboBoxItem /
+        WinMetersSlider / WinMetersCheckBox IsEnabled handling).
+
+        BasedOn={StaticResource {x:Type ListBoxItem}} preserves the
+        framework's ContentPresenter + selection wiring so the WPF
+        default item template carries through unchanged; the style
+        does not redefine the ControlTemplate (unlike
+        WinMetersComboBoxItem, which does). Future ListBox controls
+        in the app opt into this paint with:
+            <ListBox ... ItemContainerStyle="{StaticResource WinMetersListBoxItem}"/>
+        No code-behind helper required.
+    -->
+    <Style x:Key="WinMetersListBoxItem" TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Style.Triggers>
+            <Trigger Property="IsMouseOver" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+            </Trigger>
+            <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+            </Trigger>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+
     <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
          inline color picker swatch inside each Appearance card row. -->
     <Style x:Key="WinMetersColorSwatch" TargetType="Border">

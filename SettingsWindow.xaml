@@ -272,17 +272,25 @@
                          SystemColors.Window (white), which would paint
                          the meter-order list as a bright stripe against
                          the dark dialog chrome. ThemeBgBrush makes it
-                         blend in. The resting Foreground (ThemeTextBrush
-                         so labels render white instead of WPF's default
-                         SystemColors.ControlTextBrushKey black) and the
-                         selected/hovered ItemContainer Background +
-                         Foreground (ThemeAccentBrush / ThemeTextBrush)
-                         all come from
-                         ListMeterOrder.ItemContainerStyle (see
-                         CreateMenuListBoxItemStyle) — that override is
-                         preserved here.
+                         blend in. The ItemContainerStyle points at the
+                         theme-level WinMetersListBoxItem (defined in
+                         Themes/WinMetersTheme.xaml next to the
+                         WinMetersComboBoxItem precedent) so a future
+                         window's ListBox can opt into the same themed
+                         item paint with a single StaticResource ref
+                         and no per-window code-behind helper.
+                         WinMetersListBoxItem's resting Foreground is
+                         ThemeTextBrush (so labels render white instead
+                         of WPF's default SystemColors.ControlTextBrushKey
+                         black) and the IsMouseOver + IsSelected triggers
+                         paint Background=ThemeAccentBrush +
+                         Foreground=ThemeTextBrush (the same
+                         highlighted-row affordance the previous
+                         CreateMenuListBoxItemStyle helper provided).
                     -->
-                    <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name" Background="{DynamicResource ThemeBgBrush}"/>
+                    <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name"
+                             Background="{DynamicResource ThemeBgBrush}"
+                             ItemContainerStyle="{StaticResource WinMetersListBoxItem}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <!-- Explicit Foreground on the 2 meter-order arrow
                              buttons; same WPF-default-style override as the
