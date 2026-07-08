@@ -55,16 +55,17 @@ public partial class AboutWindow : Window
         // ThemeTextBrush via ColorHelper.ThemeBrush) -- the Maximal
         // recode retired the COLOR_MENU / COLOR_MENUTEXT live-sampling
         // path in favour of a single source of truth in the theme.
-        // Assigning null on lookup failure clears the local DP value
-        // and falls through to the WPF Window theme default (better
-        // fallback than Brushes.Transparent, which would make the
-        // dialog see-through). RootGrid.Background explicit to defend
-        // against WPF Window template masking the dialog's visible
-        // client area.
+        // The ?? Brushes.White fallback on this.Foreground is null-safe:
+        // a resource-lookup miss for ThemeTextBrush would clear the
+        // local Foreground DP and fall through to WPF's default
+        // SystemColors.WindowText (black on Windows), so the fallback
+        // guarantees white text regardless. RootGrid.Background
+        // explicit to defend against WPF Window template masking the
+        // dialog's visible client area.
         var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
         this.Background = menuBackground;
         RootGrid.Background = menuBackground;
-        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
+        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
 
         // Fill the dynamic fields. TxtVersion via the multi-tier TryGetVersion
         // helper (Assembly.Version ->_FILEVERSION_info -> "unknown").

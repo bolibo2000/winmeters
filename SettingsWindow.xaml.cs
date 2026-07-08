@@ -102,7 +102,8 @@ public partial class SettingsWindow : Window
         // and falls through to the WPF Window theme default (a better
         // fallback than Brushes.Transparent, which would make the dialog
         // genuinely see-through and surface whatever is behind it).
-        this.Background = ColorHelper.ThemeBrush("ThemeBgBrush");
+        //this.Background = ColorHelper.ThemeBrush("ThemeBgBrush");
+        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
         // ALSO paint the RootGrid with the same brush so the dialog's
         // visible client area is definitely dark. WPF's Window template
         // can mask Window.Background on its own when the visible client
@@ -124,8 +125,12 @@ public partial class SettingsWindow : Window
         // from the merged Themes/WinMetersTheme.xaml dictionary. Explicit
         // per-element brushes (ErrorTextStyle's Red, the color-picker
         // rectangles' black borders etc.) are unaffected because they're
-        // applied directly on the elements they belong to.
-        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush");
+        // applied directly on the elements they belong to. The
+        // ?? Brushes.White fallback is null-safe: a resource-lookup miss
+        // for ThemeTextBrush would clear the local Foreground DP and
+        // fall through to WPF's default SystemColors.WindowText (black
+        // on Windows), so the fallback guarantees white text regardless.
+        this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
 
