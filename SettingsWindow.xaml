@@ -121,6 +121,16 @@
                 ThemeTextBrush propagates here.
             -->
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+            <!-- Defensive Background setter: WPF's default CheckBox template
+                 leaves the bullet interior transparent, but the surrounding
+                 hit-test rectangle of the glyph renders in the system theme
+                 background on some Windows themes (the user reports it as a
+                 bright stripe against the dark dialog chrome). Setting
+                 Background to ThemeBgBrush here keeps that area consistent
+                 with the dark chrome and matches the ThemeBgBrush that
+                 Window.Background + RootGrid.Background already source, so
+                 a future recolour propagates here. -->
+            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
         </Style>
         <Style x:Key="RateGroupStyle" TargetType="StackPanel">
             <Setter Property="Width" Value="130"/>
@@ -298,8 +308,8 @@
                              3 footer buttons above. The Unicode arrows
                              (U+2191 / U+2193) would otherwise render black
                              on the dark chrome. -->
-                        <Button x:Name="BtnMoveUp" Content="↑" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnMoveUp_Click"/>
-                        <Button x:Name="BtnMoveDown" Content="↓" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnMoveDown_Click"/>
+                        <Button x:Name="BtnMoveUp" Content="↑" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" Click="BtnMoveUp_Click"/>
+                        <Button x:Name="BtnMoveDown" Content="↓" Margin="2" Width="40" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" Click="BtnMoveDown_Click"/>
                     </StackPanel>
                 </Grid>
             </StackPanel>
@@ -313,9 +323,9 @@
                  labels; see the CheckBoxStyle comment above for the
                  full precedence-chain explanation). The button label
                  text would otherwise paint black on the dark chrome. -->
-            <Button x:Name="BtnReset" Content="_Reset to defaults" Width="100" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnReset_Click" TabIndex="27"/>
-            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnOk_Click" IsDefault="True" TabIndex="13">_OK</Button>
-            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Click="BtnCancel_Click" IsCancel="True" TabIndex="14">_Cancel</Button>
+            <Button x:Name="BtnReset" Content="_Reset to defaults" Width="100" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" Click="BtnReset_Click" TabIndex="27"/>
+            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" Click="BtnOk_Click" IsDefault="True" TabIndex="13">_OK</Button>
+            <Button Width="90" Margin="6" Foreground="{DynamicResource ThemeTextBrush}" Background="{DynamicResource ThemeBgBrush}" Click="BtnCancel_Click" IsCancel="True" TabIndex="14">_Cancel</Button>
         </StackPanel>
     </Grid>
 </Window>
