@@ -45,14 +45,24 @@
             <Setter Property="Margin" Value="4"/>
             <!--
                 Window.Foreground is set to ThemeTextBrush (white) in the
-                ctor, but WPF's default ContentPresenter style overrides
-                that with SystemColors.ControlTextBrushKey (which evaluates
-                to black on systems where WPF hasn't picked up the dark
-                theme). Setting Foreground explicitly on the CheckBox
-                beats ContentPresenter's default-style setter, so the
-                label text paints white. ThemeTextBrush (rather than the
-                literal "White") keeps the value tied to the theme so a
-                future recolour of ThemeTextBrush propagates here.
+                ctor, but WPF's default CheckBox style (Aero2) overrides
+                that with its own Foreground setter pinned to
+                SystemColors.ControlTextBrushKey — a system colour that
+                evaluates to black on systems where WPF hasn't picked up
+                the dark OS theme. That theme-style setter sits at
+                precedence level 6, which beats the inherited
+                Window.Foreground at level 7, so the inheritance gets
+                silently overridden and the label paints black. Setting
+                Foreground here on the local style is a Style setter at
+                level 4, which beats the default style at level 6 and
+                forces the CheckBox's Foreground to ThemeTextBrush. The
+                ContentPresenter inside the CheckBox's template then
+                inherits the white Foreground via property inheritance
+                (the default ContentPresenter style doesn't set
+                Foreground, so it falls through to the inherited value).
+                ThemeTextBrush (rather than the literal "White") keeps
+                the value tied to the theme so a future recolour of
+                ThemeTextBrush propagates here.
             -->
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
