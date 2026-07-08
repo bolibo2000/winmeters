@@ -99,10 +99,10 @@ public partial class SettingsWindow : Window
         // Themes/WinMetersTheme.xaml dictionary. The Foreground lookup
         // has a ?? Brushes.White fallback so a ThemeBrush miss can never
         // clear the local Foreground DP and fall through to WPF's default
-        // SystemColors.WindowText (black on Windows). Cached locally so
-        // each DP set holds a single brush instance and Window / RootGrid
-        // paint the SAME brush (halves the brush-allocation count vs
-        // calling ThemeBrush("ThemeBgBrush") twice). The dialog no
+        // SystemColors.WindowText (black on Windows). Cached locally so Window / RootGrid paint the SAME brush
+        // instance (one allocation shared by both DPs; the pre-collapse
+        // ctor cached this brush too, so this is a shared-instance win,
+        // not an allocation-count reduction). The dialog no
         // longer samples the live OS menu chrome (that trade-off was the
         // explicit "Maximal recode" choice); it lands on a consistent
         // dark chrome regardless of OS theme state. The bar's RMB popup
