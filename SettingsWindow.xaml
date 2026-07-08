@@ -43,9 +43,16 @@
                 text; see the CheckBoxStyle comment above for the full
                 precedence-chain explanation). Setting Foreground here
                 to ThemeTextBrush forces the typed rate values to render
-                white on the dark chrome.
+                white on the dark chrome. The same WPF default style
+                ALSO pins Background to SystemColors.ControlBrush
+                (white), which would paint the typed-rate field as a
+                bright stripe against the dark dialog chrome. Setting
+                Background to ThemeBgBrush here makes the input blend
+                with the dialog so it reads as a sculpted-on rather than
+                a foreign-white control.
             -->
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
         </Style>
         <Style x:Key="RateLabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10"/>
@@ -74,8 +81,20 @@
                 Foreground, so a missing setter means the disk-drive
                 name + the network-interface name would paint black on
                 the dark chrome. ThemeTextBrush forces them to white.
+                The same default style ALSO pins Background to
+                SystemColors.Window (white), which the ComboBox
+                template propagates to both the closed-display Border
+                and the PART_Popup's Border (via TemplateBinding).
+                Both land as white stripes against the dark dialog
+                chrome; ThemeBgBrush makes them blend in. Note: the
+                popup's ListBoxItem backgrounds still come from the
+                ItemContainerStyle assigned by PopulateMeterOrder
+                (CreateMenuListBoxItemStyle), which paints
+                ThemeAccentBrush on hover/select — that override is
+                preserved here.
             -->
             <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
         </Style>
         <Style x:Key="CheckBoxStyle" TargetType="CheckBox">
             <Setter Property="FontSize" Value="9"/>
@@ -259,7 +278,20 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name"/>
+                    <!-- Explicit Background because the ListBox has no Style
+                         reference (no local ListBoxStyle exists). WPF's
+                         default ListBox style pins Background to
+                         SystemColors.Window (white), which would paint
+                         the meter-order list as a bright stripe against
+                         the dark dialog chrome. ThemeBgBrush makes it
+                         blend in. The selected/hovered ItemContainer
+                         Backgrounds still come from
+                         ListMeterOrder.ItemContainerStyle (see
+                         CreateMenuListBoxItemStyle) which paints
+                         ThemeAccentBrush — that override is preserved
+                         here.
+                    -->
+                    <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name" Background="{DynamicResource ThemeBgBrush}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
                         <!-- Explicit Foreground on the 2 meter-order arrow
                              buttons; same WPF-default-style override as the
