@@ -955,6 +955,19 @@ public partial class SettingsWindow : Window
         // setters above.
         if (hl is not null && hlt is not null)
         {
+            // Default Foreground: WPF's default ListBoxItem style pins Foreground
+            // to SystemColors.ControlTextBrushKey (black on most Windows installs),
+            // which would paint the meter-order labels black against the
+            // ListBox's dark ThemeBgBrush background. Setting Foreground here to
+            // ThemeTextBrush (white) makes the labels readable in their resting
+            // (unselected / unhovered) state. The IsMouseOver + IsSelected
+            // triggers below override Foreground to the same ThemeTextBrush
+            // (idempotent) and add the ThemeAccentBrush Background for the
+            // highlight affordance; default Background is intentionally left
+            // unset so the ListBox's ThemeBgBrush shows through (avoids a
+            // bright stripe in the resting state).
+            style.Setters.Add(new Setter(ListBoxItem.ForegroundProperty, hlt));
+
             foreach (var triggerProperty in new[] { ListBoxItem.IsMouseOverProperty, ListBoxItem.IsSelectedProperty })
             {
                 var trigger = new Trigger

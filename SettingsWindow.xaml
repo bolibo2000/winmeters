@@ -272,12 +272,15 @@
                          SystemColors.Window (white), which would paint
                          the meter-order list as a bright stripe against
                          the dark dialog chrome. ThemeBgBrush makes it
-                         blend in. The selected/hovered ItemContainer
-                         Backgrounds still come from
+                         blend in. The resting Foreground (ThemeTextBrush
+                         so labels render white instead of WPF's default
+                         SystemColors.ControlTextBrushKey black) and the
+                         selected/hovered ItemContainer Background +
+                         Foreground (ThemeAccentBrush / ThemeTextBrush)
+                         all come from
                          ListMeterOrder.ItemContainerStyle (see
-                         CreateMenuListBoxItemStyle) which paints
-                         ThemeAccentBrush — that override is preserved
-                         here.
+                         CreateMenuListBoxItemStyle) — that override is
+                         preserved here.
                     -->
                     <ListBox x:Name="ListMeterOrder" Height="100" Margin="0,0,4,0" DisplayMemberPath="Name" Background="{DynamicResource ThemeBgBrush}"/>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center">
