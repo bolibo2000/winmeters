@@ -8,10 +8,23 @@
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="FontSize" Value="13"/>
             <Setter Property="Margin" Value="0,6,0,4"/>
+            <!--
+                Defensive Foreground setter: the WPF default TextBlock
+                style doesn't pin Foreground (so the section headers
+                currently inherit white from the Window via the WPF
+                property-inheritance chain), but a future WPF theme
+                change could break that. ThemeTextBrush pins the value
+                to the theme so a recolour propagates here. See the
+                CheckBoxStyle comment above for the full precedence
+                explanation.
+            -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="SliderLabelStyle" TargetType="TextBlock">
             <Setter Property="FontSize" Value="10"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
+            <!-- Defensive Foreground; see the SectionHeaderStyle comment. -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="SliderStyle" TargetType="Slider">
             <Setter Property="Width" Value="100"/>
@@ -39,6 +52,8 @@
             <Setter Property="Width" Value="65"/>
             <Setter Property="HorizontalAlignment" Value="Left"/>
             <Setter Property="Margin" Value="0,0,4,2"/>
+            <!-- Defensive Foreground; see the SectionHeaderStyle comment. -->
+            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         </Style>
         <Style x:Key="ErrorTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="Red"/>
