@@ -440,27 +440,198 @@
     </Style>
 
     <!--
-        ComboBox: dark surface, accent selection. Layered on the framework
-        ComboBox theme default via BasedOn so WPF's required template parts
-        (PART_Popup, PART_EditableTextBox, drop-down arrow, focus visuals)
-        remain in scope. Without BasedOn an implicit-key setter-only style
-        suppresses the WPF default ControlTemplate, and a styled ComboBox
-        throws NullReferenceException on part lookups the moment it is
-        instantiated. Adding BasedOn is the same shape of fix that resolved
-        the ContextMenu ItemContainerStyle NRE earlier in this session:
-        keep the framework default chrome, override only the cosmetic
-        setters above. On Windows 11 the dropdown popup still paints with
-        the system default chrome; we accept that and rely on the card
-        surface for the inline feel.
+        WinMetersComboBoxTemplate: replaces WPF's default Aero2 ComboBox
+        template so the dropdown chevron arrow Path's Fill + the popup
+        DropDownBorder's stroke + the ComboBoxItem hover/select all
+        source from the project theme brushes instead of SystemColors.
+
+        The WPF default ComboBox template (aero2) hardcodes three
+        SystemColors that clash against the dark ThemeBgBrush chrome:
+          1. The chevron arrow Path inside PART_ToggleButton uses
+             Fill={x:Static SystemColors.ControlTextBrushKey} — black
+             on Win11 dark, paints a foreign glyph against
+             ThemeCardBgBrush chrome.
+          2. The popup's DropDownBorder uses
+             BorderBrush={DynamicResource {x:Static SystemColors.WindowTextBrushKey}}
+             plus Background={DynamicResource {x:Static SystemColors.WindowBrushKey}}
+             — system chrome grey that mud against ThemeCardBorderBrush.
+          3. ComboBoxItem hover/select use
+             SystemColors.HighlightBrushKey — the OS selection blue,
+             not the project signature teal.
+
+        This template mirrors the WinMetersCheckBoxTemplate (723e317)
+        and WinMetersSliderTemplate (baf9df8) precedent: a simplified
+        visual tree that replaces the framework's complex states with
+        flat, theme-responsive visuals. Key bindings:
+          * ContentBorder spans both grid columns so the closed
+            display paints as one continuous surface. Background +
+            BorderBrush + BorderThickness + Padding all TemplateBind
+            so WinMetersComboBox's theme setters flow through.
+          * PART_ToggleButton's inner arrow Path Fill =
+            TemplateBinding Foreground so the chevron paints
+            ThemeTextBrush white. ArrowBorder's IsMouseOver trigger
+            paints ThemeAccentDimBrush so the chevron region gives
+            the same hover affordance as the meter-order ListBox.
+          * PART_Popup's DropDownBorder uses TemplateBinding
+            Background + BorderBrush + CornerRadius 4 to match
+            dialog cards + MaxHeight TemplateBinding
+            MaxDropDownHeight so the dropdown caps at the
+            framework's set limit + MinWidth bound to the templated
+            ComboBox's ActualWidth via RelativeSource binding so the
+            popup is at least as wide as the closed display.
+          * The dropdown rows paint via the WinMetersComboBoxItem
+            style below, installed through WinMetersComboBox's
+            ItemContainerStyle setter.
+
+        PART_ToggleButton's IsChecked is two-way bound to the
+        templated ComboBox's IsDropDownOpen so the framework's click
+        handler synchronises the popup state. ClickMode=Press makes
+        the popup open on mousedown rather than mouseup (standard
+        Windows combobox behaviour). AllowsTransparency=True lets
+        the popup Border render with its 4px CornerRadius (without
+        transparency, non-rectangular popup chrome is clipped to a
+        rectangle by the OS).
+    -->
+    <ControlTemplate x:Key="WinMetersComboBoxTemplate" TargetType="{x:Type ComboBox}">
+        <Grid x:Name="MainGrid" SnapsToDevicePixels="True">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="28"/>
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="ContentBorder"
+                    Grid.Column="0" Grid.ColumnSpan="2"
+                    Background="{TemplateBinding Background}"
+                    BorderBrush="{TemplateBinding BorderBrush}"
+                    BorderThickness="{TemplateBinding BorderThickness}"
+                    CornerRadius="4">
+                <ContentPresenter x:Name="ContentSite"
+                                  IsHitTestVisible="False"
+                                  Content="{TemplateBinding SelectionBoxItem}"
+                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                  ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}"
+                                  Margin="{TemplateBinding Padding}"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Left"/>
+            </Border>
+
+            <ToggleButton x:Name="PART_ToggleButton"
+                          Grid.Column="1"
+                          Focusable="False"
+                          IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                          ClickMode="Press">
+                <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="ArrowBorder"
+                                Background="Transparent"
+                                CornerRadius="0,4,4,0">
+                            <Path x:Name="Arrow"
+                                  Data="M 0,0 L 4,4 L 8,0 Z"
+                                  Fill="{TemplateBinding Foreground}"
+                                  HorizontalAlignment="Center"
+                                  VerticalAlignment="Center"
+                                  Margin="0,2,0,0"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ArrowBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </ToggleButton.Template>
+            </ToggleButton>
+
+            <Popup x:Name="PART_Popup"
+                   AllowsTransparency="True"
+                   IsOpen="{TemplateBinding IsDropDownOpen}"
+                   Placement="Bottom"
+                   PopupAnimation="Fade"
+                   Focusable="False">
+                <Border x:Name="DropDownBorder"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="4"
+                        Margin="0,4,0,0"
+                        MaxHeight="{TemplateBinding MaxDropDownHeight}"
+                        MinWidth="{Binding ActualWidth, RelativeSource={RelativeSource TemplatedParent}}">
+                    <ScrollViewer Margin="0,4" SnapsToDevicePixels="True">
+                        <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                    </ScrollViewer>
+                </Border>
+            </Popup>
+        </Grid>
+        <ControlTemplate.Triggers>
+            <Trigger Property="IsEnabled" Value="False">
+                <Setter Property="Opacity" Value="0.5"/>
+            </Trigger>
+        </ControlTemplate.Triggers>
+    </ControlTemplate>
+
+    <!--
+        WinMetersComboBoxItem: dropdown row paint. Default ComboBoxItem
+        uses SystemColors.HighlightBrushKey (OS selection blue) on hover
+        and select, which would render the OS selection blue against our
+        dark chrome. This style replaces the ComboBoxItem template with a
+        flat Border + ContentPresenter + IsMouseOver + IsHighlighted
+        triggers. IsHighlighted (not IsSelected) is the correct trigger:
+        it fires for both keyboard navigation AND mouse hover, so the
+        active row paints ThemeAccentBrush for either interaction mode
+        (matching the WinMetersCheckBox hover affordance + the
+        WinMetersMenuItem select affordance). Pad the row with
+        TemplateBinding Padding so the WinMetersComboBoxItem.Padding
+        setter flows through (8,4).
+    -->
+    <Style x:Key="WinMetersComboBoxItem" TargetType="{x:Type ComboBoxItem}" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type ComboBoxItem}">
+                    <Border x:Name="ItemBorder"
+                            Background="{TemplateBinding Background}"
+                            CornerRadius="2"
+                            Margin="2,0">
+                        <ContentPresenter Margin="{TemplateBinding Padding}"
+                                          VerticalAlignment="Center"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsHighlighted" Value="True">
+                            <Setter TargetName="ItemBorder" Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.5"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!--
+        WinMeters standard ComboBox: themed closed display + themed
+        chevron arrow + themed popup border + themed dropdown rows
+        via ItemContainerStyle, all flowing from one Style. The
+        underlying WinMetersComboBoxTemplate above replaces the
+        default chrome so the framework's hardcoded SystemColors
+        (chevron Fill, popup DropDownBorder stroke, ComboBoxItem
+        hover/select) all reach theme brushes via TemplateBinding.
     -->
     <Style x:Key="WinMetersComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="MinHeight" Value="28"/>
+        <Setter Property="ItemContainerStyle" Value="{StaticResource WinMetersComboBoxItem}"/>
+        <Setter Property="Template" Value="{StaticResource WinMetersComboBoxTemplate}"/>
     </Style>
 
     <!--

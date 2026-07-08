@@ -82,34 +82,7 @@
             <Setter Property="Visibility" Value="Collapsed"/>
             <Setter Property="Margin" Value="0,-2,0,0"/>
         </Style>
-        <Style x:Key="ComboBoxStyle" TargetType="ComboBox">
-            <Setter Property="FontSize" Value="10"/>
-            <Setter Property="Width" Value="120"/>
-            <!--
-                WPF's default ComboBox style pins Foreground to
-                SystemColors.ControlTextBrushKey (same WPF-default-style
-                override that hits the CheckBox labels; see the
-                CheckBoxStyle comment above for the full precedence-
-                chain explanation). The selected item text and the
-                dropdown popup items both render through this
-                Foreground, so a missing setter means the disk-drive
-                name + the network-interface name would paint black on
-                the dark chrome. ThemeTextBrush forces them to white.
-                The same default style ALSO pins Background to
-                SystemColors.Window (white), which the ComboBox
-                template propagates to both the closed-display Border
-                and the PART_Popup's Border (via TemplateBinding).
-                Both land as white stripes against the dark dialog
-                chrome; ThemeBgBrush makes them blend in. Note: the
-                popup's ListBoxItem backgrounds still come from the
-                ItemContainerStyle assigned by PopulateMeterOrder
-                (CreateMenuListBoxItemStyle), which paints
-                ThemeAccentBrush on hover/select — that override is
-                preserved here.
-            -->
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-            <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
-        </Style>        <!--
+        <!--
             ChkTime24H's only deviation from every other CheckBox in this
             window is a slightly larger FontSize (10 vs the
             WinMetersCheckBox default of 9), so derive the style rather
@@ -265,7 +238,16 @@
                          TextBlock is set explicitly to be defensive in
                          case the WPF default style ever changes). -->
                     <TextBlock Text="Drive R/W:" FontSize="10" Foreground="{DynamicResource ThemeTextBrush}" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <ComboBox x:Name="ComboDisk" Style="{StaticResource ComboBoxStyle}" TabIndex="11"/>
+                    <!-- ComboDisk + ComboNetwork target the canonical
+                         WinMetersComboBox directly. Inline FontSize="10"
+                         + Width override the theme FontSize=12 + no-
+                         Width setters so they keep the same compact
+                         look the previous ComboBoxStyle shim provided.
+                         Any future theme brush update (accent recolour,
+                         border thickness, padding) propagates to both
+                         ComboBoxes automatically through the theme
+                         Style reference. -->
+                    <ComboBox x:Name="ComboDisk" Style="{StaticResource WinMetersComboBox}" FontSize="10" Width="120" TabIndex="11"/>
                 </StackPanel>
 
                 <!-- Network -->
@@ -274,7 +256,7 @@
                     <!-- Explicit Foreground; see the Drive R/W: TextBlock
                          comment above for the rationale. -->
                     <TextBlock Text="Interface:" FontSize="10" Foreground="{DynamicResource ThemeTextBrush}" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                    <ComboBox x:Name="ComboNetwork" Width="160" Style="{StaticResource ComboBoxStyle}" TabIndex="12"/>
+                    <ComboBox x:Name="ComboNetwork" Style="{StaticResource WinMetersComboBox}" FontSize="10" Width="160" TabIndex="12"/>
                 </StackPanel>
 
                 <!-- Meter Display Order -->
