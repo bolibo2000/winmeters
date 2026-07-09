@@ -17,7 +17,7 @@ namespace WinMeters
     /// <summary>
     /// Main window displaying system meters (CPU, RAM, Disk, Network).
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, Services.IBarMenuDelegate
     {
         private readonly Monitors.MonitorManager _monitorManager;
         private Services.HotkeyService? _hotkeyService;
@@ -80,6 +80,12 @@ namespace WinMeters
         // wired before any WM message arrives; Register/Unregister is toggled
         // dynamically by ApplyWindowMode based on _settings.Window.WindowMode.
         private Services.AppBarService _appBarService = null!;
+        // Native Win32 HMENU popup menu service. Constructed in OnSourceInitialized
+        // (after the HWND is known) and hooked into the HwndSource for WM_RBUTTONUP
+        // dispatch. Calls back into MainWindow via IBarMenuDelegate to apply the
+        // user-picked IDM_* cmd. BindSettings is called from ApplySettings /
+        // ApplySettingsLive so the rebuilt popup menu picks up the latest state.
+        private Services.BarPopupMenuService? _popupService;
 
         // System tray icon. WinMeters runs as a transparent overlay on the
         // taskbar (MainWindow.xaml: ShowInTaskbar=False by design) so the user
@@ -432,10 +438,11 @@ namespace WinMeters
         // Cold-open path: opt THIS PROCESS into dark mode before any
         // future syscolor-derived brush read inside MainWindow. Mirrors
         // the same call in SettingsWindow.ctor; the bar's popup-time
-        // ApplyMenuChromeMode re-applies the right value immediately
-        // before TrackPopupMenuEx anyway, so this cold-open call
-        // doesn't fight any popup-time reset. See Services.ThemeService
-        // for the Win10 1903 per-process uxtheme quirk that drives this.
+        // BarPopupMenuService.ApplyMenuChromeMode re-applies the right
+        // value immediately before TrackPopupMenuEx anyway, so this
+        // cold-open call doesn't fight any popup-time reset. See
+        // Services.ThemeService for the Win10 1903 per-process uxtheme
+        // quirk that drives this.
         Services.ThemeService.InitializeDarkMode();
 
         var helper = new WindowInteropHelper(this);
@@ -459,14 +466,14 @@ namespace WinMeters
             // own HwndHook deliberately does NOT react to WM_DISPLAYCHANGE.
             source.AddHook(MonitorChangeHook);
 
-            // WM_RBUTTONUP hook for the native HMENU-based popup menu. Fires when
-            // the user right-clicks anywhere on the bar; replaces the WPF ContextMenu
-            // (removed from MainWindow.xaml in this commit) with a native Win32
-            // HMENU driven by CreatePopupMenu / AppendMenu / TrackPopupMenuEx, matching
-            // .Kilobit/OverlayWindow.cs WndProc. The menu is drawn by the OS, forced
-            // dark via uxtheme calls; the WPF handler simply consumes WM_RBUTTONUP
-            // and returns IntPtr.Zero.
-            source.AddHook(WmRButtonUp);
+        // WM_RBUTTONUP hook for the native HMENU-based popup menu. The actual
+        // CreatePopupMenu + AppendMenu + TrackPopupMenuEx + ApplyMenuChromeMode
+        // + DispatchMenuCommand logic lives in Services.BarPopupMenuService.
+        // MainWindow installs the hook and provides IBarMenuDelegate impls
+        // (the 9 Handle* methods in the Menu command handlers region below)
+        // so the service's cmd-id dispatch has somewhere to land.
+        _popupService = new Services.BarPopupMenuService(helper.Handle, _settings, this);
+        source.AddHook(_popupService.WmRButtonUp);
 
             // Activate the mode requested by settings.
             ApplyWindowMode();
@@ -670,305 +677,33 @@ namespace WinMeters
 
         #endregion
 
-        #region Popup Menu (WM_RBUTTONUP, native HMENU)
+        #region Popup Menu --> IBarMenuDelegate dispatchers (called by BarPopupMenuService)
 
-        // Native Win32 popup menu driven by WM_RBUTTONUP, mirroring
-        // .Kilobit/OverlayWindow.cs WndProc verbatim: 10 items + 3
-        // separators, command IDs 1001-1009 in the same order, MF_CHECKED
-        // for the four live toggles, MF_SEPARATOR for the dividers, and
-        // the menu chrome forced dark via uxtheme calls (SetPreferredAppMode
-        // / AllowDarkModeForWindow / FlushMenuThemes) right before
-        // TrackPopupMenuEx. Replaces the previous WPF <ContextMenu> in
-        // MainWindow.xaml (and its 4 WPF MenuItem Click handlers) with a
-        // single OS-drawn HMENU. The custom WinMetersMenuItemTemplate
-        // ControlTemplate + MenuDivider + ItemContainerStyle were removed
-        // from Themes/WinMetersTheme.xaml in the same commit as no
-        // consumer remained after the WPF ContextMenu was deleted.
+        // Popup-menu internals (CreatePopupMenu + AppendMenu + TrackPopupMenuEx +
+        // ApplyMenuChromeMode + DispatchMenuCommand + the WM_RBUTTONUP HwndSource
+        // hook itself) live in Services/BarPopupMenuService. What stays in
+        // MainWindow is:
+        //   - the 9 public Handle* one-liners below -- IBarMenuDelegate impls
+        //     the service's cmd-id dispatch invokes;
+        //   - the four Toggle* + RestartWinMeters helpers that Handle* forward
+        //     (private -- a public Handle* can call a same-class private fine);
+        //   - OpenSettings / MenuItem_Settings_Click / OpenAboutWindow /
+        //     MenuItem_Exit_Click -- still invoked from the popup menu's
+        //     1001 / 1003 / 1004 cmd IDs.
+        //
+        // Wire-up note: the Handle* methods MUST be public (CS0737 forbids
+        // implementing interface members with anything less). Toggle*
+        // helpers stay private -- same-class forwarding from public is allowed.
 
-        /// <summary>Win32 WM_RBUTTONUP message id - fires when the user releases the right mouse button.</summary>
-        private const int WM_RBUTTONUP = 0x0205;
-
-        /// <summary>
-        /// Cached <see cref="NativeMethods.MONITORINFO.cbSize"/> value. The struct is
-        /// fixed-size (40 bytes on x64), so we evaluate Marshal.SizeOf once at type
-        /// init instead of on every WM_RBUTTONUP. The shell reads cbSize on entry to
-        /// <see cref="NativeMethods.GetMonitorInfo"/>; passing 0 makes the call fail
-        /// silently with ERROR_INVALID_PARAMETER.
-        /// </summary>
-        private static readonly uint MonitorInfoCbSize =
-            (uint)System.Runtime.InteropServices.Marshal.SizeOf<NativeMethods.MONITORINFO>();
-
-        /// <summary>
-        /// HwndSource hook for WM_RBUTTONUP. Builds the native HMENU,
-        /// forces dark chrome via uxtheme, positions it above/below the
-        /// bar based on the bar's screen quadrant, runs
-        /// <see cref="NativeMethods.TrackPopupMenuEx"/> (which blocks
-        /// until the user picks an item or dismisses), tears the menu
-        /// down, and routes the chosen command to
-        /// <see cref="DispatchMenuCommand"/>. Returns IntPtr.Zero
-        /// unconditionally - WPF's default right-click -> ContextMenu
-        /// behaviour has nothing to act on (we removed the WPF
-        /// ContextMenu from MainWindow.xaml) so letting the message
-        /// bubble costs nothing.
-        /// </summary>
-        private IntPtr WmRButtonUp(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-        {
-            if (msg != WM_RBUTTONUP) return IntPtr.Zero;
-
-            // Skip only when the bar is Collapsed (no hit-testing; can't
-            // receive WM_RBUTTONUP anyway). Visibility.Hidden still
-            // hit-tests, so the user can still right-click an invisible
-            // bar (rare, but possible if a future "peek" mode sets
-            // Hidden). The previous `!= Visible` gate was too aggressive:
-            // it would silently eat right-clicks on a Hidden bar and
-            // would also reject the transient states WPF goes through
-            // during Opacity animations.
-            if (this.Visibility == Visibility.Collapsed) return IntPtr.Zero;
-
-            // Get cursor position in virtual-screen pixels (Win32
-            // convention, same coordinate space as GetWindowRect / MONITORINFO).
-            if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return IntPtr.Zero;
-
-            // Force the menu chrome to match the user's system theme.
-            // On dark-mode systems we force dark (matches the .Kilobit
-            // reference's hardcoded SetPreferredAppMode(2) call). On
-            // light-mode systems we explicitly reset to default +
-            // disable dark for our HWND so the OS renders the popup in
-            // the user's light chrome rather than in a jarring dark
-            // box. The three calls (SetPreferredAppMode, AllowDarkModeForWindow,
-            // FlushMenuThemes) must run in that order either way -
-            // FlushMenuThemes invalidates the menu theme cache so the
-            // next CreatePopupMenu picks up the chosen mode. The whole
-            // dance is wrapped in a try/catch so an older Windows that
-            // doesn't export ShouldSystemUseDarkMode (#138 was added in
-            // 1903) falls back to kil0bit parity (always force dark).
-            ApplyMenuChromeMode(hwnd);
-
-            IntPtr hMenu = NativeMethods.CreatePopupMenu();
-            if (hMenu == IntPtr.Zero) return IntPtr.Zero;
-            try
-            {
-                BuildPopupMenu(hMenu);
-
-                // TrackPopupMenuEx requires the calling thread to be the
-                // foreground thread, otherwise the menu dismisses
-                // immediately. WPF's HwndSource hook fires on the UI
-                // thread, but right-clicking doesn't necessarily make
-                // us the foreground window - call SetForegroundWindow
-                // first so TrackPopupMenuEx retains focus until the
-                // user picks an item.
-                NativeMethods.SetForegroundWindow(hwnd);
-
-                // Mirror the kil0bit position math: cursor-X (with
-                // TPM_RIGHTALIGN so the menu's right edge meets the
-                // cursor's right side); barTop-vs-monitor-midpoint
-                // decides whether to pop the menu ABOVE (bottom half)
-                // or BELOW (top half) the bar with a 4-pixel gap.
-                int my;
-                uint alignFlag;
-                if (NativeMethods.GetWindowRect(hwnd, out NativeMethods.RECT wr) != 0)
-                {
-                    IntPtr hMon = NativeMethods.MonitorFromWindow(hwnd, NativeMethods.MONITOR_DEFAULTTONEAREST);
-                    NativeMethods.MONITORINFO mi = new NativeMethods.MONITORINFO
-                    {
-                        cbSize = MonitorInfoCbSize
-                    };
-                    NativeMethods.GetMonitorInfo(hMon, ref mi);
-
-                    if (wr.Top > (mi.rcWork.Top + mi.rcWork.Bottom) / 2)
-                    {
-                        // Bar in bottom half -> pop menu UP (menu's bottom
-                        // edge sits 4 pixels above the bar's top edge)
-                        my = wr.Top - 4;
-                        alignFlag = NativeMethods.TPM_BOTTOMALIGN;
-                    }
-                    else
-                    {
-                        // Bar in top half -> pop menu DOWN (menu's top
-                        // edge sits 4 pixels below the bar's bottom edge)
-                        my = wr.Bottom + 4;
-                        alignFlag = NativeMethods.TPM_TOPALIGN;
-                    }
-                }
-                else
-                {
-                    // Fallback: anchor to the cursor's Y if we couldn't
-                    // read the bar rect for any reason. The menu still
-                    // pops somewhere reasonable.
-                    my = cursor.Y;
-                    alignFlag = NativeMethods.TPM_TOPALIGN;
-                }
-
-                // TPM_RETURNCMD: TrackPopupMenuEx returns the selected
-                // command id directly instead of sending WM_COMMAND.
-                // TPM_NONOTIFY: don't fire WM_MENUSELECT/INITMENUPOPUP
-                // notifications. Combined with the kil0bit 0x0002
-                // (TPM_RIGHTALIGN), the menu's right edge sits at
-                // cursor.X so a right-handed user clicking on the
-                // bar's right side gets a menu that doesn't overflow
-                // off the right of the monitor.
-                int ch = NativeMethods.TrackPopupMenuEx(
-                    hMenu,
-                    NativeMethods.TPM_RETURNCMD | NativeMethods.TPM_NONOTIFY | NativeMethods.TPM_RIGHTALIGN | alignFlag,
-                    cursor.X,
-                    my,
-                    hwnd,
-                    IntPtr.Zero);
-
-                if (ch != 0)
-                {
-                    DispatchMenuCommand((uint)ch);
-                }
-            }
-            finally
-            {
-                // Always destroy the menu even if TrackPopupMenuEx
-                // threw - leaking HMENUs is one of the classic
-                // GDI/desktop-process handle leaks.
-                NativeMethods.DestroyMenu(hMenu);
-            }
-
-            handled = true;
-            return IntPtr.Zero;
-        }
-
-        /// <summary>
-        /// Populates <paramref name="hMenu"/> with the 10 menu items +
-        /// 3 separators in the same order and command-ID space as
-        /// .Kilobit/OverlayWindow.cs WM_RBUTTONUP. The four live
-        /// toggles are appended with <c>MF_CHECKED | MF_STRING</c>
-        /// (or just <c>MF_STRING</c> when off) so the user sees the
-        /// current state of each toggle directly in the menu chrome
-        /// - the kil0bit reference draws a checkmark next to enabled
-        /// toggles via the OS-rendered MF_CHECKED bit.
-        /// </summary>
-        private void BuildPopupMenu(IntPtr hMenu)
-        {
-            // 1. Utility actions
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_SETTINGS, "Settings");
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_TASKMGR, "Task Manager");
-
-            // 2. Separator
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
-
-            // 3. View toggles. MF_CHECKED (0x0008) is the OS-rendered
-            // checkmark glyph; mirrors kil0bit's
-            //   AppendMenu(hMenu, (_config.Config.AlwaysOnTop ? 0x0008U : 0), 1008, "Keep on Top")
-            // pattern exactly.
-            NativeMethods.AppendMenu(hMenu,
-                _settings.General.KeepOnTop ? NativeMethods.MF_CHECKED : 0,
-                NativeMethods.IDM_KEEPONTOP, "Keep on Top");
-            NativeMethods.AppendMenu(hMenu,
-                _settings.General.HideInFullscreen ? NativeMethods.MF_CHECKED : 0,
-                NativeMethods.IDM_HIDEFULLSCREEN, "Hide in Fullscreen");
-            NativeMethods.AppendMenu(hMenu,
-                _settings.Window.LockPosition ? NativeMethods.MF_CHECKED : 0,
-                NativeMethods.IDM_LOCK, "Lock Position");
-            NativeMethods.AppendMenu(hMenu,
-                _settings.Window.StickToTaskbar ? NativeMethods.MF_CHECKED : 0,
-                NativeMethods.IDM_SNAP, "Snap to Taskbar");
-
-            // 4. Separator
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
-
-            // 5. About (kil0bit cmd 1003 -> opens Settings + auto-navigates)
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_ABOUT, "About");
-
-            // 6. Separator
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
-
-            // 7. Restart (WinMeters extension cmd 1010, beyond the
-            //    kil0bit 1001-1009 ID space). Power-user request: lets
-            //    the user pick up settings changes without manually
-            //    closing + reopening the bar.
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_RESTART, "Restart");
-
-            // 8. Separator
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, 0, null);
-
-            // 9. Exit
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, NativeMethods.IDM_EXIT, "Exit");
-        }
-
-        /// <summary>
-        /// Dispatches the command id returned by
-        /// <see cref="NativeMethods.TrackPopupMenuEx"/> to the
-        /// equivalent action. Mirrors the kil0bit switch (cmd
-        /// 1001 = Settings, 1002 = Task Manager, 1003 = About ->
-        /// Settings, 1004 = Exit, 1006 = Lock toggle, 1007 = Snap
-        /// toggle, 1008 = Keep-on-top toggle, 1009 = Hide-in-fullscreen
-        /// toggle). Each toggle calls a self-contained Toggle* helper
-        /// so the toggle state, the side-effect, and the persist all
-        /// live in one place - no leftover WPF MenuItem.IsChecked
-        /// round-trips.
-        /// </summary>
-        private void DispatchMenuCommand(uint cmd)
-        {
-            switch (cmd)
-            {
-                case NativeMethods.IDM_SETTINGS:
-                    OpenSettings();
-                    break;
-
-                case NativeMethods.IDM_TASKMGR:
-                    LaunchTaskManager();
-                    break;
-
-                case NativeMethods.IDM_ABOUT:
-                    // Cmd 1003 (About) opens the dedicated AboutWindow --
-                    // brand wordmark + version + predecessor row, single
-                    // OK button. Single-instance gate via the parallel
-                    // OpenAboutWindow helper; see that method for the
-                    // shared OpenSettings / OpenAboutWindow pattern.
-                    OpenAboutWindow();
-                    break;
-
-                case NativeMethods.IDM_EXIT:
-                    MenuItem_Exit_Click(this, new RoutedEventArgs());
-                    break;
-
-                case NativeMethods.IDM_LOCK:
-                    ToggleLockPosition();
-                    break;
-
-                case NativeMethods.IDM_SNAP:
-                    ToggleSnapToTaskbar();
-                    break;
-
-                case NativeMethods.IDM_KEEPONTOP:
-                    ToggleKeepOnTop();
-                    break;
-
-                case NativeMethods.IDM_HIDEFULLSCREEN:
-                    ToggleHideInFullscreen();
-                    break;
-
-                case NativeMethods.IDM_RESTART:
-                    RestartWinMeters();
-                    break;
-
-                default:
-                    WinMeters.Log.D($"DispatchMenuCommand: unknown cmd {cmd}");
-                    break;
-            }
-        }
-
-        /// <summary>Launches taskmgr.exe via the shell. Matches the kil0bit cmd-1002 handler.</summary>
-        private static void LaunchTaskManager()
-        {
-            try
-            {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = "taskmgr",
-                    UseShellExecute = true,
-                });
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"LaunchTaskManager: {ex.Message}");
-            }
-        }
+        public void HandleShowSettings() => OpenSettings();
+        public void HandleOpenTaskManager() => Services.BarPopupMenuService.LaunchTaskManager();
+        public void HandleOpenAbout() => OpenAboutWindow();
+        public void HandleExit() => MenuItem_Exit_Click(this, new RoutedEventArgs());
+        public void HandleRestart() => RestartWinMeters();
+        public void HandleToggleLock() => ToggleLockPosition();
+        public void HandleToggleSnap() => ToggleSnapToTaskbar();
+        public void HandleToggleKeepOnTop() => ToggleKeepOnTop();
+        public void HandleToggleHideInFullscreen() => ToggleHideInFullscreen();
 
         /// <summary>
         /// Toggles <c>_settings.General.KeepOnTop</c> and re-applies
@@ -1136,50 +871,6 @@ namespace WinMeters
         }
 
         /// <summary>
-        /// Applies the dark/light menu-chrome mode to match the user's
-        /// system theme. On dark-mode systems we force dark chrome
-        /// (matches the .Kilobit reference's hardcoded
-        /// SetPreferredAppMode(2)). On light-mode systems we reset
-        /// the preferred mode to Default and disable dark for our HWND
-        /// so the OS renders the popup in the user's light chrome.
-        /// Wrapped in a try/catch so an older Windows that doesn't
-        /// export uxtheme #138 (ShouldSystemUseDarkMode, added in
-        /// 1903) falls back to the kil0bit behaviour of always
-        /// forcing dark.
-        /// </summary>
-        private static void ApplyMenuChromeMode(IntPtr hwnd)
-        {
-            try
-            {
-                if (NativeMethods.ShouldSystemUseDarkMode() != 0)
-                {
-                    // System is in dark mode - force dark chrome.
-                    NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
-                    NativeMethods.AllowDarkModeForWindow(hwnd, true);
-                }
-                else
-                {
-                    // System is in light mode - reset to default +
-                    // disable dark for our HWND so the OS paints the
-                    // popup in the user's light chrome.
-                    NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_DEFAULT);
-                    NativeMethods.AllowDarkModeForWindow(hwnd, false);
-                }
-                NativeMethods.FlushMenuThemes();
-            }
-            catch (System.EntryPointNotFoundException)
-            {
-                // Older Windows without uxtheme #138 - fall back to
-                // kil0bit parity (always force dark). The SetPreferredAppMode
-                // / AllowDarkModeForWindow / FlushMenuThemes trio is the
-                // same one kil0bit calls unconditionally.
-                NativeMethods.SetPreferredAppMode(NativeMethods.PREFERRED_APP_MODE_FORCE_DARK);
-                NativeMethods.AllowDarkModeForWindow(hwnd, true);
-                NativeMethods.FlushMenuThemes();
-            }
-        }
-
-        /// <summary>
         /// Opens the Settings dialog as a modeless owned window. Used by
         /// both the RMB-menu Settings entry (cmd 1001) and the tray
         /// icon's left-double-click handler.
@@ -1300,6 +991,7 @@ namespace WinMeters
             // so the AppBarService / WindowPlacementService read from the new instance.
             _appBarService?.BindSettings(_settings);
             _placementService.BindSettings(_settings);
+            _popupService?.BindSettings(_settings);
             // Re-init / shut down the LibreHardwareMonitorService to match the new
             // EnableHardwareMonitor setting -- needed when the user toggled the
             // checkbox in SettingsWindow since the previous launch.
@@ -1319,6 +1011,7 @@ namespace WinMeters
             _settings = settings;
             _appBarService?.BindSettings(_settings);
             _placementService.BindSettings(_settings);
+            _popupService?.BindSettings(_settings);
             // Also bring the LibreHardwareMonitorService up/down on the live path so
             // the sensor data updates immediately while the user is editing the
             // EnableHardwareMonitor checkbox in the open dialog. ApplySettings (the
