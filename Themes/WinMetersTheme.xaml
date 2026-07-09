@@ -992,6 +992,33 @@
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
     </Style>
 
+    <!-- Time checkbox: dialog's emphasize-this-checkbox affordance. BasedOn
+         WinMetersCheckBox so it inherits Margin=4 + Foreground=ThemeTextBrush
+         + Background=ThemeBgBrush + BorderBrush=ThemeCardBorderBrush +
+         Template=WinMetersCheckBoxTemplate + every trigger. Override only
+         the FontSize (10 vs the WinMetersCheckBox default of 9). Per WPF's
+         child-setter-beats-parent-setter rule, the child's FontSize=10 wins
+         over the parent's FontSize=9. Future dark-chrome setters added to
+         WinMetersCheckBox propagate through automatically. Named "Time"
+         because ChkTime24H is the only current user, but the style is
+         reusable for any dialog checkbox that wants the slightly larger
+         font affordance. -->
+    <Style x:Key="WinMetersTimeCheckBox" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}">
+        <Setter Property="FontSize" Value="10"/>
+    </Style>
+
+    <!-- Rate input group: StackPanel container that wraps a single rate
+         textbox + error textblock column in the dialog's Rate column grid.
+         Width=130 columns the label / slider / value-badge rows above and
+         gives the rate textbox (Width=55) room to breathe next to its
+         "Type: GHz / MB" hint label. Margin=2 adds a uniform gutter. No
+         BasedOn (StackPanel has no {x:Type StackPanel} theme style to
+         inherit from; the WPF default StackPanel is already chrome-free). -->
+    <Style x:Key="WinMetersRateGroup" TargetType="StackPanel">
+        <Setter Property="Width" Value="130"/>
+        <Setter Property="Margin" Value="2"/>
+    </Style>
+
     <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
          inline color picker swatch inside each Appearance card row. -->
     <Style x:Key="WinMetersColorSwatch" TargetType="Border">

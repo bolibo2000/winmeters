@@ -5,40 +5,17 @@
         ResizeMode="NoResize" FocusManager.FocusedElement="{Binding ElementName=SliderOpacity}">
     <Window.Resources>
         <!--
-            Per-window shims (SectionHeaderStyle / SliderLabelStyle /
-            SliderStyle / RateTextBoxStyle / RateLabelStyle /
-            ErrorTextStyle) were promoted into Themes/WinMetersTheme.xaml
-            as theme-level WinMeters* styles (WinMetersSectionHeader /
-            WinMetersSliderLabel / WinMetersSlider / WinMetersRateTextBox
-            / WinMetersRateLabel / WinMetersErrorText). The Window.Resources
-            block now only contains the two local-specific shims
-            (TimeCheckBoxStyle for the 24-Hour Time checkbox's
-            FontSize=10 override, RateGroupStyle for the rate input
-            StackPanel width) that aren't useful to other windows.
+            All per-window shims (SectionHeaderStyle / SliderLabelStyle /
+            SliderStyle / RateTextBoxStyle / RateLabelStyle / ErrorTextStyle
+            / TimeCheckBoxStyle / RateGroupStyle) have been promoted into
+            Themes/WinMetersTheme.xaml as theme-level WinMeters* styles
+            (WinMetersSectionHeader / WinMetersSliderLabel /
+            WinMetersSlider / WinMetersRateTextBox / WinMetersRateLabel /
+            WinMetersErrorText / WinMetersTimeCheckBox / WinMetersRateGroup).
+            The Window.Resources block is now empty: future windows opt in
+            via StaticResource references directly. No per-window shim
+            layer remains.
         -->
-
-        <!--
-            ChkTime24H's only deviation from every other CheckBox in this
-            window is a slightly larger FontSize (10 vs the
-            WinMetersCheckBox default of 9), so derive the style rather
-            than restating the opt-out on every property. BasedOn on
-            WinMetersCheckBox inherits all properties symmetrically:
-            Margin=4 + Foreground=ThemeTextBrush + Background=ThemeBgBrush +
-            BorderBrush=ThemeCardBorderBrush + Template=WinMetersCheckBoxTemplate.
-            Setter triggers and resource references cascade through the
-            BasedOn chain. Future dark-chrome (or other styling) setters
-            added to WinMetersCheckBox propagate through to ChkTime24H
-            automatically. The child's FontSize=10 setter wins over the
-            parent's FontSize=9 setter per WPF's child-setter-beats-
-            parent-setter rule.
-        -->
-        <Style x:Key="TimeCheckBoxStyle" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}">
-            <Setter Property="FontSize" Value="10"/>
-        </Style>
-        <Style x:Key="RateGroupStyle" TargetType="StackPanel">
-            <Setter Property="Width" Value="130"/>
-            <Setter Property="Margin" Value="2"/>
-        </Style>
     </Window.Resources>
     <Grid x:Name="RootGrid" Margin="10">
         <Grid.RowDefinitions>
@@ -60,55 +37,55 @@
                         <TextBlock x:Name="TxtScale" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="1.0×"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <!-- ChkTime24H uses TimeCheckBoxStyle (BasedOn=
-                             CheckBoxStyle with FontSize=10 override) so the
+                        <!-- ChkTime24H uses WinMetersTimeCheckBox (BasedOn=
+                             WinMetersCheckBox with FontSize=10 override) so the
                              Foreground + Background + Margin auto-applied to
                              the other 15 CheckBoxes cascade through it as
                              future dark-chrome setters are added to
-                             CheckBoxStyle. -->
-                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" Style="{StaticResource TimeCheckBoxStyle}" VerticalAlignment="Center" TabIndex="25"/>
+                             WinMetersCheckBox. -->
+                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" Style="{StaticResource WinMetersTimeCheckBox}" VerticalAlignment="Center" TabIndex="25"/>
                     </StackPanel>
                 </WrapPanel>
 
                 <!-- Refresh Rates -->
                 <TextBlock Text="Refresh Rates (ms)" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel Margin="0,2">
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="CPU:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateCpu" Style="{StaticResource WinMetersRateTextBox}" TabIndex="2"/>
                         <TextBlock x:Name="ErrRateCpu" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="RAM:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateRam" Style="{StaticResource WinMetersRateTextBox}" TabIndex="3"/>
                         <TextBlock x:Name="ErrRateRam" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="Disk:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateDisk" Style="{StaticResource WinMetersRateTextBox}" TabIndex="4"/>
                         <TextBlock x:Name="ErrRateDisk" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="Net:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateNet" Style="{StaticResource WinMetersRateTextBox}" TabIndex="5"/>
                         <TextBlock x:Name="ErrRateNet" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="CPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateCpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="15"/>
                         <TextBlock x:Name="ErrRateCpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="GPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateGpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="16"/>
                         <TextBlock x:Name="ErrRateGpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="VRAM:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateGpuDedicated" Style="{StaticResource WinMetersRateTextBox}" TabIndex="19"/>
                         <TextBlock x:Name="ErrRateGpuDedicated" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
-                    <StackPanel Style="{StaticResource RateGroupStyle}">
+                    <StackPanel Style="{StaticResource WinMetersRateGroup}">
                         <TextBlock Text="SRAM:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateGpuShared" Style="{StaticResource WinMetersRateTextBox}" TabIndex="20"/>
                         <TextBlock x:Name="ErrRateGpuShared" Style="{StaticResource WinMetersErrorText}"/>
