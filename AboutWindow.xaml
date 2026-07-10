@@ -27,13 +27,16 @@
 
         <!-- Tagline: complements the brand. -->
         <TextBlock Grid.Row="1" x:Name="TxtTagline"
-                   Text="A slim system-monitor overlay for the Windows taskbar."
-                   FontSize="11" Margin="0,2,0,12"/>
+                   FontSize="11" Margin="0,2,0,12">
+            <Run Text="A slim system-monitor overlay for the Windows taskbar." />
+            <LineBreak/>
+            <Run Text="Based on XMeters." />
+        </TextBlock>
 
         <!-- Version + Build row: side-by-side label/value pair. -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,2">
-            <TextBlock Text="Version:" FontSize="11" Width="70" />
-            <TextBlock x:Name="TxtVersion" Text="—" FontSize="11" />
+            <TextBlock Text="Version: 2.5" FontSize="11" Width="70" />
+            <!-- <TextBlock x:Name="TxtVersion" Text="—" FontSize="11" /> -->
         </StackPanel>
 
         <!-- .NET target framework row (so users can see at a glance which
@@ -45,18 +48,22 @@
             <TextBlock x:Name="TxtRuntime" Text="—" FontSize="11" />
         </StackPanel>
 
-        <!-- Credits: line back to the original .Kilobit predecessor (so
-             anyone exploring the project tree sees the lineage). Plain
-             text only. No click handler is wired, because no canonical
-             WinMeters project repo URL lives in this codebase, and a
-             click handler that opened a placeholder URL would advertise
-             a feature that can't be fulfilled. -->
-        <StackPanel Grid.Row="4" Orientation="Horizontal" Margin="0,16,0,0">
-            <TextBlock Text="Predecessor:" FontSize="11" Width="70" />
-            <TextBlock x:Name="TxtCredits"
-                       Text="Successor to .Kilobit"
-                       FontSize="11" />
-        </StackPanel>
+        <!-- Features: bullet-list summary of the bar's headline capabilities.
+             Sits in Row 4 (the slot previously reserved for an excerpt /
+             credits panel still being designed). The Ctrl+Alt+Shift+M chord
+             matches the hotkey owned by Services/HotkeyService and bound
+             to MainWindow.ToggleVisibility. -->
+        <TextBlock Grid.Row="4" x:Name="TxtFeatures" FontSize="11">
+            <Run Text="Features:" FontWeight="SemiBold"/>
+            <LineBreak/>
+            <Run Text="• Multi-GPU VRAM &amp; SRAM tracking"/>
+            <LineBreak/>
+            <Run Text="• Disk &amp; Network activity"/>
+            <LineBreak/>
+            <Run Text="• Hardware temperatures"/>
+            <LineBreak/>
+            <Run Text="• Use Ctrl+Alt+Shift+M to hide/show interface"/>
+        </TextBlock>
 
         <!-- OK button: right-aligned at bottom (matches Windows About
              dialog convention). IsDefault=True so Enter closes the

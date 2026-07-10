@@ -67,14 +67,20 @@ public partial class AboutWindow : Window
         RootGrid.Background = menuBackground;
         this.Foreground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
 
-        // Fill the dynamic fields. TxtVersion via the multi-tier TryGetVersion
-        // helper (Assembly.Version ->_FILEVERSION_info -> "unknown").
-        // TxtRuntime via the assembly's TargetFrameworkAttribute so the
+        // Fill the dynamic fields. TxtRuntime via the assembly's TargetFrameworkAttribute so the
         // displayed runtime stays in lockstep with WinMeters.csproj's
         // <TargetFramework> -- one source of truth (the csproj), not a
         // string the AboutWindow can silently drift from. The attribute
         // is always present on .NET-compiled assemblies; no fallback.
-        TxtVersion.Text = TryGetVersion();
+        // TxtVersion wiring is currently intentionally inactive: the
+        // <TextBlock x:Name="TxtVersion"> line in AboutWindow.xaml is
+        // commented out, and the displayed "Version: 2.5" label is a
+        // hardcoded literal. To make the displayed version dynamically
+        // follow Assembly.GetName().Version, uncomment BOTH the XAML
+        // field AND this assignment -- and add an explicit <Version>
+        // to WinMeters.csproj so the value is meaningful (otherwise the
+        // displayed version collapses to a default '1.0.0.0').
+        // TxtVersion.Text = TryGetVersion();
         TxtRuntime.Text = typeof(AboutWindow).Assembly
             .GetCustomAttribute<System.Runtime.Versioning.TargetFrameworkAttribute>()
             ?.FrameworkDisplayName ?? "net10.0-windows";
