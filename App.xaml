@@ -4,16 +4,7 @@
              xmlns:local="clr-namespace:WinMeters"
              StartupUri="MainWindow.xaml">
     <Application.Resources>
-        <!--
-            Hand-built WinMeters visual theme merged globally. WinMetersTheme.xaml
-            provides token brushes (ThemeBg / ThemeAccent / ThemeText / ...),
-            the WinMetersCard / WinMetersNavItem / WinMetersToggleSwitch styles, and
-            template-based button / picker styles. Earlier iterations merged
-            Wpf.Ui's Dark.xaml before this dictionary, but Wpf.Ui 3.4.2.7 ships
-            only net451 assemblies so we cannot load it on .NET 10. We keep
-            the hand-built styles and revisit if/when a Wpf.Ui release
-            publishes net8.0/net10.0 assemblies.
-        -->
+        <!-- Hand-built WinMeters visual theme merged globally. -->
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Themes/WinMetersTheme.xaml"/>

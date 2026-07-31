@@ -2,71 +2,38 @@ using LibreHardwareMonitor.Hardware;
 
 namespace WinMeters.Monitors
 {
-    /// <summary>
-    /// Provides hardware sensor data using LibreHardwareMonitor.
-    /// Requires administrator privileges for full functionality.
-    /// </summary>
     public class HardwareMonitorService : IDisposable
     {
         private readonly Computer? _computer;
         private bool _disposed;
         private bool _isInitialized;
 
-        /// <summary>CPU Package/Core temperature in °C.</summary>
+        // Per-IHardware "is this a GPU?" flag computed once on first sight of the hardware
+        // object. LibreHardwareMonitor returns stable IHardware instances across Update() calls,
+        // so caching avoids re-running the `hardware.Name.Contains("...")` OrdinalIgnoreCase
+        // scan (a hidden allocation each tick) on its 1s-tick update loop.
+        //
+        // ReferenceEqualityComparerIdentity gives us object-identity-based hashing for the
+        // IHardware interface (no Equals/GetHashCode contract on it), and we deliberately do
+        // not key on Name because Zotac vs GeForce "GPU" vs another OEM differ only in Name.
+        private readonly Dictionary<IHardware, bool> _isGpuByHardware =
+            new(ReferenceEqualityComparer.Instance);
+
         public float? CpuTemperature { get; private set; }
-
-        /// <summary>CPU Total Load percentage.</summary>
         public float? CpuLoad { get; private set; }
-
-        /// <summary>GPU temperature in °C.</summary>
         public float? GpuTemperature { get; private set; }
-
-        /// <summary>CPU fan speed in RPM.</summary>
-        public float? CpuFanSpeed { get; private set; }
-
-        /// <summary>GPU fan speed in RPM.</summary>
-        public float? GpuFanSpeed { get; private set; }
-
-        /// <summary>CPU package power consumption in Watts.</summary>
-        public float? CpuPackagePower { get; private set; }
-
-        /// <summary>GPU power consumption in Watts.</summary>
-        public float? GpuPower { get; private set; }
-
-        /// <summary>GPU load percentage.</summary>
         public float? GpuLoad { get; private set; }
-
-        /// <summary>CPU name/model.</summary>
-        public string? CpuName { get; private set; }
-
-        /// <summary>GPU name/model.</summary>
         public string? GpuName { get; private set; }
-
-        /// <summary>GPU dedicated memory usage percentage.</summary>
         public float? GpuDedicatedMemoryUsage { get; private set; }
-        /// <summary>GPU shared memory usage percentage.</summary>
         public float? GpuSharedMemoryUsage { get; private set; }
-        /// <summary>GPU dedicated memory used in MB.</summary>
         public float? GpuDedicatedMemoryUsed { get; private set; }
-        /// <summary>GPU dedicated memory total in MB.</summary>
         public float? GpuDedicatedMemoryTotal { get; private set; }
-        /// <summary>GPU shared memory used in MB.</summary>
         public float? GpuSharedMemoryUsed { get; private set; }
-        /// <summary>GPU shared memory total in MB.</summary>
         public float? GpuSharedMemoryTotal { get; private set; }
 
-        /// <summary>Whether the service is properly initialized with detected hardware.</summary>
         public bool IsAvailable => _isInitialized && _computer != null && HardwareCount > 0;
-
-        /// <summary>Number of hardware items detected.</summary>
         public int HardwareCount => _computer?.Hardware?.Count ?? 0;
 
-        /// <summary>
-        /// Initializes the hardware monitor.
-        /// </summary>
-        /// <param name="enableCpu">Enable CPU monitoring.</param>
-        /// <param name="enableGpu">Enable GPU monitoring.</param>
-        /// <param name="enableMotherboard">Enable motherboard monitoring (for fan sensors).</param>
         public HardwareMonitorService(bool enableCpu = true, bool enableGpu = true, bool enableMotherboard = true)
         {
             try
@@ -77,27 +44,21 @@ namespace WinMeters.Monitors
                     IsGpuEnabled = enableGpu,
                     IsMotherboardEnabled = enableMotherboard
                 };
-
                 _computer.Open();
                 _isInitialized = true;
 
-                // Get initial hardware names
                 foreach (var hardware in _computer.Hardware)
                 {
-                    if (hardware.HardwareType == HardwareType.Cpu && string.IsNullOrEmpty(CpuName))
-                    {
-                        CpuName = hardware.Name;
-                    }
-                    else if ((hardware.HardwareType == HardwareType.GpuNvidia ||
-                              hardware.HardwareType == HardwareType.GpuAmd ||
-                              hardware.HardwareType == HardwareType.GpuIntel) &&
-                             string.IsNullOrEmpty(GpuName))
+                    if ((hardware.HardwareType == HardwareType.GpuNvidia ||
+                         hardware.HardwareType == HardwareType.GpuAmd ||
+                         hardware.HardwareType == HardwareType.GpuIntel) &&
+                        string.IsNullOrEmpty(GpuName))
                     {
                         GpuName = hardware.Name;
                     }
                 }
 
-                WinMeters.Log.D($"HardwareMonitorService initialized. Hardware count: {_computer.Hardware.Count}, CPU: {CpuName}, GPU: {GpuName}");
+                WinMeters.Log.D($"HardwareMonitorService initialized. Hardware count: {_computer.Hardware.Count}, GPU: {GpuName}");
             }
             catch (Exception ex)
             {
@@ -106,24 +67,15 @@ namespace WinMeters.Monitors
             }
         }
 
-        /// <summary>
-        /// Updates all sensor values using the visitor pattern.
-        /// </summary>
         public void Update()
         {
             if (!_isInitialized || _computer == null) return;
 
             try
             {
-                // Reset all sensor values before each update to prevent stale data from
-                // persisting if a sensor disappears or temporarily stops reporting.
                 CpuTemperature = null;
                 CpuLoad = null;
-                CpuFanSpeed = null;
-                CpuPackagePower = null;
                 GpuTemperature = null;
-                GpuFanSpeed = null;
-                GpuPower = null;
                 GpuLoad = null;
                 GpuDedicatedMemoryUsage = null;
                 GpuSharedMemoryUsage = null;
@@ -132,22 +84,16 @@ namespace WinMeters.Monitors
                 GpuSharedMemoryUsed = null;
                 GpuSharedMemoryTotal = null;
 
-                // Use the visitor pattern to recursively update all hardware (key technique from LibreHWMonitor).
-                // The visitor already runs hardware.Update() for every node, so we don't need to re-update here —
-                // we just need to read sensors from any node that contains them.
                 _computer.Accept(new UpdateVisitor());
 
                 foreach (var hardware in _computer.Hardware)
                 {
-                    ProcessHardware(hardware);
+                    bool isGpu = ClassifyAsGpu(hardware);
 
-                    // Sub-hardware (e.g. SuperIO children of Motherboard) carries CPU and chassis fan
-                    // sensors that the top-level hardware doesn't expose. They were updated by the visitor
-                    // above; this pass only reads them.
-                    foreach (var subHardware in hardware.SubHardware)
-                    {
-                        ProcessSubHardware(subHardware, hardware.HardwareType);
-                    }
+                    if (hardware.HardwareType == HardwareType.Cpu)
+                        ProcessCpuSensors(hardware);
+                    else if (isGpu)
+                        ProcessGpuSensors(hardware);
                 }
             }
             catch (Exception ex)
@@ -156,45 +102,54 @@ namespace WinMeters.Monitors
             }
         }
 
-        private void ProcessHardware(IHardware hardware)
+        /// <summary>
+        /// Determines whether an IHardware is a GPU. Prefers <see cref="HardwareType"/> (always
+        /// trustworthy for Nvidia/AMD/Intel) and only falls back to name probing on
+        /// <see cref="HardwareType.Unknown"/> to avoid naming arbitrary hardware (e.g., a NIC
+        /// manufacturer whose name happens to contain "GPU") as a video card. Cached per-
+        /// instance so the name scan doesn't run every Update() tick.
+        /// </summary>
+        private bool ClassifyAsGpu(IHardware hardware)
         {
-            // Check if this is a GPU by HardwareType OR by name (Intel iGPU may be reported as Unknown)
-            bool isGpu = hardware.HardwareType == HardwareType.GpuNvidia ||
-                         hardware.HardwareType == HardwareType.GpuAmd ||
-                         hardware.HardwareType == HardwareType.GpuIntel ||
-                         hardware.Name.Contains("GPU", StringComparison.OrdinalIgnoreCase) ||
-                         (hardware.Name.Contains("Graphics", StringComparison.OrdinalIgnoreCase) && !hardware.Name.Contains("CPU", StringComparison.OrdinalIgnoreCase));
+            if (_isGpuByHardware.TryGetValue(hardware, out bool cached))
+                return cached;
 
-            if (hardware.HardwareType == HardwareType.Cpu || isGpu)
+            bool isGpu = hardware.HardwareType switch
             {
-                if (isGpu)
-                {
-                    ProcessGpuSensors(hardware);
-                }
-                else
-                {
-                    ProcessCpuSensors(hardware);
-                }
-            }
+                HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel => true,
+                _ => hardware.Name.AsSpan().Contains("GPU", StringComparison.OrdinalIgnoreCase)
+                     || (hardware.Name.AsSpan().Contains("Graphics", StringComparison.OrdinalIgnoreCase)
+                         && !hardware.Name.AsSpan().Contains("CPU", StringComparison.OrdinalIgnoreCase)),
+            };
+            _isGpuByHardware[hardware] = isGpu;
+            return isGpu;
         }
 
-        private void ProcessSubHardware(IHardware subHardware, HardwareType parentType)
+        protected virtual void Dispose(bool disposing)
         {
-            // SuperIO chips often have fan sensors
-            if (subHardware.HardwareType == HardwareType.SuperIO)
+            if (_disposed) return;
+            _disposed = true;
+            if (disposing)
             {
-                foreach (var sensor in subHardware.Sensors)
+                try
                 {
-                    if (sensor.SensorType == SensorType.Fan && sensor.Value.HasValue)
-                    {
-                        // Try to identify CPU fan by name
-                        if (sensor.Name.Contains("CPU", StringComparison.OrdinalIgnoreCase) && !CpuFanSpeed.HasValue)
-                        {
-                            CpuFanSpeed = sensor.Value;
-                        }
-                    }
+                    _isGpuByHardware.Clear();
+                }
+                catch (Exception ex)
+                {
+                    // Never throw out of Dispose.
+                    WinMeters.Log.D($"HardwareMonitorService cache clear: {ex.Message}");
                 }
             }
+            try
+            {
+                _computer?.Close();
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.D($"HardwareMonitorService dispose: {ex.Message}");
+            }
+            _isInitialized = false;
         }
 
         private void ProcessCpuSensors(IHardware hardware)
@@ -207,9 +162,7 @@ namespace WinMeters.Monitors
             {
                 switch (sensor.SensorType)
                 {
-                    case SensorType.Temperature:
-                        if (!sensor.Value.HasValue) break;
-
+                    case SensorType.Temperature when sensor.Value.HasValue:
                         if (!foundPackageTemp && sensor.Name.Equals("CPU Package", StringComparison.OrdinalIgnoreCase))
                         {
                             packageTemp = sensor.Value;
@@ -219,27 +172,16 @@ namespace WinMeters.Monitors
                                  (sensor.Name.Contains("Tctl", StringComparison.OrdinalIgnoreCase) ||
                                   sensor.Name.Contains("Tdie", StringComparison.OrdinalIgnoreCase)))
                         {
-                            if (!packageTemp.HasValue) packageTemp = sensor.Value;
+                            packageTemp ??= sensor.Value;
                         }
                         else if (sensor.Name.Contains("Core", StringComparison.OrdinalIgnoreCase))
                         {
-                            if (!fallbackTemp.HasValue) fallbackTemp = sensor.Value;
+                            fallbackTemp ??= sensor.Value;
                         }
                         break;
 
-                    case SensorType.Power:
-                        if (sensor.Name.Contains("Package", StringComparison.OrdinalIgnoreCase))
-                            CpuPackagePower = sensor.Value;
-                        break;
-
-                    case SensorType.Fan:
-                        if (!CpuFanSpeed.HasValue && sensor.Value.HasValue)
-                            CpuFanSpeed = sensor.Value;
-                        break;
-
-                    case SensorType.Load:
-                        if (sensor.Name.Contains("Total", StringComparison.OrdinalIgnoreCase))
-                            CpuLoad = sensor.Value;
+                    case SensorType.Load when sensor.Name.Contains("Total", StringComparison.OrdinalIgnoreCase):
+                        CpuLoad = sensor.Value;
                         break;
                 }
             }
@@ -253,172 +195,101 @@ namespace WinMeters.Monitors
             {
                 switch (sensor.SensorType)
                 {
-                    case SensorType.Temperature:
-                        if (!sensor.Value.HasValue) break;
-
-                        // Priority: "GPU Core" > "GPU Temperature" > first available GPU temp
-                        if (!GpuTemperature.HasValue)
-                        {
-                            if (sensor.Name.Contains("Core", StringComparison.OrdinalIgnoreCase))
-                            {
-                                GpuTemperature = sensor.Value;
-                            }
-                            else if (sensor.Name.Equals("GPU Temperature", StringComparison.OrdinalIgnoreCase))
-                            {
-                                GpuTemperature = sensor.Value;
-                            }
-                            else if (sensor.Name.Contains("GPU", StringComparison.OrdinalIgnoreCase))
-                            {
-                                GpuTemperature = sensor.Value;
-                            }
-                        }
+                    case SensorType.Temperature when sensor.Value.HasValue && !GpuTemperature.HasValue &&
+                        (sensor.Name.Contains("Core", StringComparison.OrdinalIgnoreCase) ||
+                         sensor.Name.Contains("GPU", StringComparison.OrdinalIgnoreCase)):
+                        GpuTemperature = sensor.Value;
                         break;
 
-                    case SensorType.Power:
-                        // Prefer "Total" sensor; fall back to first available if no "Total" exists yet
-                        if (sensor.Name.Contains("Total", StringComparison.OrdinalIgnoreCase) && sensor.Value.HasValue)
-                        {
-                            GpuPower = sensor.Value;
-                        }
-                        else if (!GpuPower.HasValue && sensor.Value.HasValue)
-                        {
-                            GpuPower = sensor.Value;
-                        }
-                        break;
-
-                    case SensorType.Fan:
-                        if (!GpuFanSpeed.HasValue)
-                        {
-                            GpuFanSpeed = sensor.Value;
-                        }
+                    case SensorType.Load:
+                        if (!GpuLoad.HasValue && IsGpuCoreLoadSensor(sensor))
+                            GpuLoad = sensor.Value;
+                        ProcessGpuMemorySensor(sensor);
                         break;
 
                     case SensorType.SmallData:
-                    case SensorType.Load:
-                        // Memory/VRAM/Video sensors report usage as either:
-                        // - Load: percentage (0-100)
-                        // - SmallData: amount in MB
-                        bool isMemoryRelated = sensor.Name.Contains("Memory", StringComparison.OrdinalIgnoreCase) ||
-                                               sensor.Name.Contains("VRAM", StringComparison.OrdinalIgnoreCase) ||
-                                               sensor.Name.Contains("Video", StringComparison.OrdinalIgnoreCase);
-
-                        if (isMemoryRelated && sensor.Value.HasValue)
-                        {
-                            string n = sensor.Name;
-
-                            // "GPU Memory" and "VRAM" are normally dedicated GPU memory. D3D shared
-                            // sensors are explicitly tagged with "Shared" / "System".
-                            bool isDedicatedName = n.Contains("Dedicated", StringComparison.OrdinalIgnoreCase) ||
-                                                   n.Contains("VRAM", StringComparison.OrdinalIgnoreCase) ||
-                                                   n.Contains("GPU Memory", StringComparison.OrdinalIgnoreCase) ||
-                                                   (n.Contains("D3D", StringComparison.OrdinalIgnoreCase) && !n.Contains("Shared", StringComparison.OrdinalIgnoreCase));
-                            bool isSharedName = n.Contains("Shared", StringComparison.OrdinalIgnoreCase) ||
-                                                (n.Contains("System", StringComparison.OrdinalIgnoreCase) && n.Contains("GPU", StringComparison.OrdinalIgnoreCase)) ||
-                                                n.Equals("Memory Usage", StringComparison.OrdinalIgnoreCase);
-                            bool isTotalName = n.Contains("Total", StringComparison.OrdinalIgnoreCase) ||
-                                               n.Contains("Available", StringComparison.OrdinalIgnoreCase);
-
-                            if (sensor.SensorType == SensorType.Load)
-                            {
-                                // Load sensors are percentages by definition.
-                                if (isDedicatedName && !isTotalName)
-                                {
-                                    GpuDedicatedMemoryUsage ??= sensor.Value;
-                                }
-                                else if (isSharedName && !isTotalName)
-                                {
-                                    GpuSharedMemoryUsage ??= sensor.Value;
-                                }
-                            }
-                            else // SmallData
-                            {
-                                // SmallData sensors report amounts in MB.
-                                if (isTotalName)
-                                {
-                                    if (isDedicatedName)
-                                        GpuDedicatedMemoryTotal ??= sensor.Value;
-                                    else if (isSharedName)
-                                        GpuSharedMemoryTotal ??= sensor.Value;
-                                }
-                                else
-                                {
-                                    if (isDedicatedName)
-                                        GpuDedicatedMemoryUsed ??= sensor.Value;
-                                    else if (isSharedName)
-                                        GpuSharedMemoryUsed ??= sensor.Value;
-                                }
-                            }
-                        }
-                        else if (sensor.Name.Contains("Core", StringComparison.OrdinalIgnoreCase))
-                        {
-                            GpuLoad = sensor.Value;
-                        }
+                        ProcessGpuMemorySensor(sensor);
                         break;
                 }
             }
 
-            // Fallback calculation for usage if load sensor is missing.
-            // Only compute when we have a denominator that matches the memory pool we're measuring.
-            if (!GpuDedicatedMemoryUsage.HasValue &&
-                GpuDedicatedMemoryUsed.HasValue &&
-                GpuDedicatedMemoryTotal.HasValue &&
-                GpuDedicatedMemoryTotal > 0)
-            {
+            if (!GpuDedicatedMemoryUsage.HasValue && GpuDedicatedMemoryUsed.HasValue && GpuDedicatedMemoryTotal.HasValue && GpuDedicatedMemoryTotal > 0)
                 GpuDedicatedMemoryUsage = (GpuDedicatedMemoryUsed / GpuDedicatedMemoryTotal) * 100.0f;
-            }
-            if (!GpuSharedMemoryUsage.HasValue &&
-                GpuSharedMemoryUsed.HasValue &&
-                GpuSharedMemoryTotal.HasValue &&
-                GpuSharedMemoryTotal > 0)
-            {
-                // Do NOT fall back to GpuDedicatedMemoryTotal here: dedicated and shared come from
-                // distinct memory pools on most GPUs and conflating them produces nonsensical ratios.
+            if (!GpuSharedMemoryUsage.HasValue && GpuSharedMemoryUsed.HasValue && GpuSharedMemoryTotal.HasValue && GpuSharedMemoryTotal > 0)
                 GpuSharedMemoryUsage = (GpuSharedMemoryUsed / GpuSharedMemoryTotal.Value) * 100.0f;
+        }
+
+        private static bool IsGpuCoreLoadSensor(ISensor sensor)
+        {
+            ReadOnlySpan<char> n = sensor.Name.AsSpan();
+            bool looksLikeCore = n.Contains("Core", StringComparison.OrdinalIgnoreCase) ||
+                                 n.Contains("Video", StringComparison.OrdinalIgnoreCase) ||
+                                 n.Contains("Engine", StringComparison.OrdinalIgnoreCase) ||
+                                 n.Contains("3D", StringComparison.OrdinalIgnoreCase);
+            bool looksLikeMemory = n.Contains("Memory", StringComparison.OrdinalIgnoreCase) ||
+                                   n.Contains("VRAM", StringComparison.OrdinalIgnoreCase);
+            return looksLikeCore && !looksLikeMemory;
+        }
+
+        private void ProcessGpuMemorySensor(ISensor sensor)
+        {
+            if (!sensor.Value.HasValue) return;
+            ReadOnlySpan<char> n = sensor.Name.AsSpan();
+
+            bool isMemory = n.Contains("Memory", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("VRAM", StringComparison.OrdinalIgnoreCase) ||
+                            n.Contains("Video", StringComparison.OrdinalIgnoreCase);
+            if (!isMemory) return;
+
+            bool isDedicated = n.Contains("Dedicated", StringComparison.OrdinalIgnoreCase) ||
+                               n.Contains("VRAM", StringComparison.OrdinalIgnoreCase) ||
+                               n.Contains("GPU Memory", StringComparison.OrdinalIgnoreCase) ||
+                               (n.Contains("D3D", StringComparison.OrdinalIgnoreCase) && !n.Contains("Shared", StringComparison.OrdinalIgnoreCase));
+            bool isShared = n.Contains("Shared", StringComparison.OrdinalIgnoreCase) ||
+                            (n.Contains("System", StringComparison.OrdinalIgnoreCase) && n.Contains("GPU", StringComparison.OrdinalIgnoreCase)) ||
+                            n.Equals("Memory Usage", StringComparison.OrdinalIgnoreCase);
+            bool isTotal = n.Contains("Total", StringComparison.OrdinalIgnoreCase) ||
+                           n.Contains("Available", StringComparison.OrdinalIgnoreCase);
+
+            if (sensor.SensorType == SensorType.Load)
+            {
+                if (isDedicated && !isTotal) GpuDedicatedMemoryUsage ??= sensor.Value;
+                else if (isShared && !isTotal) GpuSharedMemoryUsage ??= sensor.Value;
+            }
+            else
+            {
+                if (isTotal)
+                {
+                    if (isDedicated) GpuDedicatedMemoryTotal ??= sensor.Value;
+                    else if (isShared) GpuSharedMemoryTotal ??= sensor.Value;
+                }
+                else
+                {
+                    if (isDedicated) GpuDedicatedMemoryUsed ??= sensor.Value;
+                    else if (isShared) GpuSharedMemoryUsed ??= sensor.Value;
+                }
             }
         }
 
-        /// <summary>
-        /// Disposes the hardware monitor and releases resources.
-        /// </summary>
+        // Note: no finalizer is added because Computer.Close() must be called from a managed
+        // thread; finalizers can't safely free LibreHardwareMonitor internals on shutdown of
+        // the runtime. SuppressFinalize still keeps the contract correct if a derived type
+        // later does add a finalizer.
         public void Dispose()
         {
-            if (_disposed) return;
-            _disposed = true;
-
-            try
-            {
-                _computer?.Close();
-            }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"HardwareMonitorService dispose error: {ex.Message}");
-            }
-
-            // Mark uninitialized so IsAvailable reads as false after Dispose.
-            _isInitialized = false;
+            Dispose(disposing: true);
+            GC.SuppressFinalize(this);
         }
     }
 
-    /// <summary>
-    /// Visitor pattern implementation for updating hardware sensors.
-    /// This ensures all hardware and sub-hardware are properly updated.
-    /// </summary>
     internal class UpdateVisitor : IVisitor
     {
-        public void VisitComputer(IComputer computer)
-        {
-            computer.Traverse(this);
-        }
-
+        public void VisitComputer(IComputer computer) => computer.Traverse(this);
         public void VisitHardware(IHardware hardware)
         {
             hardware.Update();
-            foreach (var subHardware in hardware.SubHardware)
-            {
-                subHardware.Accept(this);
-            }
+            foreach (var sub in hardware.SubHardware) sub.Accept(this);
         }
-
         public void VisitSensor(ISensor sensor) { }
         public void VisitParameter(IParameter parameter) { }
     }

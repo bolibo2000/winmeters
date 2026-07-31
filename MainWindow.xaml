@@ -6,82 +6,21 @@
         xmlns:local="clr-namespace:WinMeters"
         mc:Ignorable="d"
         Title="WinMeters" Height="40" Width="Auto" SizeToContent="Width"
+        Icon="pack://application:,,,/winmeters.png"
         WindowStyle="None" AllowsTransparency="True" Background="Transparent" ShowInTaskbar="False"
         MouseLeftButtonDown="Window_MouseLeftButtonDown"
         SnapsToDevicePixels="True" UseLayoutRounding="True">
     <Window.Resources>
-        <!-- Shared Styles -->
-        <Style x:Key="LabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource ThemeLabelBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="Width" Value="24"/>
-            <Setter Property="Margin" Value="0,0,6,0"/>
-        </Style>
-        <Style x:Key="ValueStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-        </Style>
-        <Style x:Key="MetricValueStyle" TargetType="TextBlock" BasedOn="{StaticResource ValueStyle}">
-            <Setter Property="Foreground" Value="{DynamicResource ThemeMetricCpuBrush}"/>
-        </Style>
-        <Style x:Key="IconStyle" TargetType="Path">
-            <Setter Property="Fill" Value="{DynamicResource ThemeLabelBrush}"/>
-            <Setter Property="Height" Value="9"/>
-            <Setter Property="Width" Value="9"/>
-            <Setter Property="Stretch" Value="Uniform"/>
-        </Style>
-        <Style x:Key="PieLabelStyle" TargetType="TextBlock">
-            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-            <Setter Property="FontSize" Value="8"/>
-            <Setter Property="HorizontalAlignment" Value="Center"/>
-            <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Opacity" Value="0.7"/>
-            <Setter Property="IsHitTestVisible" Value="False"/>
-            <Setter Property="Effect">
-                <Setter.Value>
-                    <DropShadowEffect BlurRadius="1" ShadowDepth="1" Color="Black"/>
-                </Setter.Value>
-            </Setter>
-        </Style>
-        <Style x:Key="GridRowStyle" TargetType="Grid">
-            <Setter Property="Margin" Value="5,0,0,0"/>
-        </Style>
         <!--
-            Implicit <Style TargetType="ToolTip"> intentionally
-            not redeclared here — the bar's ToolTip chrome is owned by
-            the App-level theme (Themes/WinMetersTheme.xaml), which
-            references ThemeBarTooltipBgBrush / ThemeBarTooltipBorderBrush /
-            ThemeTextBrush. The StackPanel ToolTipService defaults below
-            stay because they govern ToolTip behaviour (placement +
-            timing) specific to the bar's per-meter StackPanel layout,
-            not the visual chrome.
+            Bar meter styles (Label / Value / MetricValue / Icon / PieLabel /
+            GridRow) live in Themes/WinMetersTheme.xaml so any future window
+            can reuse them. The implicit StackPanel style below stays here
+            because it governs tooltip placement behaviour specific to the
+            bar's per-meter panels.
         -->
         <Style TargetType="StackPanel">
-            <!-- Placement=Top anchors the tooltip perpendicular to the panel's
-                 top edge so it consistently sits ABOVE the bar regardless of
-                 whether the bar is docked (touching the taskbar) or floating
-                 in the middle of the screen. PlacementMode.Mouse previously
-                 relied on WPF's automatic edge-flip to put the tooltip above
-                 when the bar was at the screen bottom (cursor would overflow
-                 the bottom edge), but in floating mode the cursor-over-panel
-                 anchor fit comfortably BELOW the bar and WPF had no reason to
-                 flip — leaving the tooltip visually disconnected below the
-                 bar instead of above it. Placement=Top removes the
-                 condition-dependent flip and matches standard Windows
-                 toolbar-tooltip behaviour (tooltip appears above the toolbar
-                 regardless of toolbar position). X positioning remains
-                 panel-aligned (left edge = panel left edge); this is
-                 visually similar to cursor-X positioning when the cursor is
-                 over a single panel and matches what users expect from a
-                 control-host tooltip. -->
+            <!-- Anchor tooltips above each panel regardless of bar position. -->
             <Setter Property="ToolTipService.Placement" Value="Top"/>
-            <!-- VerticalOffset=-6 puts a 6-DIP visual gap between the tooltip's
-                 bottom edge and the bar's top edge so they don't visually merge.
-                 Standard Windows toolbar-tooltip behaviour (native toolbar
-                 tooltips sit 4-6 DIPs above their toolbar). -->
             <Setter Property="ToolTipService.VerticalOffset" Value="0"/>
             <Setter Property="ToolTipService.InitialShowDelay" Value="1000"/>
             <Setter Property="ToolTipService.BetweenShowDelay" Value="500"/>
@@ -115,114 +54,107 @@
             <Border.LayoutTransform>
                 <ScaleTransform x:Name="MainScale" ScaleX="1.0" ScaleY="1.0"/>
             </Border.LayoutTransform>
-        <StackPanel Orientation="Horizontal" Margin="5,0">
-            
-            <!-- CPU Usage -->
-            <StackPanel x:Name="PanelCpu" Orientation="Horizontal">
-                <StackPanel x:Name="CpuContainer" Orientation="Horizontal" Height="24" Margin="5,5,0,5" HorizontalAlignment="Center"/>
-            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="5,0">
 
-            <!-- Hardware Temps -->
-            <StackPanel x:Name="PanelHardware" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="90">
-                <!-- CPU Temp Row -->
-                <Grid x:Name="RowCpuTemp" Style="{StaticResource GridRowStyle}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="CpuTempLabel" Grid.Column="0" Text="Cpu:" Style="{StaticResource LabelStyle}"/>
-                    <TextBlock x:Name="CpuTempText" Grid.Column="1" Text="--°C" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right"/>
-                    <TextBlock x:Name="CpuLoadText" Grid.Column="2" Text="--%" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                </Grid>
-                <!-- GPU Temp Row -->
-                <Grid x:Name="RowGpuTemp" Style="{StaticResource GridRowStyle}">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="GpuTempLabel" Grid.Column="0" Text="Gpu:" Style="{StaticResource LabelStyle}"/>
-                    <TextBlock x:Name="GpuTempText" Grid.Column="1" Text="--°C" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right"/>
-                    <TextBlock x:Name="GpuLoadText" Grid.Column="2" Text="--%" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource MetricValueStyle}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
-                </Grid>
-            </StackPanel>
+                <!-- CPU Usage -->
+                <StackPanel x:Name="PanelCpu" Orientation="Horizontal">
+                    <StackPanel x:Name="CpuContainer" Orientation="Horizontal" Height="24" Margin="5,5,0,5" HorizontalAlignment="Center"/>
+                </StackPanel>
 
-            <!-- RAM
-                 Pie wedges are rendered with GDI+ (System.Drawing.Graphics.FillPie)
-                 into a WPF WriteableBitmap backbuffer and displayed inside an
-                 <Image>. The border (ellipse stroke) is drawn into the SAME bitmap,
-                 so no separate XAML border element is needed. See
-                 Utils/PieChartRenderer.cs and RENDERING.md for the policy. -->
-            <StackPanel x:Name="PanelRam" Orientation="Horizontal">
-                <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Image x:Name="RamPie" Width="24" Height="24" Stretch="Uniform"/>
-                    <TextBlock x:Name="RamLabel" Text="RAM" Style="{StaticResource PieLabelStyle}"/>
-                </Grid>
-            </StackPanel>
+                <!-- Hardware Temps -->
+                <StackPanel x:Name="PanelHardware" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="90">
+                    <Grid x:Name="RowCpuTemp" Style="{StaticResource WinMetersBarGridRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="CpuTempLabel" Grid.Column="0" Text="Cpu:" Style="{StaticResource WinMetersBarLabel}"/>
+                        <TextBlock x:Name="CpuTempText" Grid.Column="1" Text="--°C" Style="{StaticResource WinMetersBarMetricValue}" HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="CpuLoadText" Grid.Column="2" Text="--%" Style="{StaticResource WinMetersBarMetricValue}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    </Grid>
+                    <Grid x:Name="RowGpuTemp" Style="{StaticResource WinMetersBarGridRow}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock x:Name="GpuTempLabel" Grid.Column="0" Text="Gpu:" Style="{StaticResource WinMetersBarLabel}"/>
+                        <TextBlock x:Name="GpuTempText" Grid.Column="1" Text="--°C" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource WinMetersBarMetricValue}" HorizontalAlignment="Right"/>
+                        <TextBlock x:Name="GpuLoadText" Grid.Column="2" Text="--%" Foreground="{DynamicResource ThemeMetricGpuBrush}" Style="{StaticResource WinMetersBarMetricValue}" HorizontalAlignment="Right" Margin="0,0,4,0"/>
+                    </Grid>
+                </StackPanel>
 
-            <!-- GPU Dedicated Memory -->
-            <StackPanel x:Name="PanelGpuDedicated" Orientation="Horizontal">
-                <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Image x:Name="GpuDedicatedPie" Width="24" Height="24" Stretch="Uniform"/>
-                    <TextBlock x:Name="GpuDedicatedLabel" Text="VRAM" Style="{StaticResource PieLabelStyle}"/>
-                </Grid>
-            </StackPanel>
+                <!-- RAM -->
+                <StackPanel x:Name="PanelRam" Orientation="Horizontal">
+                    <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
+                        <Image x:Name="RamPie" Width="24" Height="24" Stretch="Uniform"/>
+                        <TextBlock x:Name="RamLabel" Text="RAM" Style="{StaticResource WinMetersBarPieLabel}"/>
+                    </Grid>
+                </StackPanel>
 
-            <!-- GPU Shared Memory -->
-            <StackPanel x:Name="PanelGpuShared" Orientation="Horizontal">
-                <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
-                    <Image x:Name="GpuSharedPie" Width="24" Height="24" Stretch="Uniform"/>
-                    <TextBlock x:Name="GpuSharedLabel" Text="SRAM" Style="{StaticResource PieLabelStyle}"/>
-                </Grid>
-            </StackPanel>
+                <!-- GPU Dedicated Memory -->
+                <StackPanel x:Name="PanelGpuDedicated" Orientation="Horizontal">
+                    <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
+                        <Image x:Name="GpuDedicatedPie" Width="24" Height="24" Stretch="Uniform"/>
+                        <TextBlock x:Name="GpuDedicatedLabel" Text="VRAM" Style="{StaticResource WinMetersBarPieLabel}"/>
+                    </Grid>
+                </StackPanel>
 
-            <!-- DISK -->
-            <StackPanel x:Name="PanelDisk" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="60">
-                <Grid Margin="10,0,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="R:" x:Name="DiskRestText" Foreground="{DynamicResource ThemeDiskReadBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
-                    <TextBlock Grid.Column="1" x:Name="DiskReadText" Text="0%" Style="{StaticResource ValueStyle}"/>
-                </Grid>
-                <Grid Margin="10,0,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" Text="W:" x:Name="DiskWriteLabel" Foreground="{DynamicResource ThemeDiskWriteBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
-                    <TextBlock Grid.Column="1" x:Name="DiskWriteText" Text="0%" Style="{StaticResource ValueStyle}"/>
-                </Grid>
-            </StackPanel>
+                <!-- GPU Shared Memory -->
+                <StackPanel x:Name="PanelGpuShared" Orientation="Horizontal">
+                    <Grid Width="24" Height="24" Margin="4,0" VerticalAlignment="Center">
+                        <Image x:Name="GpuSharedPie" Width="24" Height="24" Stretch="Uniform"/>
+                        <TextBlock x:Name="GpuSharedLabel" Text="SRAM" Style="{StaticResource WinMetersBarPieLabel}"/>
+                    </Grid>
+                </StackPanel>
 
-            <!-- NET -->
-            <StackPanel x:Name="PanelNet" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="80">
-                <Grid Margin="10,0,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Path x:Name="ArrowDown" Grid.Column="0" Data="{StaticResource ArrowDownGeometry}" Fill="{DynamicResource ThemeLabelBrush}" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,1,4,0"/>
-                    <TextBlock Grid.Column="1" x:Name="NetDownText" Text="0 KB/s" Style="{StaticResource ValueStyle}"/>
-                </Grid>
-                <Grid Margin="10,0,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Path x:Name="ArrowUp" Grid.Column="0" Data="{StaticResource ArrowUpGeometry}" Fill="{DynamicResource ThemeLabelBrush}" Height="9" Width="9" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,4,1"/>
-                    <TextBlock Grid.Column="1" x:Name="NetUpText" Text="0 KB/s" Style="{StaticResource ValueStyle}"/>
-                </Grid>
-            </StackPanel>
+                <!-- DISK -->
+                <StackPanel x:Name="PanelDisk" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="60">
+                    <Grid Margin="10,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="R:" x:Name="DiskRestText" Foreground="{DynamicResource ThemeDiskReadBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
+                        <TextBlock Grid.Column="1" x:Name="DiskReadText" Text="0%" Style="{StaticResource WinMetersBarValue}"/>
+                    </Grid>
+                    <Grid Margin="10,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="W:" x:Name="DiskWriteLabel" Foreground="{DynamicResource ThemeDiskWriteBrush}" FontSize="11" FontWeight="Bold" Margin="0,0,4,0" Width="15"/>
+                        <TextBlock Grid.Column="1" x:Name="DiskWriteText" Text="0%" Style="{StaticResource WinMetersBarValue}"/>
+                    </Grid>
+                </StackPanel>
 
-            <!-- Time -->
-            <StackPanel x:Name="PanelTime" Orientation="Horizontal" VerticalAlignment="Center" Margin="5,0">
-                <TextBlock x:Name="TimeText" Text="00:00" Style="{StaticResource ValueStyle}" FontSize="11" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
-            </StackPanel>
+                <!-- NET -->
+                <StackPanel x:Name="PanelNet" Orientation="Vertical" Margin="0,5" VerticalAlignment="Center" Width="83">
+                    <Grid Margin="10,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Path x:Name="ArrowDown" Grid.Column="0" Data="{StaticResource ArrowDownGeometry}" Style="{StaticResource WinMetersBarIcon}" VerticalAlignment="Center" Margin="0,1,4,0"/>
+                        <TextBlock Grid.Column="1" x:Name="NetDownText" Text="0 KB/s" Style="{StaticResource WinMetersBarValue}" HorizontalAlignment="Right"/>
+                    </Grid>
+                    <Grid Margin="10,0,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Path x:Name="ArrowUp" Grid.Column="0" Data="{StaticResource ArrowUpGeometry}" Style="{StaticResource WinMetersBarIcon}" VerticalAlignment="Center" Margin="0,0,4,1"/>
+                        <TextBlock Grid.Column="1" x:Name="NetUpText" Text="0 KB/s" Style="{StaticResource WinMetersBarValue}" HorizontalAlignment="Right"/>
+                    </Grid>
+                </StackPanel>
 
-        </StackPanel>
-    </Border>
-</Grid>
+                <!-- Time -->
+                <StackPanel x:Name="PanelTime" Orientation="Horizontal" VerticalAlignment="Center" Margin="5,0">
+                    <TextBlock x:Name="TimeText" Text="00:00" Style="{StaticResource WinMetersBarValue}" FontSize="11" VerticalAlignment="Center" Typography.NumeralAlignment="Tabular"/>
+                </StackPanel>
+
+            </StackPanel>
+        </Border>
+    </Grid>
 </Window>

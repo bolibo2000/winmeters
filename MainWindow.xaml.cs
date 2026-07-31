@@ -5,7 +5,6 @@ using System.Windows.Threading;
 using System.Windows.Controls;
 using System.Windows.Shapes;
 using System.Windows.Interop;
-using Microsoft.Win32;
 using WpfRectangle = System.Windows.Shapes.Rectangle;
 using WpfBrushes = System.Windows.Media.Brushes;
 using WpfBitmapSource = System.Windows.Media.Imaging.BitmapSource;
@@ -14,9 +13,6 @@ using WinMeters.Utils;
 
 namespace WinMeters
 {
-    /// <summary>
-    /// Main window displaying system meters (CPU, RAM, Disk, Network).
-    /// </summary>
     public partial class MainWindow : Window, Services.IBarMenuDelegate
     {
         private readonly Monitors.MonitorManager _monitorManager;
@@ -25,41 +21,26 @@ namespace WinMeters
         private Monitors.HardwareMonitorService? _hardwareMonitor;
         private DispatcherTimer? _timer;
         private DispatcherTimer? _zOrderTimer;
-        private AppSettings _settings = new AppSettings();
+        private AppSettings _settings = new();
 
-        // Use ticks for more efficient rate-limiting
-        private long _lastCpuTicks;
-        private long _lastRamTicks;
-        private long _lastDiskTicks;
-        private long _lastNetTicks;
-        private long _lastCpuTempTicks;
-        private long _lastGpuTempTicks;
-        private long _lastGpuDedicatedTicks;
-        private long _lastGpuSharedTicks;
+        private long _lastCpuTicks, _lastRamTicks, _lastDiskTicks, _lastNetTicks;
+        private long _lastCpuTempTicks, _lastGpuTempTicks, _lastGpuDedicatedTicks, _lastGpuSharedTicks;
 
-        // Cache formatted network/disk strings
-        private string _lastNetDownFormatted = "";
-        private string _lastNetUpFormatted = "";
-        private string _lastDiskReadFormatted = "";
-        private string _lastDiskWriteFormatted = "";
+        private string _lastNetDownFormatted = "", _lastNetUpFormatted = "";
+        private string _lastDiskReadFormatted = "", _lastDiskWriteFormatted = "";
 
-        // Cache formatted time and date separately so the date tooltip only updates
-        // when the calendar day actually changes (once per day, not once per second).
         private long _lastTimeTicks;
-        private string _lastTimeFormatted = "";
-        private string _lastDateFormatted = "";
+        private string _lastTimeFormatted = "", _lastDateFormatted = "";
 
-        // Reusable StringBuilder for EnforceZOrder's GetClassName call.
-        // EnforceZOrder runs on the WPF UI thread only, so a single instance is safe.
+        // Rate-limit tooltip rebuilds: only rebuild when meter data actually changes,
+        // not on every timer tick. This avoids per-tick string allocations for tooltips
+        // that rarely change (CPU%, RAM%, disk/net are already rate-limited by their
+        // own IsReadyToUpdate gates; this adds a content-change gate on top).
+        private string _lastTooltipCpu = "", _lastTooltipRam = "", _lastTooltipDisk = "", _lastTooltipNet = "";
+        private string _lastTooltipGpuDedicated = "", _lastTooltipGpuShared = "";
+
         private readonly System.Text.StringBuilder _sbClassName = new(256);
 
-        // Cache rendered bitmap + last percentage + last DPI bucket for pie charts.
-        // The bitmap is produced with GDI+ (System.Drawing.Graphics.FillPie / DrawEllipse)
-        // into a WPF WriteableBitmap backbuffer and displayed inside a WPF Image; see
-        // Utils/PieChartRenderer.cs and RENDERING.md for the policy. Pct + DPI bucket
-        // together form the cache key (Renderer.UpdatePieWithCache) — re-rendering only
-        // fires when either moves by more than its threshold, so a stable meter with
-        // occasional small fluctuations doesn't churn allocations.
         private WpfBitmapSource? _lastRamPieSource;
         private double _lastRamPercentage = -1;
         private int _lastRamPieDpiBucket = -1;
@@ -70,61 +51,37 @@ namespace WinMeters
         private double _lastGpuSharedPercentage = -1;
         private int _lastGpuSharedPieDpiBucket = -1;
 
-        // Foreground window tracking for Alt+Tab lowering mechanism
-        private IntPtr _lastForegroundHwnd = IntPtr.Zero;
-
-        // AppBar registration so the shell treats us as part of the taskbar surface and
-        // the work area is shrunk to exclude us. Eliminates the WS_EX_TOPMOST family of
-        // z-order bugs (taskbar clicks, tooltip / context-menu vs bar, fullscreen apps).
-        // Constructed unconditionally in OnSourceInitialized so the WndProc hook is
-        // wired before any WM message arrives; Register/Unregister is toggled
-        // dynamically by ApplyWindowMode based on _settings.Window.WindowMode.
         private Services.AppBarService _appBarService = null!;
-        // Native Win32 HMENU popup menu service. Constructed in OnSourceInitialized
-        // (after the HWND is known) and hooked into the HwndSource for WM_RBUTTONUP
-        // dispatch. Calls back into MainWindow via IBarMenuDelegate to apply the
-        // user-picked IDM_* cmd. BindSettings is called from ApplySettings /
-        // ApplySettingsLive so the rebuilt popup menu picks up the latest state.
         private Services.BarPopupMenuService? _popupService;
-
-        // System tray icon. WinMeters runs as a transparent overlay on the
-        // taskbar (MainWindow.xaml: ShowInTaskbar=False by design) so the user
-        // has no other persistent UI surface to find it in. The tray icon gives
-        // them a visible "WinMeters is running" affordance plus an always-on
-        // path to open Settings and Quit, which closes the "doesn't start /
-        // not showing in Task Manager" complaint path: even if the bar is
-        // crashed or hidden, the tray stays there. See InitializeTrayIcon()
-        // for wiring + lifetime.
         private WnForms.NotifyIcon? _trayIcon;
-
-        // Active Settings dialog. Cached so repeated clicks on the RMB-menu
-        // Settings item (or the tray Show Settings entry) re-activate the
-        // existing window instead of stacking a second copy. Modeless Show()
-        // keeps the WPF owner window interactive so DragMove() and
-        // MouseLeftButtonDown fire on the bar even while Settings is up,
-        // which is the user's explicit request: "able to reposition main
-        // window when settings window is open". Cleared by the Closed
-        // subscriber attached inside MenuItem_Settings_Click.
         private SettingsWindow? _existingSettingsWindow;
-
-        // Active About dialog. Same single-instance gate pattern as
-        // _existingSettingsWindow -- repeated RMB-menu About clicks just
-        // reactivate the existing window. Cleared by the Closed
-        // subscriber attached inside OpenAboutWindow.
         private AboutWindow? _existingAboutWindow;
 
         public MainWindow()
         {
             InitializeComponent();
-            _monitorManager = new Monitors.MonitorManager();
+
+            // PerformanceCounterCategory .ctors can throw on systems with corrupt performance-
+            // counter registrations (some Windows Server SKUs, after package uninstall). Let the
+            // exception propagate but record it before re-throwing so the global
+            // UnhandledException sink surfaces it to the rolling error log; the App's handler
+            // will still pop the standard "fatal error" dialog to the user.
+            Monitors.MonitorManager? monitorManager = null;
+            try
+            {
+                monitorManager = new Monitors.MonitorManager();
+            }
+            catch (Exception ex)
+            {
+                WinMeters.Log.E(ex, "MainWindow: MonitorManager init failed.");
+            }
+            _monitorManager = monitorManager ?? new Monitors.MonitorManager();
 
             _settings = AppSettings.Load();
-            // Construct the placement service once, after Load, so it picks up the real settings.
             _placementService = new Services.WindowPlacementService(this, _settings);
             InitializeHardwareMonitor();
             ApplySettingsInternal();
             _settings.Save();
-
             InitializeTrayIcon();
 
             this.Loaded += MainWindow_Loaded;
@@ -132,85 +89,59 @@ namespace WinMeters
             this.Deactivated += MainWindow_Deactivated;
         }
 
-        /// <summary>
-        /// Builds the <see cref="WnForms.NotifyIcon"/> that lives in the
-        /// system tray for the entire lifetime of the process. Menu is kept
-        /// minimal on purpose: Show Settings (also wired to left-double-click
-        /// to match Windows tray conventions), Show / Hide Bar (delegates to
-        /// the same ToggleVisibility the global hotkey uses), About
-        /// (parallel to the bar RMB popup's IDM_ABOUT entry — reuses the
-        /// <see cref="OpenAboutWindow"/> single-instance gate so repeated
-        /// clicks don't stack parallel About dialogs), and Quit. The Quit
-        /// handler defers to MenuItem_Exit_Click so cleanup logic stays in
-        /// exactly one place.
-        /// All click handlers marshal onto the WPF Dispatcher because
-        /// NotifyIcon's events fire on a WinForms MessageOnlyWindow thread,
-        /// not on the WPF UI thread.
-        /// </summary>
         private void InitializeTrayIcon()
         {
             try
             {
                 _trayIcon = new WnForms.NotifyIcon
                 {
-                    // System.Drawing.SystemIcons is a property of the
-                    // System.Drawing namespace, not System.Windows.Forms --
-                    // so it lives outside the WnForms alias on purpose.
-                    Icon = System.Drawing.SystemIcons.Application,
+                    Icon = LoadAppIcon(),
                     Text = "WinMeters",
                     Visible = true,
                 };
                 _trayIcon.ContextMenuStrip = BuildTrayMenu();
-
                 _trayIcon.MouseDoubleClick += (_, args) =>
                 {
                     if (args.Button == WnForms.MouseButtons.Left)
-                    {
-                        Dispatcher.Invoke(() =>
-                            MenuItem_Settings_Click(this, new RoutedEventArgs()));
-                    }
+                        Dispatcher.Invoke(() => MenuItem_Settings_Click(this, new RoutedEventArgs()));
                 };
+            }
+            catch (Exception ex) { WinMeters.Log.D($"InitializeTrayIcon failed: {ex.Message}"); }
+        }
+
+        private static System.Drawing.Icon LoadAppIcon()
+        {
+            string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "winmeters.ico");
+            try
+            {
+                if (System.IO.File.Exists(iconPath))
+                    return new System.Drawing.Icon(iconPath);
             }
             catch (Exception ex)
             {
-                // Best-effort: tray is optional. If it fails (e.g. headless
-                // service environment with no shell), WinMeters still works;
-                // the bar + global hotkey are unaffected.
-                WinMeters.Log.D($"InitializeTrayIcon failed: {ex.Message}");
+                WinMeters.Log.D($"LoadAppIcon failed for '{iconPath}': {ex.Message}");
             }
+            return System.Drawing.SystemIcons.Application;
         }
 
-        /// <summary>
-        /// Builds (or rebuilds) the tray ContextMenuStrip. Single source of
-        /// truth = <c>_settings.Window.IsHiddenByUser</c> -- the trailing
-        /// ternary above flips the toggle item's label between
-        /// "Hide Bar" (when the bar is visible -- so clicking will hide it)
-        /// and "Show Bar" (when the bar is hidden -- so clicking will show
-        /// it), and the Checked mark restamps from the same field. The
-        /// whole menu is rebuilt rather than just mutating .Text on the
-        /// existing item so the user sees the label change BEFORE the
-        /// next right-click on the tray icon.
-        ///
-        /// Item order parallels the bar's RMB popup (see BuildPopupMenu in
-        /// WmRButtonUp): top-level actions (settings + visibility toggle),
-        /// separator, then bottom-of-menu actions (About + Quit). About
-        /// sits between the separator and Quit so the user sees it the
-        /// last "data" item before the destructive Quit -- matches Explorer
-        /// / WinMeters conventions.
-        /// </summary>
+        // Tag attached to the "Show/Hide Bar" tray toggle item so ToggleVisibility can find and
+        // update it in place without rebuilding the entire ContextMenuStrip and re-subscribing
+        // every closure inside the parent menu — avoids a small allocation churn + transient
+        // disposal window race each time the user toggles the bar from the tray.
+        private const string ToggleVisibilityItemTag = "ToggleVisibility";
+
         private WnForms.ContextMenuStrip BuildTrayMenu()
         {
             bool isBarVisible = !_settings.Window.IsHiddenByUser;
             var menu = new WnForms.ContextMenuStrip();
 
             var settingsItem = new WnForms.ToolStripMenuItem("Show Settings");
-            settingsItem.Click += (_, _) => Dispatcher.Invoke(() =>
-                MenuItem_Settings_Click(this, new RoutedEventArgs()));
+            settingsItem.Click += (_, _) => Dispatcher.Invoke(() => MenuItem_Settings_Click(this, new RoutedEventArgs()));
 
-            var toggleItem = new WnForms.ToolStripMenuItem(
-                isBarVisible ? "Hide Bar" : "Show Bar")
+            var toggleItem = new WnForms.ToolStripMenuItem(isBarVisible ? "Hide Bar" : "Show Bar")
             {
                 Checked = isBarVisible,
+                Tag = ToggleVisibilityItemTag
             };
             toggleItem.Click += (_, _) => Dispatcher.Invoke(() => ToggleVisibility());
 
@@ -218,101 +149,59 @@ namespace WinMeters
             aboutItem.Click += (_, _) => Dispatcher.Invoke(() => OpenAboutWindow());
 
             var quitItem = new WnForms.ToolStripMenuItem("Quit");
-            quitItem.Click += (_, _) => Dispatcher.Invoke(() =>
-                MenuItem_Exit_Click(this, new RoutedEventArgs()));
+            quitItem.Click += (_, _) => Dispatcher.Invoke(() => MenuItem_Exit_Click(this, new RoutedEventArgs()));
 
             menu.Items.Add(settingsItem);
             menu.Items.Add(toggleItem);
             menu.Items.Add(new WnForms.ToolStripSeparator());
             menu.Items.Add(aboutItem);
             menu.Items.Add(quitItem);
-
             return menu;
         }
 
-    private void InitializeHardwareMonitor()
-    {
-        // Idempotent: called from ctor once at launch. ApplyHardwareMonitor does the same
-        // up/down from then on as the user toggles the Enable Hardware Monitor checkbox
-        // in SettingsWindow and re-saves -- the ctor call here just covers the launch-time
-        // case so a first-launch user with EnableHardwareMonitor=true gets sensors wired up
-        // BEFORE their first Timer_Tick.
-        if (_hardwareMonitor is not null) return;
-        if (!_settings.General.EnableHardwareMonitor) return;
+        private void InitializeHardwareMonitor()
+        {
+            if (_hardwareMonitor is not null) return;
+            if (!_settings.General.EnableHardwareMonitor) return;
+            try
+            {
+                _hardwareMonitor = new Monitors.HardwareMonitorService(enableCpu: true, enableGpu: true, enableMotherboard: true);
+            }
+            catch (Exception ex) { WinMeters.Log.D($"Failed to initialize hardware monitor: {ex.Message}"); }
+        }
 
-        try
+        private void ApplyHardwareMonitor()
         {
-            _hardwareMonitor = new Monitors.HardwareMonitorService(
-                enableCpu: true,
-                enableGpu: true,
-                enableMotherboard: true);
+            if (_settings.General.EnableHardwareMonitor)
+                InitializeHardwareMonitor();
+            else if (_hardwareMonitor is not null)
+            {
+                _hardwareMonitor.Dispose();
+                _hardwareMonitor = null;
+            }
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"Failed to initialize hardware monitor: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Bring the HardwareMonitorService up or down in lock-step with
-    /// <c>_settings.General.EnableHardwareMonitor</c>. Called whenever settings change
-    /// (ApplySettings / ApplySettingsLive) so flipping the Enable Hardware Monitor
-    /// checkbox in SettingsWindow takes effect immediately on dialog close rather
-    /// than requiring a manual app restart. The dispose branch nulls the field so
-    /// MainWindow_Closed's <c>_hardwareMonitor?.Dispose()</c> becomes a safe no-op.
-    /// </summary>
-    private void ApplyHardwareMonitor()
-    {
-        if (_settings.General.EnableHardwareMonitor)
-        {
-            // Reuse InitializeHardwareMonitor's create branch (idempotent via the
-            // _hardwareMonitor is not null guard) -- single source of truth for
-            // the service constructor.
-            InitializeHardwareMonitor();
-        }
-        else if (_hardwareMonitor is not null)
-        {
-            _hardwareMonitor.Dispose();
-            _hardwareMonitor = null;
-        }
-    }
-
-        #region Initialization & Loading
 
         private void MainWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // The legacy InitializeHeight() helper (which sized the window to the
-            // system taskbar's height on first launch) is gone in the WinMeters-style
-            // rewrite — the bar height is now derived dynamically from DPI + ScaleFactor
-            // inside AppBarService.ComputeBarHeightPx(). Nothing to do here.
             SetupCpuBars();
             UpdateTooltips();
 
-            // Log window state for debugging
             WinMeters.Log.D($"[WinMeters] Window loaded: Visibility={this.Visibility}, Opacity={this.Opacity}, Width={this.Width}, Height={this.ActualHeight}, Left={this.Left}, Top={this.Top}");
             WinMeters.Log.D($"[WinMeters] IsHiddenByUser={_settings.Window.IsHiddenByUser}, StickToTaskbar={_settings.Window.StickToTaskbar}");
 
-            // Visibility from user toggle. The AppBar's ABN_FULLSCREENAPP handler will
-            // also hide us while a fullscreen app is on the desktop in AppBar mode.
             if (_settings.Window.IsHiddenByUser)
             {
                 this.Visibility = Visibility.Collapsed;
                 WinMeters.Log.D("[WinMeters] Window hidden due to IsHiddenByUser=true");
             }
             else
-            {
                 this.Visibility = Visibility.Visible;
-            }
 
-            // Note: floating-mode position restore happens upstream in
-            // OnSourceInitialized → ApplyWindowMode → AppBarService.AlignToTaskbarCenter
-            // (which already chose between RestorePosition and ClampToTargetMonitor).
-            // Re-running RestorePosition here would double-set the window position.
+            // The visibility gate above may have toggled state that ApplyKeepOnTop needs to know
+            // about before the timer starts — re-evaluate now so the z-order dispatcher timer only
+            // spins up while we're actually on-screen and configured to keep-on-top.
+            ApplyKeepOnTop(_settings.General.KeepOnTop);
         }
-
-        #endregion
-
-        #region CPU Bar Setup
 
         private sealed class CpuBarSet
         {
@@ -328,8 +217,7 @@ namespace WinMeters
 
             int logicalCores = _monitorManager.LogicalCoreCount;
             int barsToShow = _settings.General.CombineLogicalCores
-                ? ((logicalCores > 1) ? logicalCores / 2 : 1)
-                : logicalCores;
+                ? ((logicalCores > 1) ? logicalCores / 2 : 1) : logicalCores;
             if (barsToShow < 1) barsToShow = 1;
 
             double borderThickness = _settings.Colors.CpuBorderThickness;
@@ -377,23 +265,13 @@ namespace WinMeters
             }
         }
 
-        #endregion
-
-        #region Window Interaction
-
         private void Window_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            if (!_settings.Window.LockPosition)
-            {
-                this.DragMove();
-            }
+            if (!_settings.Window.LockPosition) this.DragMove();
         }
 
         private void SavePosition()
         {
-            // Persist the WPF Window's current DIP coordinates so the next launch
-            // lands at the same screen-position. WPF dep-property source of truth,
-            // not the raw HWND rect.
             _placementService.SaveCurrentDips();
             _settings.Save();
         }
@@ -402,22 +280,9 @@ namespace WinMeters
         {
             try
             {
-                // Tear down the tray icon FIRST so it disappears the moment
-                // the user sees the bar close — keeps the visual contract
-                // intact (tray = running process) and removes the misleading
-                // "Quit didn't work" affordance on slow widget disposes below.
-                // Both the currently-attached ContextMenuStrip AND the
-                // NotifyIcon must be disposed: the strip holds a native
-                // menu HWND the icon does not own-transitively, and while
-                // every toggle in ToggleVisibility already disposes the
-                // obsolete strip via oldMenu?.Dispose(), the most recently
-                // rebuilt strip stays attached to the icon right up to
-                // shutdown. Without this line the strip leaks its native
-                // handle on every WinMeters exit.
                 _trayIcon?.ContextMenuStrip?.Dispose();
                 _trayIcon?.Dispose();
                 _trayIcon = null;
-
                 _hotkeyService?.Dispose();
                 _timer?.Stop();
                 _zOrderTimer?.Stop();
@@ -425,94 +290,45 @@ namespace WinMeters
                 _monitorManager?.Dispose();
                 _hardwareMonitor?.Dispose();
             }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"MainWindow_Closed: {ex}");
-            }
+            catch (Exception ex) { WinMeters.Log.D($"MainWindow_Closed: {ex}"); }
         }
 
-    protected override void OnSourceInitialized(EventArgs e)
-    {
-        base.OnSourceInitialized(e);
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
 
-        // Cold-open path: opt THIS PROCESS into dark mode before any
-        // future syscolor-derived brush read inside MainWindow. Mirrors
-        // the same call in SettingsWindow.ctor; the bar's popup-time
-        // BarPopupMenuService.ApplyMenuChromeMode re-applies the right
-        // value immediately before TrackPopupMenuEx anyway, so this
-        // cold-open call doesn't fight any popup-time reset. See
-        // Services.ThemeService for the Win10 1903 per-process uxtheme
-        // quirk that drives this.
-        Services.ThemeService.InitializeDarkMode();
+            Services.ThemeService.InitializeDarkMode();
 
-        var helper = new WindowInteropHelper(this);
+            var helper = new WindowInteropHelper(this);
             var source = HwndSource.FromHwnd(helper.Handle);
             if (source is null) return;
 
-            // System-wide hotkey is owned by HotkeyService; we just install the hook and
-            // tell the service to register itself.
-            _hotkeyService = new Services.HotkeyService(helper.Handle, ToggleVisibility);
-            source.AddHook(_hotkeyService.HwndHook);
-            _hotkeyService.Register();
+        _hotkeyService = new Services.HotkeyService(helper.Handle, ToggleVisibility, _settings.General.Hotkey);
+        source.AddHook(_hotkeyService.HwndHook);
+        // Subscribe BEFORE Register so a collision during the very first register attempt is
+        // surfaced. The handler is resubscribed across ReRegister via the closure field, but
+        // since RegisterFailed is a single multicast event, += on a freshly-constructed
+        // HotkeyService instance is idempotent in practice (current HotkeyService is owned
+        // per-call, not reused across the lifetime of MainWindow).
+        _hotkeyService.RegisterFailed += OnHotkeyRegisterFailed;
+        _hotkeyService.Register();
 
-            // Construct AppBarService unconditionally so its HwndSource hook is wired
-            // BEFORE the first WM message arrives. ApplyWindowMode below toggles
-            // Register/Unregister according to settings without touching hooks.
             _appBarService = new Services.AppBarService(this, _settings);
             source.AddHook(_appBarService.HwndHook);
-
-            // WM_DISPLAYCHANGE hook so we can re-apply positioning when the user
-            // unplugs / wakes / plugs a monitor. Single source of truth — AppBarService's
-            // own HwndHook deliberately does NOT react to WM_DISPLAYCHANGE.
             source.AddHook(MonitorChangeHook);
 
-        // WM_RBUTTONUP hook for the native HMENU-based popup menu. The actual
-        // CreatePopupMenu + AppendMenu + TrackPopupMenuEx + ApplyMenuChromeMode
-        // + DispatchMenuCommand logic lives in Services.BarPopupMenuService.
-        // MainWindow installs the hook and provides IBarMenuDelegate impls
-        // (the 9 Handle* methods in the Menu command handlers region below)
-        // so the service's cmd-id dispatch has somewhere to land.
-        _popupService = new Services.BarPopupMenuService(helper.Handle, _settings, this);
-        source.AddHook(_popupService.WmRButtonUp);
+            _popupService = new Services.BarPopupMenuService(helper.Handle, _settings, this);
+            source.AddHook(_popupService.WmRButtonUp);
 
-            // Activate the mode requested by settings.
             ApplyWindowMode();
         }
 
-        /// <summary>
-        /// Installs/refreshes the integration mode chosen in settings. Idempotent; safe
-        /// to call on app boot and again whenever the user changes WindowMode or
-        /// MonitorIndex via the settings dialog.
-        /// </summary>
         public void ApplyWindowMode()
         {
-            // WinMeters-style split: StickToTaskbar=true -> shell owns positioning and z-order;
-            // otherwise we treat the bar as a free-floating window whose X/Y come straight
-            // from settings (verbatically, with a one-time SetWindowPos on first launch to
-            // sit above normal windows before the 500ms keepalive kicks in).
             double savedXDip = _placementService.GetX();
             double savedYDip = _placementService.GetY();
-
-            if (_settings.Window.StickToTaskbar)
-            {
-                // Stuck mode: shell owns positioning once attached. Apply the user's
-                // KeepOnTop preference LAST so it overrides the unconditional
-                // Topmost=true that follows (the shell keeps us above the taskbar
-                // regardless of Z-order anyway; Topmost is a backup).
-                _appBarService.ApplyIntegrationState(savedXDip, savedYDip);
-                ApplyKeepOnTop(_settings.General.KeepOnTop);
-                WinMeters.Log.D("MainWindow: Stuck-to-taskbar mode active.");
-            }
-            else
-            {
-                // Float mode: detach (or stay detached) and put the window back at
-                // the saved X/Y. One-time HWND_TOPMOST placement is folded into
-                // ApplyKeepOnTop so it fires only when the user actually wants
-                // keep-on-top; otherwise we land at HWND_NOTOPMOST.
-                _appBarService.ApplyIntegrationState(savedXDip, savedYDip);
-                ApplyKeepOnTop(_settings.General.KeepOnTop);
-                WinMeters.Log.D("MainWindow: Float mode active.");
-            }
+            _appBarService.ApplyIntegrationState(savedXDip, savedYDip);
+            ApplyKeepOnTop(_settings.General.KeepOnTop);
         }
 
         private void StartZOrderTimer()
@@ -527,63 +343,28 @@ namespace WinMeters
 
         private void StopZOrderTimer() => _zOrderTimer?.Stop();
 
-        /// <summary>
-        /// WinMeters's <c>_config.Config.AlwaysOnTop</c> toggle semantics. When
-        /// <paramref name="keepOnTop"/> is <c>true</c>: install WPF Topmost=true
-        /// and start the EnforceZOrder timer (so we keep re-asserting
-        /// HWND_TOPMOST in floating mode). When <c>false</c>: stop the timer
-        /// (zero CPU cost — no background re-assertion wars with other apps),
-        /// demote the WPF Topmost flag, and fire a single one-time HWND_NOTOPMOST
-        /// so we fall back into standard Windows Z-order immediately rather than
-        /// staying stuck above normal windows from the last timer tick.
-        ///
-        /// In stuck-to-taskbar mode the shell owns z-order so the Topmost flag is
-        /// effectively decorative; both branches are still applied so direct
-        /// staging (e.g. shell pause during a debug session) lands predictably.
-        /// </summary>
         private void ApplyKeepOnTop(bool keepOnTop)
         {
             this.Topmost = keepOnTop;
-
-            if (keepOnTop)
+            // The z-order enforcement is only needed while visible AND keep-on-top. Pausing
+            // the 500ms dispatcher timer when hidden avoids ~7200 wasted GetForegroundWindow
+            // + GetClassName round-trips per hour when the user has chosen to hide the bar.
+            if (keepOnTop && this.Visibility == Visibility.Visible)
             {
                 StartZOrderTimer();
                 return;
             }
-
             StopZOrderTimer();
 
-            // One-shot HWND_NOTOPMOST demote so we don't keep sitting above
-            // normal windows from a previous timer tick. SWP_NOMOVE / NOSIZE /
-            // NOACTIVATE so we don't disrupt focus or layout.
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
             NativeMethods.SetWindowPos(hwnd, NativeMethods.HWND_NOTOPMOST, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
         }
 
-        /// <summary>
-        /// kil0bit's z-order enforcement. Runs every 500ms in floating mode and
-        /// re-asserts HWND_TOPMOST only when the foreground window is NOT the
-        /// shell's taskbar (re-asserting while the taskbar is in front causes
-        /// visible blinking). Also skips the assertion when we are already the
-        /// top-most window (GW_HWNDPREV == IntPtr.Zero).
-        /// </summary>
         private void EnforceZOrder(object? sender, EventArgs e)
         {
-            // Float mode always re-asserts TOPMOST so we stay above normal windows
-            // while the user is interacting with other apps. In stuck-to-taskbar
-            // mode the shell owns z-order so the timer is not started at all
-            // (see StartZOrderTimer / StopZOrderTimer).
-            //
-            // The kil0bit-style KeepOnTop toggle gates the timer: when false we
-            // have nothing to enforce, so we exit immediately and avoid waking
-            // the timer thread. ApplyKeepOnTop stops the timer entirely when the
-            // user disables KeepOnTop, but a late Tick could still be in flight
-            // when the menu toggle fires — this gate defends against that.
-            if (!_settings.General.KeepOnTop) return;
-            if (_settings.Window.StickToTaskbar) return;
-            if (this.Visibility != Visibility.Visible) return;
+            if (!_settings.General.KeepOnTop || _settings.Window.StickToTaskbar || this.Visibility != Visibility.Visible) return;
 
             var hwnd = new WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
@@ -591,16 +372,12 @@ namespace WinMeters
             IntPtr fg = NativeMethods.GetForegroundWindow();
             if (fg == IntPtr.Zero) return;
 
-            // Skip re-asserting while the shell's taskbar is in front of us.
             _sbClassName.Clear();
-            if (NativeMethods.GetClassName(fg, _sbClassName, _sbClassName.Capacity) > 0)
-            {
-                string fgClass = _sbClassName.ToString();
-                if (fgClass == "Shell_TrayWnd" || fgClass == "Shell_SecondaryTrayWnd")
-                    return;
-            }
+            if (NativeMethods.GetClassName(fg, _sbClassName, _sbClassName.Capacity) <= 0) return;
 
-            // Only re-assert when something else is already above us in Z-order.
+            string fgClass = _sbClassName.ToString();
+            if (fgClass is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd") return;
+
             IntPtr prev = NativeMethods.GetWindow(hwnd, NativeMethods.GW_HWNDPREV);
             if (prev == IntPtr.Zero) return;
 
@@ -608,19 +385,9 @@ namespace WinMeters
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE | NativeMethods.SWP_SHOWWINDOW);
         }
 
-        /// <summary>
-        /// WndProc hook dedicated to monitor-configuration changes. Fires on
-        /// WM_DISPLAYCHANGE (wParam = bit-depth; lParam = resolution) when the user
-        /// plugs, unplugs, or wakes a monitor. We re-resolve the saved MonitorIndex
-        /// against the current Screen.AllScreens and ApplyWindowMode re-registers
-        /// or re-snaps. Deliberately does NOT mutate <c>_settings.Window.MonitorIndex</c>
-        /// or call <c>_settings.Save()</c> — KVM-switched or sleeping monitors should
-        /// not erase the user's saved preference during a transient disconnect.
-        /// </summary>
         private IntPtr MonitorChangeHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
-            // WM_DISPLAYCHANGE = 0x007E
-            if (msg == 0x007E)
+            if (msg == NativeMethods.WM_DISPLAYCHANGE)
             {
                 WinMeters.Log.D("MainWindow: WM_DISPLAYCHANGE received.");
                 ApplyWindowMode();
@@ -628,19 +395,11 @@ namespace WinMeters
             return IntPtr.Zero;
         }
 
-        private void MainWindow_Deactivated(object? sender, EventArgs e)
-        {
-            // In floating mode the 500ms EnforceZOrder timer handles TOPMOST
-            // re-assertion (with foreground-class guard to avoid blinking on the
-            // taskbar). In AppBar mode the shell owns z-order. Either way this
-            // handler is a no-op — kept for backwards compatibility with XAML
-            // event wiring.
-        }
+        private void MainWindow_Deactivated(object? sender, EventArgs e) { }
 
         private void ToggleVisibility()
         {
             bool currentlyVisible = this.Visibility == Visibility.Visible;
-
             if (currentlyVisible)
             {
                 _settings.Window.IsHiddenByUser = true;
@@ -650,50 +409,38 @@ namespace WinMeters
             {
                 _settings.Window.IsHiddenByUser = false;
                 this.Visibility = Visibility.Visible;
-                // In floating mode we keep the saved X/Y verbatim; if the
-                // user dragged off-screen while hidden, the next
-                // AlignToTaskbarCenter (or settings reload) handles the
-                // recovery. In AppBar mode the shell repositions us on
-                // the next ABN_POSCHANGED.
             }
             _settings.Save();
 
-            // Rebuild the tray ContextMenuStrip so:
-            //   (1) the toggle item's label flips ("Hide Bar" -> "Show Bar"
-            //       or vice-versa) to reflect the action available next,
-            //   (2) the checkmark restamps from the source of truth.
-            // BuildTrayMenu reads _settings.Window.IsHiddenByUser directly,
-            // so the rebuild implicitly performs both updates. The old
-            // ContextMenuStrip is disposed so its native handles don't
-            // accumulate on every toggle -- safe because WinForms has
-            // already closed the menu before this click handler runs.
-            if (_trayIcon is not null)
+            // Re-evaluate whether the z-order keep-alive timer should be running: when hidden,
+            // it shouldn't. When shown again, restart it if keep-on-top is on.
+            ApplyKeepOnTop(_settings.General.KeepOnTop);
+
+            // Update just the "Hide Bar"/"Show Bar" item in place if a tray menu already exists;
+            // only build a fresh menu if the tray icon has no menu yet (e.g. first toggle).
+            RefreshTrayMenuToggleItem();
+        }
+
+        private void RefreshTrayMenuToggleItem()
+        {
+            if (_trayIcon?.ContextMenuStrip is not { } menu) return;
+            // Look for our flagged toggle item without disposing/rebuilding the whole menu —
+            // anything else clicked through the tray between the toggle Click and the menu reopen
+            // is still safely bound to live closures.
+            foreach (WnForms.ToolStripItem item in menu.Items)
             {
-                var oldMenu = _trayIcon.ContextMenuStrip;
-                _trayIcon.ContextMenuStrip = BuildTrayMenu();
-                oldMenu?.Dispose();
+                if (item is WnForms.ToolStripMenuItem tsi &&
+                    (tsi.Tag as string) == ToggleVisibilityItemTag)
+                {
+                    bool isBarVisible = !_settings.Window.IsHiddenByUser;
+                    tsi.Text = isBarVisible ? "Hide Bar" : "Show Bar";
+                    tsi.Checked = isBarVisible;
+                    break;
+                }
             }
         }
 
-        #endregion
-
-        #region Popup Menu --> IBarMenuDelegate dispatchers (called by BarPopupMenuService)
-
-        // Popup-menu internals (CreatePopupMenu + AppendMenu + TrackPopupMenuEx +
-        // ApplyMenuChromeMode + DispatchMenuCommand + the WM_RBUTTONUP HwndSource
-        // hook itself) live in Services/BarPopupMenuService. What stays in
-        // MainWindow is:
-        //   - the 9 public Handle* one-liners below -- IBarMenuDelegate impls
-        //     the service's cmd-id dispatch invokes;
-        //   - the four Toggle* + RestartWinMeters helpers that Handle* forward
-        //     (private -- a public Handle* can call a same-class private fine);
-        //   - OpenSettings / MenuItem_Settings_Click / OpenAboutWindow /
-        //     MenuItem_Exit_Click -- still invoked from the popup menu's
-        //     1001 / 1003 / 1004 cmd IDs.
-        //
-        // Wire-up note: the Handle* methods MUST be public (CS0737 forbids
-        // implementing interface members with anything less). Toggle*
-        // helpers stay private -- same-class forwarding from public is allowed.
+        #region IBarMenuDelegate
 
         public void HandleShowSettings() => OpenSettings();
         public void HandleOpenTaskManager() => Services.BarPopupMenuService.LaunchTaskManager();
@@ -705,12 +452,6 @@ namespace WinMeters
         public void HandleToggleKeepOnTop() => ToggleKeepOnTop();
         public void HandleToggleHideInFullscreen() => ToggleHideInFullscreen();
 
-        /// <summary>
-        /// Toggles <c>_settings.General.KeepOnTop</c> and re-applies
-        /// the WPF Topmost flag + ZOrder timer gate via
-        /// <see cref="ApplyKeepOnTop"/>. Mirrors kil0bit's
-        /// <c>cmd == 1008</c> branch (<c>AlwaysOnTop = !AlwaysOnTop</c>).
-        /// </summary>
         private void ToggleKeepOnTop()
         {
             _settings.General.KeepOnTop = !_settings.General.KeepOnTop;
@@ -718,37 +459,18 @@ namespace WinMeters
             _settings.Save();
         }
 
-        /// <summary>
-        /// Toggles <c>_settings.General.HideInFullscreen</c>. The
-        /// AppBar service's ABN_FULLSCREENAPP handler reads this flag
-        /// on every fullscreen transition, so the change takes effect
-        /// the next time a fullscreen app activates. Mirrors kil0bit's
-        /// <c>cmd == 1009</c> branch.
-        /// </summary>
         private void ToggleHideInFullscreen()
         {
             _settings.General.HideInFullscreen = !_settings.General.HideInFullscreen;
             _settings.Save();
         }
 
-        /// <summary>
-        /// Toggles <c>_settings.Window.LockPosition</c>. Persists the
-        /// change (and the current X/Y) via <see cref="SavePosition"/>.
-        /// Mirrors kil0bit's <c>cmd == 1006</c> branch.
-        /// </summary>
         private void ToggleLockPosition()
         {
             _settings.Window.LockPosition = !_settings.Window.LockPosition;
             SavePosition();
         }
 
-        /// <summary>
-        /// Toggles <c>_settings.Window.StickToTaskbar</c> and routes
-        /// the change through <see cref="ApplyWindowMode"/> so the
-        /// AppBar service re-registers (or unregisters) and the bar
-        /// re-anchors to the taskbar (or returns to floating mode).
-        /// Mirrors kil0bit's <c>cmd == 1007</c> branch.
-        /// </summary>
         private void ToggleSnapToTaskbar()
         {
             _settings.Window.StickToTaskbar = !_settings.Window.StickToTaskbar;
@@ -756,196 +478,144 @@ namespace WinMeters
             _settings.Save();
         }
 
-        /// <summary>
-        /// Restarts WinMeters (cmd 1010, WinMeters extension beyond the
-        /// kil0bit 1001-1009 ID space) so the user can pick up settings
-        /// changes without manually closing + reopening the bar. The
-        /// flow:
-        ///
-        ///   1. <see cref="SavePosition"/> persists the current X/Y so
-        ///      the new instance launches at the same screen spot.
-        ///   2. <see cref="App.ReleaseSingleInstanceMutex"/> drops the
-        ///      kernel handle so the freshly-launched process can
-        ///      acquire it without hitting the "already running" branch
-        ///      in App.OnStartup. Without this, the new process
-        ///      sometimes races the old one's OnExit mutex release and
-        ///      shows a spurious "WinMeters is already running" dialog.
-        ///   3. Process.Start launches a fresh WinMeters.exe with the
-        ///      same executable path as the current process. The path
-        ///      resolution handles both the standalone .exe (published
-        ///      output) and the .dll + dotnet.exe pair (dotnet run /
-        ///      dotnet test dev workflow).
-        ///   4. Application.Current.Shutdown() tears the old process
-        ///      down. MainWindow_Closed + App.OnExit fire normally and
-        ///      dispose of services / tray / appbar / hotkey. The
-        ///      <c>_singleInstanceMutex</c> field is already null (set
-        ///      by step 2) so OnExit's release is a no-op.
-        /// </summary>
         private void RestartWinMeters()
         {
             SavePosition();
 
-            // Step 1: find the entry-point path. Assembly.GetEntryAssembly
-            // is the only fully-trustable source for "what executable
-            // (or dll) started me" - Environment.ProcessPath returns
-            // dotnet.exe in the dotnet-run scenario, which is NOT what
-            // we want to relaunch. If the entry assembly is a .dll we
-            // launch via "dotnet path/to.dll"; otherwise the entry path
-            // is itself the .exe.
-            //
-            // The .Location access is wrapped in a #pragma disable IL3000:
-            // the WinMeters csproj sets <PublishSingleFile>true</PublishSingleFile>,
-            // so .Location returns "" at runtime in published builds. The
-            // empty-string fall-through below routes us to Environment.ProcessPath
-            // (which returns the .exe path in single-file mode) and then
-            // to Process.MainModule.FileName as a last resort. The fallback
-            // chain covers both single-file and normal publishes; the
-            // .Location call exists only to catch the dotnet-run dev
-            // workflow where Environment.ProcessPath would return dotnet.exe.
-            string? entryPath = null;
-            try
-            {
-#pragma warning disable IL3000
-                entryPath = System.Reflection.Assembly.GetEntryAssembly()?.Location;
-#pragma warning restore IL3000
-            }
-            catch { /* GetEntryAssembly can throw in some hosted scenarios; fall through */ }
-
+            string? entryPath = GetEntryAssemblyPath();
             if (string.IsNullOrEmpty(entryPath))
             {
-                entryPath = Environment.ProcessPath;
-            }
-            if (string.IsNullOrEmpty(entryPath))
-            {
-                entryPath = System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName;
-            }
-            if (string.IsNullOrEmpty(entryPath))
-            {
-                WinMeters.Log.D("RestartWinMeters: could not determine entry path; aborting restart.");
+                WinMeters.Log.E("RestartWinMeters: could not determine entry path; aborting.");
+                ShowRestartFailed("WinMeters could not determine its own executable path, so the restart cannot proceed automatically.\n\nPlease relaunch WinMeters manually.");
                 return;
             }
 
-            // Step 2: drop the single-instance mutex so the new process
-            // can take ownership immediately. Done before Process.Start
-            // so the new process doesn't race the old one's OnExit.
             try { App.ReleaseSingleInstanceMutex(); }
             catch (Exception ex) { WinMeters.Log.D($"RestartWinMeters: ReleaseSingleInstanceMutex: {ex.Message}"); }
 
-            // Step 3: launch a fresh process. UseShellExecute=true so
-            // the OS resolves any PATHEXT / shell-association quirks
-            // (e.g. when the entry path is a .dll we still go through
-            // "dotnet" + .dll, which is a registered file association).
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo
-                {
-                    UseShellExecute = true,
-                };
+                var psi = new System.Diagnostics.ProcessStartInfo { UseShellExecute = true };
                 if (entryPath.EndsWith(".dll", System.StringComparison.OrdinalIgnoreCase))
                 {
-                    // dotnet-run / dotnet-test dev workflow: re-launch
-                    // via dotnet so the host runtime is set up again.
                     psi.FileName = "dotnet";
                     psi.Arguments = $"\"{entryPath}\"";
                 }
                 else
-                {
-                    // Standalone published exe: relaunch the .exe directly.
                     psi.FileName = entryPath;
-                }
                 System.Diagnostics.Process.Start(psi);
             }
             catch (Exception ex)
             {
-                WinMeters.Log.D($"RestartWinMeters: Process.Start failed: {ex.Message}");
-                // We already released the mutex; the only safe way to
-                // recover is to let the current process keep running
-                // and let the user retry. OnExit will re-acquire / re-
-                // release cleanly on the next normal exit.
+                WinMeters.Log.E(ex, "RestartWinMeters: Process.Start failed");
+                ShowRestartFailed($"WinMeters failed to launch a new instance:\n\n{ex.Message}\n\nPlease relaunch WinMeters manually.");
                 return;
             }
 
-            // Step 4: tear down the old process. SavePosition already ran
-            // (step 0); OnExit is no-op for mutex thanks to step 2.
             System.Windows.Application.Current.Shutdown();
         }
 
-        /// <summary>
-        /// Opens the Settings dialog as a modeless owned window. Used by
-        /// both the RMB-menu Settings entry (cmd 1001) and the tray
-        /// icon's left-double-click handler.
-        ///
-        /// Single-instance gate: if Settings is already open, just
-        /// reactivate it.
-        /// Without this gate, switching from modal ShowDialog to modeless
-        /// Show lets an impatient user spawn N independent SettingsWindow
-        /// instances, each holding a private clone of _settings (the JSON
-        /// round-trip in their ctor) and competing on close for which
-        /// one's BtnSave_Click wins.
-        ///
-        /// Apply-on-save: the Closed subscriber fires after the dialog
-        /// closes. If dlg.WasSaved (BtnSave_Click path), we run the full
-        /// ApplySettings branch. If not (X-button or Esc), SettingsWindow's
-        /// own SettingsWindow_Closing handler already restored the snapshot
-        /// to _original before Closed even fires, so we leave _settings
-        /// alone. We deliberately use the SettingsWindow.WasSaved bool
-        /// rather than the WPF Window.DialogResult property -- Settings is
-        /// shown modeless via Show() (so the user can drag the bar while
-        /// it's up), and the WPF DialogResult setter throws when called on
-        /// a Show()'d window.
-        /// </summary>
-        private void OpenSettings()
+        private static string? GetEntryAssemblyPath()
         {
-            if (_existingSettingsWindow is { } existing)
+            // Try each candidate in order; the first non-empty *and existing* path wins.
+            // The prior shape returned from `Assembly.GetEntryAssembly()?.Location`
+            // unconditionally on empty strings — but for single-file / ReadyToRun / AOT
+            // scenarios Location is a perfectly valid "" (not null), which then
+            // bypasses Environment.ProcessPath + MainModule.FileName and surfaces the
+            // "could not determine executable path" message box even though we could
+            // have answered the question from the process itself.
+            foreach (var candidate in EnumerateEntryPathCandidates())
             {
-                existing.Activate();
-                return;
+                if (!string.IsNullOrEmpty(candidate) && System.IO.File.Exists(candidate))
+                    return candidate;
             }
-
-            var dlg = new SettingsWindow(_settings) { Owner = this };
-            _existingSettingsWindow = dlg;
-
-            dlg.Closed += (_, _) =>
-            {
-                try
-                {
-                    if (dlg.WasSaved)
-                    {
-                        ApplySettings();
-                    }
-                }
-                finally
-                {
-                    // Always clear the cached reference so the next click
-                    // opens a fresh Settings. finally runs regardless of
-                    // whether ApplySettings throws, so a corrupt .json
-                    // doesn't permanently lock the user out of Settings.
-                    _existingSettingsWindow = null;
-                }
-            };
-
-            dlg.Show();
+            return null;
         }
 
-        /// <summary>
-        /// Thin shell-event wrapper around <see cref="OpenSettings"/>
-        /// that keeps the tray icon's RoutedEventArgs-style invocation working.
-        /// </summary>
-        private void MenuItem_Settings_Click(object sender, RoutedEventArgs e)
+        private static IEnumerable<string> EnumerateEntryPathCandidates()
         {
-            OpenSettings();
+            var fromEntry = SafeInvoke(TryGetEntryAssemblyLocationRaw, "entry assembly");
+            if (!string.IsNullOrEmpty(fromEntry)) yield return fromEntry;
+
+            var processPath = SafeInvoke(static () => Environment.ProcessPath, "Environment.ProcessPath");
+            if (!string.IsNullOrEmpty(processPath)) yield return processPath;
+
+            var mainModule = SafeInvoke(static () => System.Diagnostics.Process.GetCurrentProcess().MainModule?.FileName, "MainModule.FileName");
+            if (!string.IsNullOrEmpty(mainModule)) yield return mainModule;
         }
 
-        /// <summary>
-        /// Opens the dedicated AboutWindow (cmd 1003 from the popup
-        /// menu). Single-instance gate with the same semantics as
-        /// <see cref="OpenSettings"/>: if About is already
-        /// open, just reactivate it (no second MainWindow.OpenAboutWindow
-        /// invocations ever spawn a parallel instance). AboutWindow has
-        /// no model-time selection state to persist, so no Closed
-        /// subscriber reads any WhenSaved-style bool on close -- the
-        /// dialog is purely informational.
-        /// </summary>
+#pragma warning disable IL3000
+        private static string? TryGetEntryAssemblyLocationRaw()
+            => System.Reflection.Assembly.GetEntryAssembly()?.Location;
+#pragma warning restore IL3000
+
+        private static string? SafeInvoke(Func<string?> getter, string label)
+        {
+            // Single funnel for every path-resolution source: each Getter is
+            // tried in turn, exceptions are swallowed + logged (the path is
+            // user-visible at restart time so a noisy log beat here), and a
+            // null return is forwarded so the iterator yields nothing for
+            // that slot. Owning the try/catch in one place keeps the iterator
+            // block yield-safe (CS1626 forbids yield inside try-with-catch).
+            try { return getter(); }
+            catch (Exception ex) { WinMeters.Log.D($"GetEntryAssemblyPath: {label}: {ex.Message}"); return null; }
+        }
+
+        private static void ShowRestartFailed(string message)
+        {
+            try
+            {
+                System.Windows.MessageBox.Show(message, "WinMeters - Restart failed",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            catch (Exception mboxEx)
+            {
+                // If the WPF session is shutting down MessageBox can throw; in that case the only
+                // thing we can usefully do is log to the error file.
+                WinMeters.Log.E(mboxEx, "ShowRestartFailed: MessageBox.Show threw");
+            }
+        }
+
+    private void OpenSettings()
+    {
+        if (_existingSettingsWindow is { } existing)
+        {
+            existing.Activate();
+            return;
+        }
+        var dlg = new SettingsWindow(_settings) { Owner = this };
+        _existingSettingsWindow = dlg;
+        dlg.Closed += (_, _) =>
+        {
+            try { if (dlg.WasSaved) ApplySettings(); }
+            finally { _existingSettingsWindow = null; }
+        };
+        dlg.Show();
+    }
+
+    private void OnHotkeyRegisterFailed(string message)
+    {
+        // Surface a one-shot tray balloon-tip so the user sees their saved Hotkey setting
+        // is not actually registered (typically because another OS / app process owns the
+        // chord). The tray icon is owned by InitializeTrayIcon which runs in the ctor — so
+        // it's never null by the time this handler fires. We null-check defensively
+        // because a Dispose path on the tray could run while a hotkey re-register is in
+        // flight (e.g. during shutdown). ToolTipIcon.Warning picks the OS warning icon
+        // for a clearer affordance than the Info default. BalloonTipText is the raw
+        // message so the user can paste it into a bug report without reading a diff.
+        // No local try/catch: any exception thrown by ShowBalloonTip on a stale tray
+        // icon (e.g. disposed during a race with shutdown) is already swallowed by the
+        // RegisterFailed raise site in HotkeyService.Register, which logs it to the
+        // rolling debug log on the way out.
+        _trayIcon?.ShowBalloonTip(
+            timeout: 5000,
+            tipTitle: "WinMeters — hotkey registration failed",
+            tipText: message,
+            tipIcon: ToolTipIcon.Warning);
+    }
+
+    private void MenuItem_Settings_Click(object sender, RoutedEventArgs e) => OpenSettings();
+
         private void OpenAboutWindow()
         {
             if (_existingAboutWindow is { } existing)
@@ -953,13 +623,15 @@ namespace WinMeters
                 existing.Activate();
                 return;
             }
-
-            var dlg = new AboutWindow { Owner = this };
+            // Pass the live hotkey from the current settings so the About window reflects
+            // whatever the user has saved (instead of the stale "Ctrl+Alt+Shift+M"
+            // hardcoded into the original XAML). Closing + reopening About will pick up
+            // updates applied via Settings between sessions.
+            var dlg = new AboutWindow(_settings.General.Hotkey) { Owner = this };
             _existingAboutWindow = dlg;
             dlg.Closed += (_, _) => _existingAboutWindow = null;
             dlg.Show();
         }
-
 
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
         {
@@ -970,10 +642,7 @@ namespace WinMeters
                 _monitorManager?.Dispose();
                 _hardwareMonitor?.Dispose();
             }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"MenuItem_Exit_Click: {ex}");
-            }
+            catch (Exception ex) { WinMeters.Log.D($"MenuItem_Exit_Click: {ex}"); }
             System.Windows.Application.Current.Shutdown();
         }
 
@@ -981,69 +650,67 @@ namespace WinMeters
 
         #region Settings Application
 
-        /// <summary>
-        /// Loads settings from disk and applies them.
-        /// </summary>
-        public void ApplySettings()
-        {
-            _settings = AppSettings.Load();
-            // Refresh every service that captures a _settings reference at construction
-            // so the AppBarService / WindowPlacementService read from the new instance.
-            _appBarService?.BindSettings(_settings);
-            _placementService.BindSettings(_settings);
-            _popupService?.BindSettings(_settings);
-            // Re-init / shut down the LibreHardwareMonitorService to match the new
-            // EnableHardwareMonitor setting -- needed when the user toggled the
-            // checkbox in SettingsWindow since the previous launch.
-            ApplyHardwareMonitor();
-            ClearCaches();
-            ApplySettingsInternal();
-            // Re-apply positioning in case the user changed WindowMode / MonitorIndex
-            // since the previous load.
-            ApplyWindowMode();
-        }
+    public void ApplySettings()
+    {
+        _settings = AppSettings.Load();
+        _appBarService?.BindSettings(_settings);
+        _placementService.BindSettings(_settings);
+        _popupService?.BindSettings(_settings);
+        _hotkeyService?.BindSettings(_settings);
+        _hotkeyService?.ReRegister();
+        ApplyHardwareMonitor();
+        ClearCaches();
+        ApplySettingsInternal();
+        ApplyWindowMode();
+        SyncAboutHotkey();
+    }
 
-        /// <summary>
-        /// Applies settings for live preview (does not save to disk).
-        /// </summary>
-        public void ApplySettingsLive(AppSettings settings)
+    public void ApplySettingsLive(AppSettings settings)
+    {
+        _settings = settings;
+        _appBarService?.BindSettings(_settings);
+        _placementService.BindSettings(_settings);
+        _popupService?.BindSettings(_settings);
+        _hotkeyService?.BindSettings(_settings);
+        _hotkeyService?.ReRegister();
+        ApplyHardwareMonitor();
+        ClearCaches();
+        ApplySettingsInternal();
+        ApplyWindowMode();
+        SyncAboutHotkey();
+    }
+
+    /// <summary>
+    /// Pushes the current settings' hotkey into the About window if it's open.
+    /// Without this, the About hint row was frozen at ctor time: opening About,
+    /// then changing the chord in Settings, would leave the still-open About
+    /// window showing the stale chord (the exact user-reported "hotkey does not
+    /// update" symptom). <c>IsLoaded</c> guards against pushing text into a
+    /// window that's been closed but not yet nulled out by the Closed handler.
+    /// Note: <c>IsVisible</c> is intentionally NOT checked — the bug must
+    /// still update when the window is minimized or behind another window,
+    /// so the user sees the new chord on next restore/focus.
+    /// </summary>
+    private void SyncAboutHotkey()
+    {
+        try
         {
-            _settings = settings;
-            _appBarService?.BindSettings(_settings);
-            _placementService.BindSettings(_settings);
-            _popupService?.BindSettings(_settings);
-            // Also bring the LibreHardwareMonitorService up/down on the live path so
-            // the sensor data updates immediately while the user is editing the
-            // EnableHardwareMonitor checkbox in the open dialog. ApplySettings (the
-            // post-save path called after BtnOk_Click) calls the same method so
-            // the code path is identical regardless of caller.
-            ApplyHardwareMonitor();
-            ClearCaches();
-            ApplySettingsInternal();
-            // ApplyWindowMode is called by SettingsWindow.ApplyChangesLive directly
-            // for quicker feedback on mode/monitor dropdowns; calling it again here
-            // is also safe and makes ApplySettingsLive self-sufficient.
-            ApplyWindowMode();
+            if (_existingAboutWindow is { IsLoaded: true } win)
+                win.SetHotkey(_settings.General.Hotkey);
         }
+        catch (Exception ex) { WinMeters.Log.D($"SyncAboutHotkey: {ex.Message}"); }
+    }
 
         private void ClearCaches()
         {
-            _lastRamPieSource = null;
-            _lastRamPercentage = -1;
-            _lastRamPieDpiBucket = -1;
-            _lastGpuDedicatedSource = null;
-            _lastGpuDedicatedPercentage = -1;
-            _lastGpuDedicatedPieDpiBucket = -1;
-            _lastGpuSharedSource = null;
-            _lastGpuSharedPercentage = -1;
-            _lastGpuSharedPieDpiBucket = -1;
-            _lastNetDownFormatted = "";
-            _lastNetUpFormatted = "";
-            _lastDiskReadFormatted = "";
-            _lastDiskWriteFormatted = "";
-            _lastTimeFormatted = "";
-            _lastDateFormatted = "";
-            _lastTimeTicks = 0;
+            _lastRamPieSource = null; _lastRamPercentage = -1; _lastRamPieDpiBucket = -1;
+            _lastGpuDedicatedSource = null; _lastGpuDedicatedPercentage = -1; _lastGpuDedicatedPieDpiBucket = -1;
+            _lastGpuSharedSource = null; _lastGpuSharedPercentage = -1; _lastGpuSharedPieDpiBucket = -1;
+            _lastNetDownFormatted = ""; _lastNetUpFormatted = "";
+            _lastDiskReadFormatted = ""; _lastDiskWriteFormatted = "";
+            _lastTimeFormatted = ""; _lastDateFormatted = ""; _lastTimeTicks = 0;
+            _lastTooltipCpu = ""; _lastTooltipRam = ""; _lastTooltipDisk = "";
+            _lastTooltipNet = ""; _lastTooltipGpuDedicated = ""; _lastTooltipGpuShared = "";
         }
 
         private void ApplySettingsInternal()
@@ -1058,26 +725,19 @@ namespace WinMeters
             UpdateTooltips();
         }
 
-        private void ApplyNetworkSettings()
-        {
-            // Apply the network interface filter to the monitor manager
+        private void ApplyNetworkSettings() =>
             _monitorManager.InterfaceNameFilter = _settings.General.NetworkInterfaceName;
-        }
 
         private void ConfigureTimer()
         {
             int minRate = CalculateMinRefreshRate();
-
             if (_timer == null)
             {
                 _timer = new DispatcherTimer();
                 _timer.Tick += Timer_Tick;
             }
             else
-            {
                 _timer.Stop();
-            }
-
             _timer.Interval = TimeSpan.FromMilliseconds(minRate);
             _timer.Start();
         }
@@ -1093,58 +753,30 @@ namespace WinMeters
             if (_settings.Rates.GpuShared.HasValue) minRate = Math.Min(minRate, _settings.Rates.GpuShared.Value);
             if (_settings.Rates.GpuTemp.HasValue) minRate = Math.Min(minRate, _settings.Rates.GpuTemp.Value);
             if (_settings.Rates.CpuTemp.HasValue) minRate = Math.Min(minRate, _settings.Rates.CpuTemp.Value);
-
             return Math.Max(minRate, Constants.Timing.MinTimerIntervalMs);
         }
 
-        private void ApplyDiskSettings()
-        {
-            string diskInstance = _settings.General.DiskInstanceName;
-            _monitorManager.SetDiskInstance(diskInstance);
-        }
+        private void ApplyDiskSettings() => _monitorManager.SetDiskInstance(_settings.General.DiskInstanceName);
 
         private void ApplyColors()
         {
             try
             {
-                // Background & Border
                 var bgBrush = ColorHelper.ParseBrush(_settings.Colors.Background);
-                // In stick-to-taskbar mode, do NOT multiply brush.Opacity onto the
-                // layered window's background. Multiplying alpha through the WPF
-                // brush state forces DWM to recompose the layered surface on every
-                // WPF invalidate cycle (CPU/RAM/Net/Disk text changes etc.) and
-                // along with it the taskbar surface behind any anti-aliased or
-                // rounded-corner regions. The user-visible symptom is the system
-                // taskbar fading / changing opacity every refresh tick. WinMeters's
-                // `UpdateLayeredWindow` path writes a pre-blended 32-bit ARGB
-                // bitmap in one pass; the per-pixel alpha in
-                // `_settings.Colors.Background` (e.g. the `CC` byte of `#CC202020`)
-                // already encodes the desired translucency, so omit the multiplier
-                // and rely on per-pixel alpha. The Opacity slider in the
-                // SettingsWindow intentionally has no effect in stick mode (it
-                // carries a tooltip explaining this and pointing users at the
-                // Background color's alpha byte instead). Power users can still
-                // program per-pixel alpha directly via the color picker.
-                if (!_settings.Window.StickToTaskbar)
+                if (_settings.Window.StickToTaskbar)
                 {
-                    bgBrush.Opacity = _settings.General.Opacity;
+                    var c = bgBrush.Color;
+                    byte a = (byte)Math.Round(Math.Clamp(c.A * _settings.General.Opacity, 0, 255));
+                    bgBrush = new SolidColorBrush(System.Windows.Media.Color.FromArgb(a, c.R, c.G, c.B));
                 }
+                else
+                    bgBrush.Opacity = _settings.General.Opacity;
                 MainBorder.Background = bgBrush;
                 MainBorder.BorderBrush = ColorHelper.ParseBrush(_settings.Colors.Border);
                 MainBorder.BorderThickness = new Thickness(_settings.Colors.BorderThickness);
 
-                // CPU
                 SetupCpuBars();
 
-                // RAM / VRAM / SRAM pies: rendered with GDI+ into a WPF WriteableBitmap
-                // backbuffer (see Utils/PieChartRenderer.cs + RENDERING.md). The wedge
-                // fill AND the border stroke are painted into the same bitmap, so neither
-                // .Fill nor .Stroke brushes need to be assigned on the WPF Image host
-                // here — UpdateRamMeter / UpdateGpuMemoryMeters pass the current colors
-                // as parameters every tick.
-
-                // Disk Labels — the "R:" / "W:" prefixes use the read/write colors.
-                // The percentage values use the same colors so the meter stays self-consistent.
                 var diskReadBrush = ColorHelper.ParseBrush(_settings.Colors.DiskRead);
                 var diskWriteBrush = ColorHelper.ParseBrush(_settings.Colors.DiskWrite);
                 DiskRestText.Foreground = diskReadBrush;
@@ -1152,7 +784,6 @@ namespace WinMeters
                 DiskReadText.Foreground = diskReadBrush;
                 DiskWriteText.Foreground = diskWriteBrush;
 
-                // Network
                 var netDownBrush = ColorHelper.ParseBrush(_settings.Colors.NetDown);
                 var netUpBrush = ColorHelper.ParseBrush(_settings.Colors.NetUp);
                 NetDownText.Foreground = netDownBrush;
@@ -1160,7 +791,6 @@ namespace WinMeters
                 ArrowDown.Fill = netDownBrush;
                 ArrowUp.Fill = netUpBrush;
 
-                // Temperature displays
                 var cpuBrush = ColorHelper.ParseBrush(_settings.Colors.CpuTemp);
                 var gpuBrush = ColorHelper.ParseBrush(_settings.Colors.GpuTemp);
                 CpuTempText.Foreground = cpuBrush;
@@ -1170,29 +800,14 @@ namespace WinMeters
                 GpuTempLabel.Foreground = gpuBrush;
                 GpuLoadText.Foreground = gpuBrush;
 
-                // Time
                 TimeText.Foreground = ColorHelper.ParseBrush(_settings.Colors.TimeText);
             }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"ApplyColors: {ex}");
-            }
+            catch (Exception ex) { WinMeters.Log.D($"ApplyColors: {ex}"); }
         }
 
         private void ApplyScale()
         {
-            // Lock the WPF window's DIP-height to AppBarService.BarHeightNormalDips × ScaleFactor
-            // (= 40 × Scale). Pair with the Window xaml's SizeToContent="Width" so WPF stops
-            // competing with the XAML for height — the WPF window's actual height always
-            // equals the centring formula's winHPx ÷ DPI. The WM_WINDOWPOSCHANGING Y-centre
-            // then lands at the *visual* centre of the WPF window. Before this fix the bar
-            // drifted ~4-12 DIPs downward because the centring formula anchored to a constant
-            // 32-DIP value while WinMeters' actual rendered height (CpuContainer 24 + Margin
-            // 5+5 + 2-row panels each ~14×2 + Margin 5+5 ≈ 40 DIPs) didn't match. Set BEFORE
-            // the early-return so first-load applies even when the saved Scale equals
-            // MainScale.ScaleX's default.
             this.Height = 40 * _settings.General.Scale;
-
             if (Math.Abs(MainScale.ScaleX - _settings.General.Scale) <= 0.001) return;
 
             if (this.IsLoaded)
@@ -1220,7 +835,6 @@ namespace WinMeters
             PanelGpuShared.Visibility = _settings.Visibility.ShowGpuShared ? Visibility.Visible : Visibility.Collapsed;
             PanelTime.Visibility = _settings.Visibility.ShowTime ? Visibility.Visible : Visibility.Collapsed;
 
-            // Hardware panel visibility
             bool hwAvailable = _hardwareMonitor?.IsAvailable == true;
             bool showCpuTemp = _settings.Visibility.ShowCpuTemp && hwAvailable;
             bool showGpuTemp = _settings.Visibility.ShowGpuTemp && hwAvailable;
@@ -1229,7 +843,6 @@ namespace WinMeters
             PanelHardware.Visibility = (showCpuTemp || showGpuTemp) ? Visibility.Visible : Visibility.Collapsed;
             RowCpuTemp.Visibility = showCpuTemp ? Visibility.Visible : Visibility.Collapsed;
             RowGpuTemp.Visibility = showGpuTemp ? Visibility.Visible : Visibility.Collapsed;
-
             CpuLoadText.Visibility = showLoad ? Visibility.Visible : Visibility.Collapsed;
             GpuLoadText.Visibility = showLoad ? Visibility.Visible : Visibility.Collapsed;
         }
@@ -1256,13 +869,9 @@ namespace WinMeters
             {
                 UIElement? panel = null;
                 if (key is "CpuTemp" or "GpuTemp")
-                {
                     panel = PanelHardware;
-                }
                 else if (map.TryGetValue(key, out var p))
-                {
                     panel = p;
-                }
                 else
                 {
                     WinMeters.Log.D($"ApplyMeterOrder: Unrecognized meter key '{key}' ignored.");
@@ -1270,7 +879,6 @@ namespace WinMeters
                 }
 
                 if (panel is null || addedPanels.Contains(panel)) continue;
-
                 mainStack.Children.Add(panel);
                 mainStack.Children.Add(CreateSeparator());
                 addedPanels.Add(panel);
@@ -1286,23 +894,18 @@ namespace WinMeters
                 }
             }
 
-            // Remove trailing separator
             if (mainStack.Children.Count > 0 &&
                 mainStack.Children[^1] is WpfRectangle { Width: 1 })
-            {
                 mainStack.Children.RemoveAt(mainStack.Children.Count - 1);
-            }
         }
 
-        private UIElement CreateSeparator()
-        {
-            return new WpfRectangle
+        private UIElement CreateSeparator() =>
+            new WpfRectangle
             {
                 Width = 1,
                 Fill = ColorHelper.ParseBrush(_settings.Colors.Separator),
                 Margin = new Thickness(0, 5, 0, 5)
             };
-        }
 
         #endregion
 
@@ -1310,10 +913,7 @@ namespace WinMeters
 
         private void Timer_Tick(object? sender, EventArgs e)
         {
-            // Don't do any UI-bound work before the window has been Loaded: the XAML bindings
-            // to named children (RamPie, PanelCpu, etc.) are not guaranteed valid yet.
             if (!this.IsLoaded) return;
-
             long now = DateTime.UtcNow.Ticks;
 
             UpdateCpuMeters(now);
@@ -1324,10 +924,6 @@ namespace WinMeters
             UpdateGpuMemoryMeters(now);
             UpdateTime(now);
             UpdateTooltips();
-
-            // No continuous per-tick positioning: kil0bit keeps X/Y verbatim in
-            // floating mode (the user drags the bar), and the shell + ABN_*
-            // callbacks handle positioning in AppBar mode.
         }
 
         private void UpdateCpuMeters(long now)
@@ -1355,27 +951,19 @@ namespace WinMeters
 
         private (double Total, double User) CalculateCoreUsage((double Total, double User)[] splitUsages, int barIndex, int logicalCores)
         {
-            double total, user;
-
             if (logicalCores > 1 && _settings.General.CombineLogicalCores)
             {
                 int idx1 = barIndex * 2;
                 int idx2 = idx1 + 1;
-
                 double t1 = idx1 < logicalCores ? splitUsages[idx1].Total : 0;
                 double u1 = idx1 < logicalCores ? splitUsages[idx1].User : 0;
                 double t2 = idx2 < logicalCores ? splitUsages[idx2].Total : 0;
                 double u2 = idx2 < logicalCores ? splitUsages[idx2].User : 0;
-
-                total = (t1 + t2) / 2.0;
-                user = (u1 + u2) / 2.0;
-            }
-            else
-            {
-                total = barIndex < logicalCores ? splitUsages[barIndex].Total : 0;
-                user = barIndex < logicalCores ? splitUsages[barIndex].User : 0;
+                return (Math.Min((t1 + t2) / 2.0, 100), Math.Min((u1 + u2) / 2.0, 100));
             }
 
+            double total = barIndex < logicalCores ? splitUsages[barIndex].Total : 0;
+            double user  = barIndex < logicalCores ? splitUsages[barIndex].User  : 0;
             return (Math.Min(total, 100), Math.Min(user, 100));
         }
 
@@ -1383,19 +971,13 @@ namespace WinMeters
         {
             if (!IsReadyToUpdate(ref _lastRamTicks, _settings.Rates.Ram ?? _settings.General.RefreshRateMs, now)) return;
             _monitorManager.UpdateRam();
-            // Render the RAM pie via GDI+ into a WPF WriteableBitmap backbuffer. The
-            // wedge fill and the border stroke are painted into the same bitmap; the
-            // WPF Image element hosts the result. See Utils/PieChartRenderer.cs.
             PieChartRenderer.UpdatePieWithCache(
-                RamPie,
-                _monitorManager.RamUsage,
+                RamPie, _monitorManager.RamUsage,
                 _settings.Colors.RamBorderThickness,
                 ColorHelper.ToDrawingColor(_settings.Colors.RamPie),
                 ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
                 _appBarService?.DpiScale ?? 1.0f,
-                ref _lastRamPieSource,
-                ref _lastRamPercentage,
-                ref _lastRamPieDpiBucket);
+                ref _lastRamPieSource, ref _lastRamPercentage, ref _lastRamPieDpiBucket);
         }
 
         private void UpdateDiskMeter(long now)
@@ -1446,7 +1028,6 @@ namespace WinMeters
             int rateGpuTemp = _settings.Rates.GpuTemp ?? _settings.General.RefreshRateMs;
             bool needsCpuUpdate = IsReadyToUpdate(ref _lastCpuTempTicks, rateCpuTemp, now);
             bool needsGpuUpdate = IsReadyToUpdate(ref _lastGpuTempTicks, rateGpuTemp, now);
-
             if (!needsCpuUpdate && !needsGpuUpdate) return;
 
             try
@@ -1469,71 +1050,49 @@ namespace WinMeters
                         ? $"{_hardwareMonitor.GpuLoad:F0}%" : "--%";
                 }
             }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"UpdateHardwareSensors: {ex}");
-            }
+            catch (Exception ex) { WinMeters.Log.D($"UpdateHardwareSensors: {ex}"); }
         }
 
         private void UpdateGpuMemoryMeters(long now)
         {
-            // Both GPU pies refresh together; let the slower rate gate the work.
             bool dedicatedDue = IsReadyToUpdate(ref _lastGpuDedicatedTicks, _settings.Rates.GpuDedicated ?? _settings.General.RefreshRateMs, now);
             bool sharedDue = IsReadyToUpdate(ref _lastGpuSharedTicks, _settings.Rates.GpuShared ?? _settings.General.RefreshRateMs, now);
             if (!dedicatedDue && !sharedDue) return;
 
             _monitorManager.UpdateGpu();
 
-            // Note: _hardwareMonitor is already updated by UpdateHardwareSensors() earlier
-            // in the same Timer_Tick. Do NOT call _hardwareMonitor?.Update() again here —
-            // that would double-poll every sensor on ticks where both GPU temp and GPU
-            // memory pies are due simultaneously.
-
             if (dedicatedDue)
             {
                 double percentage = ResolveGpuDedicatedPercentage();
                 PieChartRenderer.UpdatePieWithCache(
-                    GpuDedicatedPie,
-                    percentage,
+                    GpuDedicatedPie, percentage,
                     _settings.Colors.RamBorderThickness,
                     ColorHelper.ToDrawingColor(_settings.Colors.GpuDedicatedPie),
                     ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
                     _appBarService?.DpiScale ?? 1.0f,
-                    ref _lastGpuDedicatedSource,
-                    ref _lastGpuDedicatedPercentage,
-                    ref _lastGpuDedicatedPieDpiBucket);
+                    ref _lastGpuDedicatedSource, ref _lastGpuDedicatedPercentage, ref _lastGpuDedicatedPieDpiBucket);
             }
 
             if (sharedDue)
             {
                 double percentage = ResolveGpuSharedPercentage();
                 PieChartRenderer.UpdatePieWithCache(
-                    GpuSharedPie,
-                    percentage,
+                    GpuSharedPie, percentage,
                     _settings.Colors.RamBorderThickness,
                     ColorHelper.ToDrawingColor(_settings.Colors.GpuSharedPie),
                     ColorHelper.ToDrawingColor(_settings.Colors.RamBorder),
                     _appBarService?.DpiScale ?? 1.0f,
-                    ref _lastGpuSharedSource,
-                    ref _lastGpuSharedPercentage,
-                    ref _lastGpuSharedPieDpiBucket);
+                    ref _lastGpuSharedSource, ref _lastGpuSharedPercentage, ref _lastGpuSharedPieDpiBucket);
             }
         }
 
         private double ResolveGpuDedicatedPercentage()
         {
-            // Prefer an MB-derived ratio from HardwareMonitorService; it bypasses the 4 GB
-            // overflow cap in Win32_VideoController.AdapterRAM. Fall back to the raw
-            // percentage sensor and finally to MonitorManager's WMI-derived value.
             if (_hardwareMonitor?.GpuDedicatedMemoryUsed is { } used &&
                 _hardwareMonitor?.GpuDedicatedMemoryTotal is { } total && total > 0)
-            {
                 return Math.Clamp((used / total) * 100.0, 0, 100);
-            }
             if (_hardwareMonitor?.GpuDedicatedMemoryUsage is { } hwPct)
-            {
                 return Math.Clamp(hwPct, 0, 100);
-            }
             return Math.Clamp(_monitorManager.GpuDedicatedUsage, 0, 100);
         }
 
@@ -1541,13 +1100,9 @@ namespace WinMeters
         {
             if (_hardwareMonitor?.GpuSharedMemoryUsed is { } used &&
                 _hardwareMonitor?.GpuSharedMemoryTotal is { } total && total > 0)
-            {
                 return Math.Clamp((used / total) * 100.0, 0, 100);
-            }
             if (_hardwareMonitor?.GpuSharedMemoryUsage is { } hwPct)
-            {
                 return Math.Clamp(hwPct, 0, 100);
-            }
             return Math.Clamp(_monitorManager.GpuSharedUsage, 0, 100);
         }
 
@@ -1565,7 +1120,6 @@ namespace WinMeters
                 TimeText.Text = timeStr;
             }
 
-            // The date only changes once per day; only trigger a WPF DP write when it does.
             string dateStr = localTime.ToLongDateString();
             if (dateStr != _lastDateFormatted)
             {
@@ -1582,73 +1136,47 @@ namespace WinMeters
         {
             try
             {
-                // Build tooltip strings for all panels
-                int coreCount = _monitorManager.LogicalCoreCount;
-                string cpuMode = _settings.General.CombineLogicalCores ? "Combined" : "Individual";
-                PanelCpu.ToolTip = $"CPU: {_monitorManager.CpuUsage:F1}%\n{coreCount} cores ({cpuMode})";
+                string cpuTip = $"CPU: {_monitorManager.CpuUsage:F1}%\n{_monitorManager.LogicalCoreCount} cores ({(_settings.General.CombineLogicalCores ? "Combined" : "Individual")})";
+                if (cpuTip != _lastTooltipCpu) { _lastTooltipCpu = cpuTip; PanelCpu.ToolTip = cpuTip; }
 
                 double totalRamMb = _monitorManager.GetTotalRamMb();
                 double usedRamMb = totalRamMb * (_monitorManager.RamUsage / 100.0);
-                PanelRam.ToolTip = $"RAM: {_monitorManager.RamUsage:F1}%\n{usedRamMb / 1024:F1} / {totalRamMb / 1024:F1} GB";
+                string ramTip = $"RAM: {_monitorManager.RamUsage:F1}%\n{usedRamMb / 1024:F1} / {totalRamMb / 1024:F1} GB";
+                if (ramTip != _lastTooltipRam) { _lastTooltipRam = ramTip; PanelRam.ToolTip = ramTip; }
 
                 string diskName = _settings.General.DiskInstanceName ?? "_Total";
-                PanelDisk.ToolTip = $"Disk: {diskName}\nRead: {_monitorManager.DiskReadUsage:F0}%\nWrite: {_monitorManager.DiskWriteUsage:F0}%";
+                string diskTip = $"Disk: {diskName}\nRead: {_monitorManager.DiskReadUsage:F0}%\nWrite: {_monitorManager.DiskWriteUsage:F0}%";
+                if (diskTip != _lastTooltipDisk) { _lastTooltipDisk = diskTip; PanelDisk.ToolTip = diskTip; }
 
-                PanelNet.ToolTip = $"Network\n↓ {FormatBytes(_monitorManager.NetDownload)}\n↑ {FormatBytes(_monitorManager.NetUpload)}";
+                string netTip = $"Network\n↓ {FormatBytes(_monitorManager.NetDownload)}\n↑ {FormatBytes(_monitorManager.NetUpload)}";
+                if (netTip != _lastTooltipNet) { _lastTooltipNet = netTip; PanelNet.ToolTip = netTip; }
 
-                string gpuName = _hardwareMonitor is { IsAvailable: true, GpuName: not null }
-                    ? _hardwareMonitor.GpuName : "GPU";
+                string gpuName = _hardwareMonitor is { IsAvailable: true, GpuName: not null } ? _hardwareMonitor.GpuName : "GPU";
 
-                // Dedicated VRAM tooltip
-                PanelGpuDedicated.ToolTip = FormatGpuMemoryTooltip(
-                    gpuName,
-                    "Dedicated VRam",
-                    _monitorManager.GpuDedicatedUsage,
-                    _hardwareMonitor?.GpuDedicatedMemoryUsed,
-                    _hardwareMonitor?.GpuDedicatedMemoryTotal,
-                    _monitorManager.GpuDedicatedTotal);
+                string dedicatedTip = FormatGpuMemoryTooltip(gpuName, "Dedicated VRam", _monitorManager.GpuDedicatedUsage,
+                    _hardwareMonitor?.GpuDedicatedMemoryUsed, _hardwareMonitor?.GpuDedicatedMemoryTotal, _monitorManager.GpuDedicatedTotal);
+                if (dedicatedTip != _lastTooltipGpuDedicated) { _lastTooltipGpuDedicated = dedicatedTip; PanelGpuDedicated.ToolTip = dedicatedTip; }
 
-                // Shared SRAM tooltip
-                PanelGpuShared.ToolTip = FormatGpuMemoryTooltip(
-                    gpuName,
-                    "Shared SRAM",
-                    _monitorManager.GpuSharedUsage,
-                    _hardwareMonitor?.GpuSharedMemoryUsed,
-                    _hardwareMonitor?.GpuSharedMemoryTotal,
-                    _monitorManager.GpuSharedTotal);
+                string sharedTip = FormatGpuMemoryTooltip(gpuName, "Shared SRAM", _monitorManager.GpuSharedUsage,
+                    _hardwareMonitor?.GpuSharedMemoryUsed, _hardwareMonitor?.GpuSharedMemoryTotal, _monitorManager.GpuSharedTotal);
+                if (sharedTip != _lastTooltipGpuShared) { _lastTooltipGpuShared = sharedTip; PanelGpuShared.ToolTip = sharedTip; }
             }
-            catch (Exception ex)
-            {
-                WinMeters.Log.D($"UpdateTooltips: {ex}");
-            }
+            catch (Exception ex) { WinMeters.Log.D($"UpdateTooltips: {ex}"); }
         }
 
         private static string FormatGpuMemoryTooltip(
-            string gpuName,
-            string label,
-            double usagePercentage,
-            float? usedMb,
-            float? totalMb,
-            double totalBytes)
+            string gpuName, string label, double usagePercentage,
+            float? usedMb, float? totalMb, double totalBytes)
         {
-            // Compute used bytes from MB (HardwareMonitorService provides MB values)
             double usedBytes = (usedMb ?? 0) * 1024.0 * 1024.0;
-            // Compute total bytes from MB if available, otherwise fall back to totalBytes
             double total = 0;
-            if ((totalMb ?? 0) > 0)
-                total = (double)(totalMb ?? 0) * 1024.0 * 1024.0;
-            else if (totalBytes > 0)
-                total = totalBytes;
+            if ((totalMb ?? 0) > 0) total = (double)(totalMb ?? 0) * 1024.0 * 1024.0;
+            else if (totalBytes > 0) total = totalBytes;
 
-            // Determine the percentage to display: use the computed percentage from used/total,
-            // but fall back to usagePercentage if we can't compute a meaningful ratio
             double perc = 0;
-            if (total > 0 && usedBytes > 0)
-                perc = (usedBytes / total) * 100.0;
-            else if (usagePercentage > 0)
-                perc = usagePercentage;
+            if (total > 0 && usedBytes > 0) perc = (usedBytes / total) * 100.0;
+            else if (usagePercentage > 0) perc = usagePercentage;
 
-            // Format used/total in GB if we have valid byte values, otherwise show percentage
             if (total > 0 && usedBytes > 0)
                 return $"{gpuName} {label}: {perc:F1}%\n{usedBytes / GiB:F2} / {total / GiB:F2} GB";
             return $"{gpuName} {label}: {perc:F1}%";

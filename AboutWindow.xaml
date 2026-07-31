@@ -1,7 +1,7 @@
 <Window x:Class="WinMeters.AboutWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="About WinMeters" Height="280" Width="440"
+        Title="About WinMeters" Width="440" Icon="pack://application:,,,/winmeters.png"
         SizeToContent="Height"
         WindowStartupLocation="CenterOwner" ResizeMode="NoResize"
         ShowInTaskbar="False">
@@ -24,6 +24,7 @@
         <TextBlock Grid.Row="0" x:Name="TxtBrand"
                    Text="WinMeters"
                    FontSize="24" FontWeight="SemiBold"
+                   Foreground="#FF0080FF"
                    Margin="0,4,0,0"/>
 
         <!-- Tagline: complements the brand. -->
@@ -36,8 +37,8 @@
 
         <!-- Version + Build row: side-by-side label/value pair. -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" Margin="0,2">
-            <TextBlock Text="Version: 2.5" FontSize="11" Width="70" />
-            <!-- <TextBlock x:Name="TxtVersion" Text="—" FontSize="11" /> -->
+            <TextBlock Text="Version:" FontSize="11" Width="70" />
+            <TextBlock x:Name="TxtVersion" Text="—" FontSize="11" />
         </StackPanel>
 
         <!-- .NET target framework row (so users can see at a glance which
@@ -54,19 +55,25 @@
              credits panel still being designed). The Ctrl+Alt+Shift+M chord
              matches the hotkey owned by Services/HotkeyService and bound
              to MainWindow.ToggleVisibility. -->
-        <TextBlock Grid.Row="4" x:Name="TxtFeatures" FontSize="11">
+        <TextBlock Grid.Row="4" x:Name="TxtFeatures" FontSize="11" Margin="0,2">
+            <LineBreak/>
             <Run Text="Features:" FontWeight="SemiBold"/>
             <LineBreak/>
             <Run Text="  • CPU &amp; RAM monitoring"/>
             <LineBreak/>
             <Run Text="  • Multi-GPU VRAM &amp; SRAM tracking"/>
             <LineBreak/>
-            <Run Text="  • Disk &amp; Network activity"/>
+            <Run Text="  • Disk &amp; Network activity monitoring"/>
             <LineBreak/>
-            <Run Text="  • Hardware temperatures"/>
+            <Run Text="  • Hardware temperatures monitoring"/>
             <LineBreak/>
-            <Run Text="  • Use Ctrl+Alt+Shift+M to hide/show interface" FontWeight="SemiBold"/>
         </TextBlock>
+
+        <!-- Hotkey hint: replaced the prior hardcoded "Ctrl+Alt+Shift+M" Run with a
+             code-behind-bound TextBlock so the About window always reflects the user's
+             actual saved chord from Settings \u2192 AppSettings.General.Hotkey, never a stale
+             default that drifted from HotkeyService. -->
+        <TextBlock Grid.Row="5" x:Name="TxtHotkey" FontSize="11" FontWeight="SemiBold" Margin="0,2"/>
 
         <!-- OK button: right-aligned at bottom (matches Windows About
              dialog convention). IsDefault=True so Enter closes the

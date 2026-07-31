@@ -1,83 +1,15 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <!--
-        Hand-built kil0bit visual theme (no ModernWfp NuGet). Mirrors the colours,
-        surface hierarchy, and iconic affordances of .Kilobit/OverlayWindow.cs so
-        WinMeters can render the same way with stock WPF.
-
-        Token brushes (kil0bit style):
-            ThemeBgBrush          — Window background (Win11 Settings dark).
-            ThemeCardBgBrush      — Surface 1 (cards, nav rail).
-            ThemeCardBorderBrush  — 1px semi transparent white border (rounded cards).
-            ThemeAccentBrush      — System accent (default #00CCFF; user editable
-                                    via _settings.Colors.Accent). Toggle / active nav.
-            ThemeAccentDimBrush   — Accent at low alpha for hover fills.
-            ThemeTextBrush        — Primary text (white).
-            ThemeSubtextBrush     — 70 percent opacity text for descriptions.
-            ThemeDangerBrush      — Quit / destructive action foreground.
-            ThemeMutedTextBrush   — 50 percent opacity text (placeholder / hint).
-
-        The accent brushes are static so changing _settings.Colors.Accent at
-        runtime re tints the active UI without a window close/open round trip.
-    -->
-
+    <!-- Theme token brushes -->
     <SolidColorBrush x:Key="ThemeBgBrush"          Color="#1F1F1F"/>
     <SolidColorBrush x:Key="ThemeCardBgBrush"      Color="#2D2D2D"/>
     <SolidColorBrush x:Key="ThemeCardBorderBrush"  Color="#1AFFFFFF"/>
-    <SolidColorBrush x:Key="ThemeAccentBrush" Color="#00CCFF"/>
+    <SolidColorBrush x:Key="ThemeAccentBrush"      Color="#00CCFF"/>
     <SolidColorBrush x:Key="ThemeAccentDimBrush"   Color="#3300CCFF"/>
     <SolidColorBrush x:Key="ThemeTextBrush"        Color="White"/>
-    <SolidColorBrush x:Key="ThemeSubtextBrush"     Color="#B3FFFFFF"/>
-    <SolidColorBrush x:Key="ThemeMutedTextBrush"   Color="#80FFFFFF"/>
-    <SolidColorBrush x:Key="ThemeDangerBrush"      Color="#D32F2F"/>
-    <SolidColorBrush x:Key="ThemeToggleTrackOff"  Color="#333333"/>
-    <SolidColorBrush x:Key="ThemeToggleTrackOn"   Color="#00CCFF"/>
-    <SolidColorBrush x:Key="ThemeToggleThumb"     Color="White"/>
 
-    <!--
-        WinMeters-bar token brushes. Migrated off MainWindow.xaml's inlined
-        hex/Foreground/Fill values so every colour the bar paints resolves
-        to a single source of truth in this dictionary. Kil0bit house
-        style: one brush per role, paired with a cluster comment so a
-        future reader can decide whether to recolour at source or override
-        per-control.
-
-            ThemeBarBgBrush              - MainBorder background (#CC202020;
-                                           80 percent alpha so the bar's
-                                           translucent overlay reads on top
-                                           of the user's taskbar / desktop).
-            ThemeBarBorderBrush          - MainBorder stroke (#44FFFFFF; 27
-                                           percent alpha 1px outline).
-            ThemeLabelBrush              - Grey labels (#AAAAAA). Replaces
-                                           LabelStyle.Foreground + IconStyle.Fill
-                                           and the NetArrow / DiskUpDown Path.Fill.
-            ThemeMetricCpuBrush          - CPU-bar value foreground (warm red
-                                           #FF6B6B). Used by MetricValueStyle.
-            ThemeMetricGpuBrush          - GPU temp / load foreground (teal
-                                           #4ECDC4). Inline-foreground on the
-                                           GpuTempText + GpuLoadText controls.
-            ThemeDiskReadBrush           - Disk read foreground (lime #44FF44).
-            ThemeDiskWriteBrush          - Disk write foreground (red #FF4444).
-            ThemeErrorBrush              - Inline validation error foreground
-                                           (Red). Backs the per-row
-                                           ErrorTextStyle in SettingsWindow.
-            ThemeBarTooltipBgBrush       - Bar ToolTip background (#FF202020).
-                                           Picked up by the App-level implicit
-                                           <Style TargetType="ToolTip"> so the
-                                           local MainWindow ToolTip style can
-                                           be deleted (single-ownership: the
-                                           theme owns ToolTip chrome).
-            ThemeBarTooltipBorderBrush   - Bar ToolTip border (#55555555).
-
-        Per-meter colour customisation (Cpu / Ram / Gpu / Net / Disk pies
-        plus the per-disk / per-network arrows) still flows through
-        AppSettings.Colors via ColorHelper.ParseBrush(_settings.Colors.X)
-        at runtime — the default hex strings in AppSettings.cs are aligned
-        to the values above so first-launch looks like the bar's static
-        chrome. User overrides through the SettingsWindow ColorDialog keep
-        working without the theme re-tinting.
-    -->
+    <!-- Bar token brushes (MainWindow.xaml) -->
     <SolidColorBrush x:Key="ThemeBarBgBrush"             Color="#CC202020"/>
     <SolidColorBrush x:Key="ThemeBarBorderBrush"         Color="#44FFFFFF"/>
     <SolidColorBrush x:Key="ThemeLabelBrush"             Color="#AAAAAA"/>
@@ -89,265 +21,85 @@
     <SolidColorBrush x:Key="ThemeBarTooltipBgBrush"      Color="#FF202020"/>
     <SolidColorBrush x:Key="ThemeBarTooltipBorderBrush"  Color="#55555555"/>
 
-    <!--
-        WinMeters primary body text style: Segoe UI, semibold body weight. Used for
-        section titles and toggle row labels. Falls back to Segoe UI when the
-        user installed fonts do not carry the Display variant.
-    -->
+    <!-- Bar meter styles (MainWindow.xaml) -->
+    <Style x:Key="WinMetersBarLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeLabelBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="Width" Value="24"/>
+        <Setter Property="Margin" Value="0,0,6,0"/>
+    </Style>
+
+    <Style x:Key="WinMetersBarValue" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+
+    <Style x:Key="WinMetersBarMetricValue" TargetType="TextBlock" BasedOn="{StaticResource WinMetersBarValue}">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeMetricCpuBrush}"/>
+    </Style>
+
+    <Style x:Key="WinMetersBarIcon" TargetType="Path">
+        <Setter Property="Fill" Value="{DynamicResource ThemeLabelBrush}"/>
+        <Setter Property="Height" Value="9"/>
+        <Setter Property="Width" Value="9"/>
+        <Setter Property="Stretch" Value="Uniform"/>
+    </Style>
+
+    <Style x:Key="WinMetersBarPieLabel" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
+        <Setter Property="FontSize" Value="8"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="Opacity" Value="0.7"/>
+        <Setter Property="IsHitTestVisible" Value="False"/>
+        <Setter Property="Effect">
+            <Setter.Value>
+                <DropShadowEffect BlurRadius="1" ShadowDepth="1" Color="Black"/>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="WinMetersBarGridRow" TargetType="Grid">
+        <Setter Property="Margin" Value="5,0,0,0"/>
+    </Style>
+
+    <!-- Base text style for headings/labels -->
     <Style x:Key="WinMetersTextHeading" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontWeight" Value="SemiBold"/>
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
     </Style>
 
-    <Style x:Key="WinMetersTextBody" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
-        <Setter Property="FontWeight" Value="Normal"/>
-        <Setter Property="Opacity" Value="0.85"/>
-    </Style>
-
-    <Style x:Key="WinMetersTextSub" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
-        <Setter Property="FontWeight" Value="Normal"/>
-        <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
-        <Setter Property="FontSize" Value="12.5"/>
-    </Style>
-
-    <Style x:Key="WinMetersTextHint" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="Foreground" Value="{DynamicResource ThemeMutedTextBrush}"/>
-        <Setter Property="FontSize" Value="11"/>
-    </Style>
-
-    <!--
-        Card surface: rounded corner Border following kil0bit SettingsWindow card
-        pattern. One Background / one BorderBrush / one CornerRadius. Reused
-        across Appearance, Monitoring, and the Home cards. Margin is left to the
-        consumer so the same card can be tiled in different layouts.
-    -->
-    <Style x:Key="WinMetersCard" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="8"/>
-        <Setter Property="Padding" Value="20,16"/>
-    </Style>
-
-    <Style x:Key="WinMetersCardCompact" TargetType="Border" BasedOn="{StaticResource WinMetersCard}">
-        <Setter Property="Padding" Value="16"/>
-        <Setter Property="CornerRadius" Value="8"/>
-    </Style>
-
-    <!--
-        Section header: kil0bit General / Monitoring / About titles
-        (FontSize 28 Semibold, Margin 0 0 0 24). Reused in each Settings page.
-    -->
-    <Style x:Key="WinMetersPageSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
-        <Setter Property="FontSize" Value="28"/>
-        <Setter Property="Margin" Value="0,0,0,24"/>
-    </Style>
-
-    <!--
-        Subsubsection header inside a card (Hardware Telemetry inside the
-        Monitoring card, for example). Smaller, butting tight against the
-        first toggle.
-    -->
-    <Style x:Key="WinMetersSubHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="Margin" Value="0,0,0,12"/>
-    </Style>
-
-    <!--
-        Nav rail item: a RadioButton re styled as a flat left pane selector. The
-        check glyph is replaced with a 3px left border that lights up in the
-        accent colour when IsChecked is true. Matches the kil0bit NavigationView
-        selected item visual.
-    -->
-    <!-- Nav rail RadioButton. Padding tightened from 14,8 to 10,8 so the
-         24px Segoe MDL2 Assets icon in each item sits comfortably to the
-         left of the label (was 14px which pushed the icon too far in).
-         Content is a DockPanel with a fixed-width icon block on the left
-         + the label filling the rest; when the rail is collapsed the
-         label's Visibility is set to Collapsed from code-behind and the
-         icon is all that remains visible. -->
-    <Style x:Key="WinMetersNavItem" TargetType="RadioButton">
-        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
-        <Setter Property="FontSize" Value="14"/>
-        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Padding" Value="10,8"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="RadioButton">
-                    <Border x:Name="NavBorder"
-                            Background="Transparent"
-                            BorderThickness="3,0,0,0"
-                            BorderBrush="Transparent"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="NavBorder" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
-                            <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-                        </Trigger>
-                        <MultiTrigger>
-                            <MultiTrigger.Conditions>
-                                <Condition Property="IsMouseOver" Value="True"/>
-                                <Condition Property="IsChecked" Value="False"/>
-                            </MultiTrigger.Conditions>
-                            <Setter TargetName="NavBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
-                        </MultiTrigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        Hamburger toggle for the collapsible nav rail. Slim 32x32 square
-        with a 4px corner radius that lights up with the dim accent hover
-        background when the cursor is over it (and stays lit while checked
-        so the user has feedback that the rail is in its collapsed state).
-        The control template is hand rolled so we get a chrome-less
-        ToggleButton (the WPF default has a heavy thumb / track that would
-        look out of place in the rail). Glyph is Segoe MDL2 Assets 0xE700
-        (hamburger three lines).
-    -->
-    <Style x:Key="WinMetersHamburgerButton" TargetType="ToggleButton">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        <Setter Property="Padding" Value="0"/>
-        <Setter Property="Width" Value="32"/>
-        <Setter Property="Height" Value="32"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="ToggleButton">
-                    <Border x:Name="HamburgerBorder"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"
-                            BorderThickness="{TemplateBinding BorderThickness}"
-                            CornerRadius="4">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="HamburgerBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="HamburgerBorder" Property="Background" Value="{DynamicResource ThemeAccentDimBrush}"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        WinMeters toggle switch look alike. Plain CheckBox with a 40x20 rounded
-        Border (the track) plus a 12x12 Thumb Border inside it. The Thumb is
-        reachable through Setter TargetName because descendant names in the
-        template root namescope are findable. No animation; Margin setter on
-        IsChecked snaps the thumb to the right edge.
-    -->
-    <Style x:Key="WinMetersToggleSwitch" TargetType="CheckBox">
-        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="CheckBox">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border x:Name="Track"
-                                Width="40" Height="20"
-                                CornerRadius="10"
-                                Background="{DynamicResource ThemeToggleTrackOff}"
-                                BorderBrush="#555555"
-                                BorderThickness="1">
-                            <Border x:Name="Thumb"
-                                    Width="12" Height="12" CornerRadius="6"
-                                    Background="{DynamicResource ThemeToggleThumb}"
-                                    HorizontalAlignment="Left"
-                                    VerticalAlignment="Center"
-                                    Margin="3,0,0,0"/>
-                        </Border>
-                        <ContentPresenter Margin="10,0,0,0" VerticalAlignment="Center"/>
-                    </StackPanel>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsChecked" Value="True">
-                            <Setter TargetName="Track" Property="Background"  Value="{DynamicResource ThemeToggleTrackOn}"/>
-                            <Setter TargetName="Track" Property="BorderBrush" Value="{DynamicResource ThemeToggleTrackOn}"/>
-                            <Setter TargetName="Thumb"  Property="Margin"      Value="22,0,0,0"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.5"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        WinMeters standard CheckBox: white checkmark + dash glyph against dark
-        chrome, teal outline on hover, dimmed Foreground when IsEnabled=False,
-        and keeps the WPF framework defaults (FocusVisualStyle, default
-        Padding, ContentAlignment) flowing through via BasedOn instead of
-        restating them per style.
-
-        The WPF framework default CheckBox template (Aero2) hardcodes
-        Fill="{x:Static SystemColors.ControlTextBrushKey}" on the CheckMark
-        Path, so any Foreground setter on the CheckBox only colours the
-        ContentPresenter label via property inheritance; the glyph itself
-        stays tinted by the system colour. This template replaces the default
-        so Stroke on the CheckMark + InderminateMark Path uses
-        TemplateBinding Foreground (the Data is open-line geometry, so
-        Stroke is the semantically correct Brush; aliased edge mode keeps
-        the 2px thickness crisp).
-
-        OuterBorder Background = TemplateBinding Background so the
-        Background setter on WinMetersCheckBox below flows through.
-        BorderBrush on WinMetersCheckBox = ThemeCardBorderBrush
-        (translucent 1px white) replaces WPF default ControlDarkBrushKey
-        system grey that would mud against ThemeBgBrush chrome. Hover state
-        paints OuterBorder BorderBrush with ThemeAccentBrush (the project signature
-        teal) instead of WPF default HighlightBrushKey blue, mirroring the
-        SelectedItem trigger on the meter-order ListBox. The IsEnabled false
-        Trigger re-tints Foreground with WPF default GrayTextBrushKey system
-        colour for the dimmed affordance.
-
-        RecognizesAccessKey="True" on the ContentPresenter parses
-        underscore-prefixed labels (_CPU, _RAM, _Disk) for Alt+letter access
-        without an explicit AccessText wrapper. Promoted out of
-        SettingsWindow.xaml so any future CheckBox in the app opts into the
-        same chrome with Style="{StaticResource WinMetersCheckBox}".
-    -->
+    <!-- CheckBox template: white checkmark on dark chrome, accent border on hover -->
     <ControlTemplate x:Key="WinMetersCheckBoxTemplate" TargetType="{x:Type CheckBox}">
         <BulletDecorator Background="Transparent">
             <BulletDecorator.Bullet>
                 <Grid Width="13" Height="13">
                     <Border x:Name="OuterBorder"
-                            BorderThickness="1"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="{TemplateBinding BorderBrush}"/>
+                        BorderThickness="1"
+                        Background="{TemplateBinding Background}"
+                        BorderBrush="{TemplateBinding BorderBrush}"/>
                     <Path x:Name="CheckMark"
-                          Stroke="{TemplateBinding Foreground}"
-                          StrokeThickness="2"
-                          Data="M 0,5 L 2,7 L 7,0"
-                          Stretch="None"
-                          Visibility="Collapsed"
-                          RenderOptions.EdgeMode="Aliased"/>
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Stroke="{TemplateBinding Foreground}"
+                        StrokeThickness="2"
+                        Data="M 0,5 L 2,7 L 7,0"
+                        Stretch="None"
+                        Visibility="Collapsed"
+                        RenderOptions.EdgeMode="Aliased"/>
                     <Path x:Name="InderminateMark"
-                          Stroke="{TemplateBinding Foreground}"
-                          StrokeThickness="2"
-                          Data="M 0,0 L 7,0"
-                          Stretch="None"
-                          Visibility="Collapsed"
-                          RenderOptions.EdgeMode="Aliased"/>
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Stroke="{TemplateBinding Foreground}"
+                        StrokeThickness="2"
+                        Data="M 0,0 L 7,0"
+                        Stretch="None"
+                        Visibility="Collapsed"
+                        RenderOptions.EdgeMode="Aliased"/>
                 </Grid>
             </BulletDecorator.Bullet>
             <ContentPresenter Margin="{TemplateBinding Padding}"
@@ -372,11 +124,7 @@
             </Trigger>
         </ControlTemplate.Triggers>
     </ControlTemplate>
-    <!--
-        Setters: Foreground + Background + BorderBrush propagate the themed
-        dark chrome; Template wires WinMetersCheckBoxTemplate so the
-        checkmark + dash Path strokes inherit ThemeTextBrush white.
-    -->
+
     <Style x:Key="WinMetersCheckBox" TargetType="CheckBox" BasedOn="{StaticResource {x:Type CheckBox}}">
         <Setter Property="FontSize" Value="9"/>
         <Setter Property="Margin" Value="4"/>
@@ -386,112 +134,7 @@
         <Setter Property="Template" Value="{StaticResource WinMetersCheckBoxTemplate}"/>
     </Style>
 
-    <!--
-        WinMeters primary action button. Flat surface, white foreground, subtle
-        accent border on hover. Used for the Save & Close button in the
-        settings footer.
-    -->
-    <Style x:Key="WinMetersPrimaryButton" TargetType="Button">
-        <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource ThemeAccentBrush}"/>
-        <Setter Property="FontFamily" Value="Segoe UI"/>
-        <Setter Property="FontWeight" Value="SemiBold"/>
-        <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Padding" Value="20,8"/>
-        <Setter Property="Cursor" Value="Hand"/>
-        <Setter Property="Template">
-            <Setter.Value>
-                <ControlTemplate TargetType="Button">
-                    <Border x:Name="BtnBorder"
-                            Background="{TemplateBinding Background}"
-                            BorderBrush="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="4"
-                            Padding="{TemplateBinding Padding}">
-                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
-                    </Border>
-                    <ControlTemplate.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="BtnBorder" Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
-                        </Trigger>
-                        <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="BtnBorder" Property="Opacity" Value="0.8"/>
-                        </Trigger>
-                        <Trigger Property="IsEnabled" Value="False">
-                            <Setter Property="Opacity" Value="0.5"/>
-                        </Trigger>
-                    </ControlTemplate.Triggers>
-                </ControlTemplate>
-            </Setter.Value>
-        </Setter>
-    </Style>
-
-    <!--
-        Secondary button: muted, used for Quit / Reset / Cancel actions.
-    -->
-    <Style x:Key="WinMetersSecondaryButton" TargetType="Button" BasedOn="{StaticResource WinMetersPrimaryButton}">
-        <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{DynamicResource ThemeSubtextBrush}"/>
-    </Style>
-
-    <Style x:Key="WinMetersDangerButton" TargetType="Button" BasedOn="{StaticResource WinMetersPrimaryButton}">
-        <Setter Property="Background" Value="{DynamicResource ThemeDangerBrush}"/>
-        <Setter Property="Foreground" Value="White"/>
-    </Style>
-
-    <!--
-        WinMetersComboBoxTemplate: replaces WPF's default Aero2 ComboBox
-        template so the dropdown chevron arrow Path's Fill + the popup
-        DropDownBorder's stroke + the ComboBoxItem hover/select all
-        source from the project theme brushes instead of SystemColors.
-
-        The WPF default ComboBox template (aero2) hardcodes three
-        SystemColors that clash against the dark ThemeBgBrush chrome:
-          1. The chevron arrow Path inside PART_ToggleButton uses
-             Fill={x:Static SystemColors.ControlTextBrushKey} — black
-             on Win11 dark, paints a foreign glyph against
-             ThemeCardBgBrush chrome.
-          2. The popup's DropDownBorder uses
-             BorderBrush={DynamicResource {x:Static SystemColors.WindowTextBrushKey}}
-             plus Background={DynamicResource {x:Static SystemColors.WindowBrushKey}}
-             — system chrome grey that mud against ThemeCardBorderBrush.
-          3. ComboBoxItem hover/select use
-             SystemColors.HighlightBrushKey — the OS selection blue,
-             not the project signature teal.
-
-        This template mirrors the WinMetersCheckBoxTemplate (723e317)
-        and WinMetersSliderTemplate (baf9df8) precedent: a simplified
-        visual tree that replaces the framework's complex states with
-        flat, theme-responsive visuals. Key bindings:
-          * ContentBorder spans both grid columns so the closed
-            display paints as one continuous surface. Background +
-            BorderBrush + BorderThickness + Padding all TemplateBind
-            so WinMetersComboBox's theme setters flow through.
-          * PART_ToggleButton's inner arrow Path Fill =
-            TemplateBinding Foreground so the chevron paints
-            ThemeTextBrush white. ArrowBorder's IsMouseOver trigger
-            paints ThemeAccentDimBrush so the chevron region gives
-            the same hover affordance as the meter-order ListBox.
-          * PART_Popup's DropDownBorder uses TemplateBinding
-            Background + BorderBrush + CornerRadius 4 to match
-            dialog cards + MaxHeight TemplateBinding
-            MaxDropDownHeight so the dropdown caps at the
-            framework's set limit + MinWidth bound to the templated
-            ComboBox's ActualWidth via RelativeSource binding so the
-            popup is at least as wide as the closed display.
-          * The dropdown rows paint via the WinMetersComboBoxItem
-            style below, installed through WinMetersComboBox's
-            ItemContainerStyle setter.
-
-        PART_ToggleButton's IsChecked is two-way bound to the
-        templated ComboBox's IsDropDownOpen so the framework's click
-        handler synchronises the popup state. ClickMode=Press makes
-        the popup open on mousedown rather than mouseup (standard
-        Windows combobox behaviour). AllowsTransparency=True lets
-        the popup Border render with its 4px CornerRadius (without
-        transparency, non-rectangular popup chrome is clipped to a
-        rectangle by the OS).
-    -->
+    <!-- ComboBox template: themed dropdown replacing Aero2 defaults -->
     <ControlTemplate x:Key="WinMetersComboBoxTemplate" TargetType="{x:Type ComboBox}">
         <Grid x:Name="MainGrid" SnapsToDevicePixels="True">
             <Grid.ColumnDefinitions>
@@ -568,20 +211,6 @@
         </ControlTemplate.Triggers>
     </ControlTemplate>
 
-    <!--
-        WinMetersComboBoxItem: dropdown row paint. Default ComboBoxItem
-        uses SystemColors.HighlightBrushKey (OS selection blue) on hover
-        and select, which would render the OS selection blue against our
-        dark chrome. This style replaces the ComboBoxItem template with a
-        flat Border + ContentPresenter + IsMouseOver + IsHighlighted
-        triggers. IsHighlighted (not IsSelected) is the correct trigger:
-        it fires for both keyboard navigation AND mouse hover, so the
-        active row paints ThemeAccentBrush for either interaction mode
-        (matching the WinMetersCheckBox hover affordance + the
-        WinMetersMenuItem select affordance). Pad the row with
-        TemplateBinding Padding so the WinMetersComboBoxItem.Padding
-        setter flows through (8,4).
-    -->
     <Style x:Key="WinMetersComboBoxItem" TargetType="{x:Type ComboBoxItem}" BasedOn="{StaticResource {x:Type ComboBoxItem}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
@@ -612,15 +241,6 @@
         </Setter>
     </Style>
 
-    <!--
-        WinMeters standard ComboBox: themed closed display + themed
-        chevron arrow + themed popup border + themed dropdown rows
-        via ItemContainerStyle, all flowing from one Style. The
-        underlying WinMetersComboBoxTemplate above replaces the
-        default chrome so the framework's hardcoded SystemColors
-        (chevron Fill, popup DropDownBorder stroke, ComboBoxItem
-        hover/select) all reach theme brushes via TemplateBinding.
-    -->
     <Style x:Key="WinMetersComboBox" TargetType="ComboBox" BasedOn="{StaticResource {x:Type ComboBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
@@ -634,14 +254,7 @@
         <Setter Property="Template" Value="{StaticResource WinMetersComboBoxTemplate}"/>
     </Style>
 
-    <!--
-        TextBox: dark surface, accent caret. Same BasedOn pattern as the
-        ComboBox style above — WPF's default TextBox ControlTemplate
-        contains the required PART_ScrollViewer / PART_ContentHost parts
-        the editor relies on, and an implicit-key setter-only style
-        without BasedOn would strip those and NRE the first time a
-        styled TextBox is instantiated.
-    -->
+    <!-- TextBox: dark surface, accent caret -->
     <Style x:Key="WinMetersTextBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
@@ -649,175 +262,12 @@
         <Setter Property="FontFamily" Value="Segoe UI"/>
         <Setter Property="FontSize" Value="12"/>
         <Setter Property="Padding" Value="6,3"/>
-        <Setter Property="MinHeight" Value="26"/>
+        <Setter Property="MinHeight" Value="20"/>
         <Setter Property="CaretBrush" Value="{DynamicResource ThemeAccentBrush}"/>
         <Setter Property="SelectionBrush" Value="{DynamicResource ThemeAccentDimBrush}"/>
     </Style>
 
-    <!--
-        Slider: accent track on dark surface. Same BasedOn pattern as the
-        ComboBox style above — WPF's default Slider ControlTemplate has
-        the Thumb, Track, and RepeatButton parts the gesture handlers
-        walk; without BasedOn those are null and PointerPressed on the
-        track throws NullReferenceException.
-        Custom WinMetersSliderTemplate below replaces the default
-        template so the Thumb.Background + Thumb.BorderBrush +
-        Track.DecreaseRepeatButton.Background + Track.IncreaseRepeatButton.Background
-        and TickBar.Fill all reach theme brushes via TemplateBinding.
-        WPF's default Slider template hardcodes those brushes to
-        SystemColors.ControlBrushKey + SystemColors.ControlLightLightBrushKey
-        which paint white against the dark ThemeBgBrush chrome. The template
-        here mirrors the WinMetersCheckBoxTemplate precedent (commit 723e317):
-        Grid with TopTickBar / Track (containing DecreaseRepeatButton +
-        IncreaseRepeatButton + Thumb) / BottomTickBar inside an OuterBorder.
-        DecreaseRepeatButton Background reaches the Foreground setter (so the
-        filled portion of the track paints the accent teal); the
-        IncreaseRepeatButton Background reaches the Slider Background setter
-        (so the unfilled portion blends into the dark chrome); the Thumb
-        Background + BorderBrush + Foreground cascade through together
-        via the IsMouseOver trigger so hover flips the thumb to ThemeAccentBrush
-        + BorderBrush to ThemeCardBorderBrush. TickBar.Fill uses TemplateBinding
-        Foreground so tick marks inherit the theme accent. MinHeight flows
-        through to the middle RowDefinition height.
-    -->
-    <ControlTemplate x:Key="WinMetersSliderTemplate" TargetType="{x:Type Slider}">
-        <Border x:Name="OuterBorder"
-                Background="{TemplateBinding Background}"
-                BorderBrush="{TemplateBinding BorderBrush}"
-                BorderThickness="1">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="{TemplateBinding MinHeight}"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
-                <TickBar x:Name="TopTickBar"
-                         Grid.Row="0"
-                         Fill="{TemplateBinding Foreground}"
-                         Height="4"
-                         Visibility="Collapsed"
-                         Placement="Top"/>
-                <TickBar x:Name="BottomTickBar"
-                         Grid.Row="2"
-                         Fill="{TemplateBinding Foreground}"
-                         Height="4"
-                         Visibility="Collapsed"
-                         Placement="Bottom"/>
-                <Track x:Name="PART_Track"
-                       Grid.Row="1"
-                       Orientation="Horizontal">
-                    <Track.DecreaseRepeatButton>
-                        <RepeatButton x:Name="DecreaseRepeatButton"
-                                          Background="{TemplateBinding Foreground}"
-                                          Focusable="False">
-                            <RepeatButton.Template>
-                                <ControlTemplate TargetType="RepeatButton">
-                                    <Border Background="{TemplateBinding Background}"/>
-                                </ControlTemplate>
-                            </RepeatButton.Template>
-                        </RepeatButton>
-                    </Track.DecreaseRepeatButton>
-                    <Track.IncreaseRepeatButton>
-                        <RepeatButton x:Name="IncreaseRepeatButton"
-                                          Background="{TemplateBinding Background}"
-                                          Focusable="False">
-                            <RepeatButton.Template>
-                                <ControlTemplate TargetType="RepeatButton">
-                                    <Border Background="{TemplateBinding Background}"/>
-                                </ControlTemplate>
-                            </RepeatButton.Template>
-                        </RepeatButton>
-                    </Track.IncreaseRepeatButton>
-                    <Track.Thumb>
-                        <Thumb x:Name="Thumb"
-                              Width="12" Height="18"
-                              Background="{TemplateBinding Foreground}"
-                              BorderBrush="{TemplateBinding BorderBrush}"
-                              BorderThickness="1"
-                              Focusable="False">
-                            <Thumb.Template>
-                                <ControlTemplate TargetType="Thumb">
-                                    <Border Background="{TemplateBinding Background}"
-                                            BorderBrush="{TemplateBinding BorderBrush}"
-                                            BorderThickness="{TemplateBinding BorderThickness}"/>
-                                </ControlTemplate>
-                            </Thumb.Template>
-                        </Thumb>
-                    </Track.Thumb>
-                </Track>
-            </Grid>
-        </Border>
-        <ControlTemplate.Triggers>
-            <Trigger Property="TickPlacement" Value="TopLeft">
-                <Setter TargetName="TopTickBar" Property="Visibility" Value="Visible"/>
-            </Trigger>
-            <Trigger Property="TickPlacement" Value="BottomRight">
-                <Setter TargetName="BottomTickBar" Property="Visibility" Value="Visible"/>
-            </Trigger>
-            <Trigger Property="TickPlacement" Value="Both">
-                <Setter TargetName="TopTickBar" Property="Visibility" Value="Visible"/>
-                <Setter TargetName="BottomTickBar" Property="Visibility" Value="Visible"/>
-            </Trigger>
-            <Trigger Property="IsMouseOver" Value="True">
-                <Setter TargetName="Thumb" Property="Background"
-                        Value="{DynamicResource ThemeAccentBrush}"/>
-            </Trigger>
-            <Trigger Property="IsEnabled" Value="False">
-                <Setter Property="Opacity" Value="0.5"/>
-            </Trigger>
-        </ControlTemplate.Triggers>
-    </ControlTemplate>
-    <Style x:Key="WinMetersAccentSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
-        <Setter Property="Foreground" Value="{DynamicResource ThemeAccentBrush}"/>
-        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource ThemeCardBorderBrush}"/>
-        <Setter Property="MinHeight" Value="24"/>
-        <Setter Property="IsMoveToPointEnabled" Value="True"/>
-        <!--
-            Mount the custom WinMetersSliderTemplate above so the Thumb paint
-            (currently hardcoded to SystemColors.ControlBrushKey in the WPF
-            default Slider template) and the unfilled-track paint inherit the
-            theme Background / Foreground / BorderBrush setters below.
-        -->
-        <Setter Property="Template" Value="{StaticResource WinMetersSliderTemplate}"/>
-    </Style>
-
-    <!--
-        WinMetersListBoxItem: themed ListBoxItem paint for dialog lists
-        (e.g. the meter-order reorder list in SettingsWindow). Paints
-        the WPF default ListBoxItem template (kept intact via BasedOn)
-        with theme brushes via Foreground / Background property setters
-        plus IsMouseOver + IsSelected + IsEnabled Triggers.
-
-        The default Foreground setter binds ThemeTextBrush (white) so
-        labels render white instead of WPF's default
-        SystemColors.ControlTextBrushKey (black on most Windows installs)
-        that would otherwise paint black against the dark ThemeBgBrush
-        ListBox chrome. The default Background setter is Transparent
-        so the ListBox's own ThemeBgBrush shows through in the resting
-        state (avoids a bright stripe).
-
-        Two Triggers (IsMouseOver + IsSelected) share the same setters
-        so a hovered (not yet selected) entry paints ThemeAccentBrush
-        background + ThemeTextBrush foreground exactly like a selected
-        entry. WPF's MultiTrigger only supports AND; iterating two
-        separate Trigger instances is the OR pattern, matching the
-        previous SettingsWindow.CreateMenuListBoxItemStyle C# helper.
-        When both conditions are true at once (mouse over a selected
-        entry) WPF applies the setters twice (idempotent, no flicker).
-        The IsEnabled trigger covers the rare disabled row case via
-        Opacity 0.5 (consistent with the WinMetersComboBoxItem /
-        WinMetersAccentSlider / WinMetersCheckBox IsEnabled handling).
-
-        BasedOn={StaticResource {x:Type ListBoxItem}} preserves the
-        framework's ContentPresenter + selection wiring so the WPF
-        default item template carries through unchanged; the style
-        does not redefine the ControlTemplate (unlike
-        WinMetersComboBoxItem, which does). Future ListBox controls
-        in the app opt into this paint with:
-            <ListBox ... ItemContainerStyle="{StaticResource WinMetersListBoxItem}"/>
-        No code-behind helper required.
-    -->
+    <!-- ListBoxItem: themed hover/select for dialog lists -->
     <Style x:Key="WinMetersListBoxItem" TargetType="{x:Type ListBoxItem}" BasedOn="{StaticResource {x:Type ListBoxItem}}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
         <Setter Property="Background" Value="Transparent"/>
@@ -836,101 +286,29 @@
         </Style.Triggers>
     </Style>
 
-    <!--
-        ================================================================
-        Settings dialog input styles
-        ================================================================
+    <!-- ===== Settings dialog input styles ===== -->
 
-        Compact, dialog-specific styles promoted out of
-        SettingsWindow.xaml's Window.Resources block so a future
-        window in the app opts into the same chrome with a single
-        StaticResource ref and no per-window shim layer. Each style
-        BasedOn's the closest theme-level relative (WinMetersTextBox
-        / WinMetersTextHeading / {x:Type Slider}) so the round-9
-        theme work (textbox caret/selection chrome, Segoe UI text
-        heading) carries through, then overrides just the
-        dialog-specific width / margin / font-size / alignment
-        values that the dialog layout needs.
-
-        Visual semantics are byte-equivalent to the previous
-        per-window shims: the WPF default Foreground / Background
-        property-inheritance chain still paints the same theme
-        brushes, and child setters (FontSize, Width, Margin, etc.)
-        win over the BasedOn parent's setters per WPF precedence.
-
-        Distinct from the theme's round-9 work:
-          * WinMetersPageSectionHeader (28pt Semibold kil0bit page
-            title) is a different visual scale from this
-            WinMetersSectionHeader (13pt Bold dialog section
-            header).
-          * WinMetersAccentSlider (round-9 accent slider with
-            MinHeight=24 + IsMoveToPointEnabled=True + the modern
-            WinMetersSliderTemplate) is a different visual /
-            interaction scale from this WinMetersSlider (WPF
-            default template + MinHeight=0 + IsMoveToPointEnabled=
-            False, matching the previous per-window SliderStyle
-            exactly).
-        The two pairs coexist so a caller picks the right scale
-        for the right context.
-    -->
-
-    <!--
-        WinMetersSectionHeader: settings-dialog section header (the
-        bold "General" / "Refresh Rates" / "Colors" / "Visibility" /
-        "Disk" / "Network" / "Meter Display Order" titles inside
-        the SettingsWindow). FontWeight=Bold + FontSize=13 +
-        Margin=0,6,0,4. Distinct from WinMetersPageSectionHeader
-        (28pt Semibold, used for the kil0bit page titles); this
-        smaller 13pt bold version is the legacy dialog's section
-        header scale. Future dialogs opt in with
-        Style="{StaticResource WinMetersSectionHeader}".
-    -->
     <Style x:Key="WinMetersSectionHeader" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="Bold"/>
         <Setter Property="FontSize" Value="13"/>
-        <Setter Property="Margin" Value="0,6,0,4"/>
+        <Setter Property="Margin" Value="0,6,0,6"/>
+        <Setter Property="Foreground" Value="#FF0080FF"/>
     </Style>
 
-    <!--
-        WinMetersSliderLabel: small label next to a settings-dialog
-        slider (the "Opacity:" / "Scale:" labels). FontSize=10 +
-        VerticalAlignment=Center. The Foreground + FontFamily +
-        default TextBlock focus wiring all cascade through from
-        the BasedOn WinMetersTextHeading.
-    -->
     <Style x:Key="WinMetersSliderLabel" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="10"/>
         <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
 
-    <!--
-        WinMetersRateLabel: small label next to a settings-dialog
-        rate input (the "CPU:" / "RAM:" / "Disk:" / "Net:" /
-        "CPU Temp:" / "GPU Temp:" / "VRAM:" / "SRAM:" labels).
-        FontSize=10 + Width=65 + HorizontalAlignment=Left +
-        Margin=0,0,4,2. The Width=65 reserves enough space for
-        the longest label "CPU Temp:" / "GPU Temp:" at 10pt Segoe
-        UI; the Margin separates the label from the adjacent
-        rate textbox.
-    -->
     <Style x:Key="WinMetersRateLabel" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="FontWeight" Value="Normal"/>
         <Setter Property="FontSize" Value="10"/>
-        <Setter Property="Width" Value="65"/>
+        <Setter Property="Width" Value="70"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
         <Setter Property="Margin" Value="0,0,4,2"/>
     </Style>
 
-    <!--
-        WinMetersErrorText: inline validation error text under a
-        settings-dialog rate input. Foreground=ThemeErrorBrush
-        (red) + FontSize=9 + Visibility=Collapsed (the rate
-        textbox shows it on validation failure via ShowError's
-        Visibility flip). Margin=0,-2,0,0 tucks it tightly under
-        the textbox without adding a vertical gap in the resting
-        (Collapsed) state.
-    -->
     <Style x:Key="WinMetersErrorText" TargetType="TextBlock" BasedOn="{StaticResource WinMetersTextHeading}">
         <Setter Property="Foreground" Value="{DynamicResource ThemeErrorBrush}"/>
         <Setter Property="FontSize" Value="9"/>
@@ -938,22 +316,8 @@
         <Setter Property="Margin" Value="0,-2,0,0"/>
     </Style>
 
-    <!--
-        WinMetersRateTextBox: settings-dialog rate input (the 8
-        numeric "Refresh Rates (ms)" textboxes). BasedOn the
-        theme-level WinMetersTextBox so the dialog rate inputs
-        inherit the modern textbox chrome (CaretBrush=ThemeAccentBrush
-        + SelectionBrush=ThemeAccentDimBrush + Foreground=ThemeTextBrush
-        + BorderBrush=ThemeCardBorderBrush + FontFamily=Segoe UI +
-        Padding=6,3 + MinHeight=26) for free. Overrides Width=55 +
-        FontSize=10 + HorizontalContentAlignment=Right +
-        HorizontalAlignment=Left + Margin=0,2 + Background=ThemeBgBrush
-        (NOT ThemeCardBgBrush — rate inputs sit inside the dialog body
-        which paints ThemeBgBrush, so blending matches the dialog
-        rather than the elevated card surface).
-    -->
     <Style x:Key="WinMetersRateTextBox" TargetType="TextBox" BasedOn="{StaticResource WinMetersTextBox}">
-        <Setter Property="Width" Value="55"/>
+        <Setter Property="Width" Value="50"/>
         <Setter Property="FontSize" Value="10"/>
         <Setter Property="HorizontalContentAlignment" Value="Right"/>
         <Setter Property="HorizontalAlignment" Value="Left"/>
@@ -961,30 +325,6 @@
         <Setter Property="Background" Value="{DynamicResource ThemeBgBrush}"/>
     </Style>
 
-    <!--
-        WinMetersSlider: settings-dialog slider (the Opacity + Scale
-        sliders at the top of the dialog). BasedOn the WPF default
-        Slider (NOT the theme-level WinMetersAccentSlider which
-        carries MinHeight=24 + IsMoveToPointEnabled=True + the
-        modern WinMetersSliderTemplate) so the dialog sliders keep
-        the WPF default MinHeight (0) and IsMoveToPointEnabled
-        (False), preserving the previous per-window SliderStyle
-        behaviour byte-for-byte. Overrides Width=100 + Margin=4,0
-        for the dialog's compact "label / slider / value-badge"
-        layout, Background=ThemeBgBrush + Foreground=ThemeTextBrush
-        so the rendered WPF default template paints the track
-        border dark (ThemeBgBrush via the template's
-        TemplateBinding Background) and the tick TickBar white
-        (ThemeTextBrush via the template's TemplateBinding
-        Foreground). The WPF default Slider template's Thumb
-        Background is hardcoded to SystemColors.ControlBrushKey
-        (NOT a TemplateBinding), so the thumb itself stays
-        system-colored (light grey on most Windows installs) —
-        the same visual the previous per-window SliderStyle
-        produced. A future commit can install
-        WinMetersSliderTemplate to upgrade the dialog sliders to
-        the modern flat thumb + accent track.
-    -->
     <Style x:Key="WinMetersSlider" TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
         <Setter Property="Width" Value="100"/>
         <Setter Property="Margin" Value="4,0"/>
@@ -992,86 +332,16 @@
         <Setter Property="Foreground" Value="{DynamicResource ThemeTextBrush}"/>
     </Style>
 
-    <!-- Time checkbox: dialog's emphasize-this-checkbox affordance. BasedOn
-         WinMetersCheckBox so it inherits Margin=4 + Foreground=ThemeTextBrush
-         + Background=ThemeBgBrush + BorderBrush=ThemeCardBorderBrush +
-         Template=WinMetersCheckBoxTemplate + every trigger. Override only
-         the FontSize (10 vs the WinMetersCheckBox default of 9). Per WPF's
-         child-setter-beats-parent-setter rule, the child's FontSize=10 wins
-         over the parent's FontSize=9. Future dark-chrome setters added to
-         WinMetersCheckBox propagate through automatically. Named "Time"
-         because ChkTime24H is the only current user, but the style is
-         reusable for any dialog checkbox that wants the slightly larger
-         font affordance. -->
     <Style x:Key="WinMetersTimeCheckBox" TargetType="CheckBox" BasedOn="{StaticResource WinMetersCheckBox}">
         <Setter Property="FontSize" Value="10"/>
     </Style>
 
-    <!-- Rate input group: StackPanel container that wraps a single rate
-         textbox + error textblock column in the dialog's Rate column grid.
-         Width=130 columns the label / slider / value-badge rows above and
-         gives the rate textbox (Width=55) room to breathe next to its
-         "Type: GHz / MB" hint label. Margin=2 adds a uniform gutter. No
-         BasedOn (StackPanel has no {x:Type StackPanel} theme style to
-         inherit from; the WPF default StackPanel is already chrome-free). -->
     <Style x:Key="WinMetersRateGroup" TargetType="StackPanel">
         <Setter Property="Width" Value="130"/>
         <Setter Property="Margin" Value="2"/>
     </Style>
 
-    <!-- Color swatch cell: 20x20 rounded rect with white border. Used for the
-         inline color picker swatch inside each Appearance card row. -->
-    <Style x:Key="WinMetersColorSwatch" TargetType="Border">
-        <Setter Property="Width" Value="20"/>
-        <Setter Property="Height" Value="20"/>
-        <Setter Property="CornerRadius" Value="3"/>
-        <Setter Property="BorderBrush" Value="White"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="Margin" Value="0,0,10,0"/>
-        <Setter Property="VerticalAlignment" Value="Center"/>
-    </Style>
-
-    <!--
-        WinMeters horizontal rule: 1px semi transparent white divider used at the
-        Settings dialog About / Project Links section boundaries. Lives in the
-        theme so any future window that wants the same divider inherits it
-        without re declaring.
-    -->
-    <Style x:Key="WinMetersHorizontalRule" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource ThemeCardBorderBrush}"/>
-        <Setter Property="Height" Value="1"/>
-        <Setter Property="Margin" Value="0,8,0,16"/>
-    </Style>
-
-    <!--
-        Info bar callout: kil0bit's "Performance Note" / "Welcome" accent left
-        border tinted surface. Used on the Home page to advertise the active
-        monitor.
-    -->
-    <Style x:Key="WinMetersInfoBar" TargetType="Border">
-        <Setter Property="Background" Value="{DynamicResource ThemeCardBgBrush}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource ThemeAccentBrush}"/>
-        <Setter Property="BorderThickness" Value="4,0,0,0"/>
-        <Setter Property="CornerRadius" Value="4"/>
-        <Setter Property="Padding" Value="16"/>
-    </Style>
-
-    <!--
-        Default ToolTip style applied to every ToolTip in the app
-        (the 5 nav rail RadioButtons, the MetricCard section-colour
-        pickers, and the inline validation error tooltips on the
-        numeric MaxValue / RefreshRate textboxes). Uses the bar
-        palette (opaque dark surface + grey border) at compact-bold
-        11pt Segoe UI so the dense per-metric tooltips read crisply
-        on top of the bar chrome and stay consistent across every
-        window rather than inheriting a card-paint feel that belongs
-        to the dialog cards. Drop shadow keeps the tooltip lifted
-        off whatever surface it points at. The ThemeBarTooltip brushes
-        were introduced in the Maximal colour recode and would
-        otherwise be defined-but-unused; wiring them here is what the
-        cluster comment at the top of the bar brush section has been
-        promising since the recode landed.
-    -->
+    <!-- Default ToolTip style -->
     <Style TargetType="ToolTip">
         <Setter Property="Background"     Value="{DynamicResource ThemeBarTooltipBgBrush}"/>
         <Setter Property="Foreground"     Value="{DynamicResource ThemeTextBrush}"/>
@@ -1085,18 +355,7 @@
         <Setter Property="Placement"      Value="MousePoint"/>
     </Style>
 
-    <!--
-        WinMeters thin collapsible vertical scrollbar. Matches the kil0bit
-        ModernWPF overlay scrollbar look: 8px wide, no end buttons, accent
-        thumb on a transparent track. Opacity sits at 0.4 when the
-        scrollbar is idle and fades to 1 on mouse enter / fades back to
-        0.4 on mouse leave (the "collapsible" feel; a 150ms CubicEase
-        EaseInOut animation on both directions instead of an instant
-        Opacity setter snap). Defined globally because the only
-        ScrollViewer in the app is the settings window's content
-        scroller; ListBox scrollbars inside the settings window also
-        inherit this look for consistency.
-    -->
+    <!-- Thin collapsible scrollbar -->
     <Style x:Key="WinMetersScrollBarThumb" TargetType="Thumb">
         <Setter Property="OverridesDefaultStyle" Value="True"/>
         <Setter Property="IsTabStop" Value="False"/>
@@ -1149,15 +408,6 @@
             </Setter.Value>
         </Setter>
         <Style.Triggers>
-            <!-- Mouse enter / leave fade: the Trigger.EnterActions /
-                 Trigger.ExitActions Storyboards replace the instant
-                 <Setter> snap with a 150ms CubicEase EaseInOut
-                 DoubleAnimation on the ScrollBar's own Opacity
-                 property. Leaving From unspecified means WPF picks up
-                 the current animated value at trigger time, so a
-                 rapid strip-mouse over and off the bar still ends at
-                 the resting 0.4 (or 1 on hover) without snapping
-                 through un animated intermediate frames. -->
             <Trigger Property="IsMouseOver" Value="True">
                 <Trigger.EnterActions>
                     <BeginStoryboard>

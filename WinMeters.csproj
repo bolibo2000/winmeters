@@ -3,6 +3,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows</TargetFramework>
+    <Version>2.5.2</Version>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
@@ -11,6 +12,8 @@
     <SkipCompilerExecutionForDesignTimeBuild>true</SkipCompilerExecutionForDesignTimeBuild>
     <!-- Application manifest: requires Administrator privileges so RegisterHotKey works in fullscreen games -->
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- Application icon used for the compiled executable and taskbar/Alt-Tab -->
+    <ApplicationIcon>winmeters.ico</ApplicationIcon>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)'=='Release'">
@@ -33,6 +36,16 @@
   <!-- Ensure Windows Forms integration is available at build and design time -->
   <ItemGroup>
     <FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" />
+  </ItemGroup>
+
+  <!-- Icon assets:
+       - winmeters.png is embedded as a WPF resource so window icons can load it
+         from the assembly via pack URI, avoiding single-file publish copy issues.
+       - winmeters.ico is copied to output/publish so the tray icon can load it. -->
+  <ItemGroup>
+    <None Remove="winmeters.png" />
+    <Resource Include="winmeters.png" />
+    <None Update="winmeters.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- Exclude the test project sources from WinMeters (and its WPF design-time wpftmp variant)
@@ -109,6 +122,18 @@
           BeforeTargets="CoreCompile"
           Condition="'$(DisableXmlCommentCheck)' != 'true' AND '$(DesignTimeBuild)' != 'true'">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Check-XmlComments.ps1&quot; -Path &quot;$(MSBuildThisFileDirectory)&quot;"
+          ContinueOnError="false" />
+  </Target>
+
+  <!-- Regenerate the application icon from the source PNG whenever the PNG changes.
+       Runs before the build so the ICO is up-to-date before ApplicationIcon is embedded.
+       Skipped during design-time builds to avoid spawning PowerShell in Visual Studio. -->
+  <Target Name="GenerateIcoFromPng"
+          BeforeTargets="BeforeBuild"
+          Inputs="$(MSBuildThisFileDirectory)winmeters.png"
+          Outputs="$(MSBuildThisFileDirectory)winmeters.ico"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)scripts\Convert-PngToIco.ps1&quot; -PngPath &quot;$(MSBuildThisFileDirectory)winmeters.png&quot; -IcoPath &quot;$(MSBuildThisFileDirectory)winmeters.ico&quot;"
           ContinueOnError="false" />
   </Target>
 

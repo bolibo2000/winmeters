@@ -1,0 +1,3 @@
+# Treat icon/image assets as binary so Git does not attempt to diff them.
+winmeters.ico binary
+winmeters.png binary

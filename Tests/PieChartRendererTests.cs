@@ -133,8 +133,8 @@ public class PieChartRendererTests
     [InlineData(1.5, 2)]   // 150%
     [InlineData(1.75, 3)]  // 175%
     [InlineData(2.0, 4)]   // 200%
-    [InlineData(2.25, 5)]  // 225% — no 2.25 slot; routes to the 200% bucket (idx 5 = ×2.0)
-    [InlineData(2.5, 6)]   // 250%
+    [InlineData(2.25, 5)]  // 225% — no 2.25 slot; routes to the 2.5× bucket (idx 5). The pre-existing iteration labelled this "the 2.0 bucket" because the implementation used to spread the (1.0, …, 2.25) ladder across 8 slots where 2.25 = idx 5 = ×2.0. We now use the canonical 7-slot WPF ladder pinned in MultiplierForBucket, so idx 5 = ×2.5.
+    [InlineData(2.5, 5)]   // 250%
     [InlineData(3.0, 6)]   // 300%
     [InlineData(3.5, 6)]   // 350% clamps to the 300% bucket
     [InlineData(5.0, 6)]   // far above the table clamps to the 300% bucket

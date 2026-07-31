@@ -1,7 +1,7 @@
 <Window x:Class="WinMeters.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="WinMeters Settings" Height="580" Width="540" WindowStartupLocation="CenterOwner"
+        Title="WinMeters Settings" Height="580" Width="540" WindowStartupLocation="CenterOwner" Icon="pack://application:,,,/winmeters.png"
         ResizeMode="NoResize" FocusManager.FocusedElement="{Binding ElementName=SliderOpacity}">
     <Window.Resources>
         <!--
@@ -17,35 +17,42 @@
             layer remains.
         -->
     </Window.Resources>
-    <Grid x:Name="RootGrid" Margin="10">
+    <Grid x:Name="RootGrid" Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-            <StackPanel Margin="4">
+            <StackPanel Margin="4,0,0,20">
                 <!-- General -->
                 <TextBlock Text="General" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel Margin="0,2">
                     <StackPanel Orientation="Horizontal">
-                        <TextBlock Text="Opacity:" Style="{StaticResource WinMetersSliderLabel}" Width="45"/>                                                <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0" TickFrequency="0.1" IsSnapToTickEnabled="True" Style="{StaticResource WinMetersSlider}" TabIndex="0"/>
+                        <TextBlock Text="Opacity:" Style="{StaticResource WinMetersSliderLabel}" Width="45"/>                                                <Slider x:Name="SliderOpacity" Minimum="0" Maximum="1.0" TickFrequency="0.05" IsSnapToTickEnabled="True" Style="{StaticResource WinMetersSlider}" TabIndex="0"/>
                         <TextBlock x:Name="TxtOpacity" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="100%"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="10,0,0,0">
-                        <TextBlock Text="Scale:" Style="{StaticResource WinMetersSliderLabel}" Width="35"/>                                                <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0" Style="{StaticResource WinMetersSlider}" TabIndex="1"/>
+                        <TextBlock Text="Scale:" Style="{StaticResource WinMetersSliderLabel}" Width="35"/>                                                <Slider x:Name="SliderScale" Minimum="0.5" Maximum="2.0" TickFrequency="0.1" IsSnapToTickEnabled="True" Style="{StaticResource WinMetersSlider}" TabIndex="1"/>
                         <TextBlock x:Name="TxtScale" Width="44" Margin="4,0" FontSize="10" TextAlignment="Left" Text="1.0×"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="10,0,0,0" VerticalAlignment="Center">
-                        <!-- ChkTime24H uses WinMetersTimeCheckBox (BasedOn=
-                             WinMetersCheckBox with FontSize=10 override) so the
-                             Foreground + Background + Margin auto-applied to
-                             the other 15 CheckBoxes cascade through it as
-                             future dark-chrome setters are added to
-                             WinMetersCheckBox. -->
-                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" Style="{StaticResource WinMetersTimeCheckBox}" VerticalAlignment="Center" TabIndex="25"/>
-                    </StackPanel>
                 </WrapPanel>
+
+                <!-- Thin horizontal divider (1px top border on a Border with no
+                     background). Opacity="0.22" on the dims the white
+                     ThemeTextBrush into a subtle hairline that's visible on
+                     the dark dialog chrome without competing with the section
+                     headers above/below. BorderThickness=0,1,0,0 is the DPI-
+                     safe way to draw a 1px line — a <Rectangle Height="1">
+                     would round to whatever pixel-snapping rule the local
+                     render tier enforces (could collapse to 0px on 175%
+                     DPI). The same shape repeats below between every
+                     consecutive pair of sections; see the bottom of this file
+                     for a "between every section" rationale. -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
 
                 <!-- Refresh Rates -->
                 <TextBlock Text="Refresh Rates (ms)" Style="{StaticResource WinMetersSectionHeader}"/>
@@ -71,12 +78,12 @@
                         <TextBlock x:Name="ErrRateNet" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource WinMetersRateGroup}">
-                        <TextBlock Text="CPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBlock Text="CPU Temp/Use:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateCpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="15"/>
                         <TextBlock x:Name="ErrRateCpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
                     <StackPanel Style="{StaticResource WinMetersRateGroup}">
-                        <TextBlock Text="GPU Temp:" Style="{StaticResource WinMetersRateLabel}"/>
+                        <TextBlock Text="GPU Temp/Use:" Style="{StaticResource WinMetersRateLabel}"/>
                         <TextBox x:Name="TxtRateGpuTemp" Style="{StaticResource WinMetersRateTextBox}" TabIndex="16"/>
                         <TextBlock x:Name="ErrRateGpuTemp" Style="{StaticResource WinMetersErrorText}"/>
                     </StackPanel>
@@ -92,9 +99,21 @@
                     </StackPanel>
                 </WrapPanel>
 
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
+
                 <!-- Colors -->
                 <TextBlock Text="Colors" Style="{StaticResource WinMetersSectionHeader}"/>
                 <WrapPanel x:Name="ColorsPanel" Orientation="Horizontal" ItemHeight="28" ItemWidth="200"/>
+
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
 
                 <!-- Visibility -->
                 <TextBlock Text="Visibility" Style="{StaticResource WinMetersSectionHeader}"/>
@@ -111,30 +130,34 @@
                          control so the tab cycle doesn't accidentally land on a
                          destructive Reset before the user has explored the
                          visibility choices. -->
-                    <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkLockPosition"      Content="_Lock Position"    Style="{StaticResource WinMetersCheckBox}" TabIndex="28"/>
-                        <CheckBox x:Name="ChkHideInFullscreen"  Content="Hide in _Fullscreen" Style="{StaticResource WinMetersCheckBox}" TabIndex="29"/>
-                        <CheckBox x:Name="ChkSnapToTaskbar"     Content="_Snap to Taskbar"  Style="{StaticResource WinMetersCheckBox}" TabIndex="30"/>
-                        <CheckBox x:Name="ChkKeepOnTop"         Content="_Keep on Top"      Style="{StaticResource WinMetersCheckBox}" TabIndex="31"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="ChkLockPosition"      Content="  Lock Position"    Style="{StaticResource WinMetersCheckBox}" TabIndex="28"/>
+                        <CheckBox x:Name="ChkHideInFullscreen"  Content="  Hide in Fullscreen" Style="{StaticResource WinMetersCheckBox}" TabIndex="29"/>
+                        <CheckBox x:Name="ChkSnapToTaskbar"     Content="  Snap to Taskbar"  Style="{StaticResource WinMetersCheckBox}" TabIndex="30"/>
+                        <CheckBox x:Name="ChkKeepOnTop"         Content="  Keep on Top"      Style="{StaticResource WinMetersCheckBox}" TabIndex="31"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkCpu" Content="_CPU" Style="{StaticResource WinMetersCheckBox}" TabIndex="6"/>
-                        <CheckBox x:Name="ChkRam" Content="_RAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="7"/>
-                        <CheckBox x:Name="ChkGpuDedicated" Content="_VRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="22"/>
-                        <CheckBox x:Name="ChkGpuShared" Content="_SRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="23"/>
-                        <CheckBox x:Name="ChkDisk" Content="_Disk" Style="{StaticResource WinMetersCheckBox}" TabIndex="8"/>
-                        <CheckBox x:Name="ChkNet" Content="_Net" Style="{StaticResource WinMetersCheckBox}" TabIndex="9"/>
-                        <CheckBox x:Name="ChkTime" Content="_Time" Style="{StaticResource WinMetersCheckBox}" TabIndex="24"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                        <CheckBox x:Name="ChkCpu" Content="  CPU Cores" Style="{StaticResource WinMetersCheckBox}" TabIndex="6"/>
+                        <CheckBox x:Name="ChkRam" Content="  RAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="7"/>
+                        <CheckBox x:Name="ChkGpuDedicated" Content="  VRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="22"/>
+                        <CheckBox x:Name="ChkGpuShared" Content="  SRAM" Style="{StaticResource WinMetersCheckBox}" TabIndex="23"/>
+                        <CheckBox x:Name="ChkDisk" Content="  Disk" Style="{StaticResource WinMetersCheckBox}" TabIndex="8"/>
+                        <CheckBox x:Name="ChkNet" Content="  Net" Style="{StaticResource WinMetersCheckBox}" TabIndex="9"/>
+                        <CheckBox x:Name="ChkTime" Content="  System Time" Style="{StaticResource WinMetersCheckBox}" TabIndex="24"/>
                     </StackPanel>
-                    <StackPanel Orientation="Horizontal">
-                        <CheckBox x:Name="ChkCombineCpu" Content="Combine _Logical Cores" Style="{StaticResource WinMetersCheckBox}" TabIndex="10"/>
-                        <CheckBox x:Name="ChkCpuTemp" Content="CPU _Temp" Style="{StaticResource WinMetersCheckBox}" TabIndex="17"/>
-                        <CheckBox x:Name="ChkGpuTemp" Content="_GPU Temp" Style="{StaticResource WinMetersCheckBox}" TabIndex="18"/>
-                        <CheckBox x:Name="ChkHardwareLoad" Content="H/W _Load" Style="{StaticResource WinMetersCheckBox}" TabIndex="21"/>
-                        <CheckBox x:Name="ChkEnableHardwareMonitor" Content="Enable _Hardware Monitor" Style="{StaticResource WinMetersCheckBox}" TabIndex="26"/>
-
+                    <StackPanel Orientation="Horizontal" Margin="0,5,0,0">
+                         <CheckBox x:Name="ChkCpuTemp" Content="  CPU Temp/Use" Style="{StaticResource WinMetersCheckBox}" TabIndex="17"/>
+                        <CheckBox x:Name="ChkGpuTemp" Content="  GPU Temp/Use" Style="{StaticResource WinMetersCheckBox}" TabIndex="18"/>
+                        <CheckBox x:Name="ChkCombineCpu" Content="  Combine Logical Cores" Style="{StaticResource WinMetersCheckBox}" TabIndex="10"/>
+                        <CheckBox x:Name="ChkTime24H" Content="24-Hour Time" Style="{StaticResource WinMetersTimeCheckBox}" VerticalAlignment="Center" TabIndex="25"/>
                     </StackPanel>
                 </WrapPanel>
+
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
 
                 <!-- Disk -->
                 <TextBlock Text="Disk" Style="{StaticResource WinMetersSectionHeader}"/>
@@ -162,6 +185,12 @@
                     <ComboBox x:Name="ComboDisk" Style="{StaticResource WinMetersComboBox}" FontSize="10" Width="120" TabIndex="11"/>
                 </StackPanel>
 
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
+
                 <!-- Network -->
                 <TextBlock Text="Network" Style="{StaticResource WinMetersSectionHeader}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,2">
@@ -170,6 +199,66 @@
                     <TextBlock Text="Interface:" FontSize="10" Foreground="{DynamicResource ThemeTextBrush}" VerticalAlignment="Center" Width="65" HorizontalAlignment="Right" Margin="0,0,4,0"/>
                     <ComboBox x:Name="ComboNetwork" Style="{StaticResource WinMetersComboBox}" FontSize="10" Width="160" TabIndex="12"/>
                 </StackPanel>
+
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
+
+                <!-- Hotkey -->
+                <!--
+                    Live status label updates on every TextChanged through TxtHotkey_TextChanged.
+                    The label shows the parsed (mods, vk) tuple as hex so an operator can verify
+                    the chord resolved cleanly without round-tripping through GetAsyncKeyState.
+                    TabIndex keeps the hotkey box ahead of the order-ListBox / Reset button
+                    (the latter is the destructive control, tabbed last by convention).
+                -->
+                <TextBlock Text="Hotkey" Style="{StaticResource WinMetersSectionHeader}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,2">
+                    <!--
+                        Compact label matches the existing slider / rate-label widths so the
+                        section reads as one visual unit (50px column). Inline FontSize=10
+                        matches the TravelOf TextBoxes on this dialog for visual consistency.
+                    -->
+                    <TextBlock Text="Chord:" Width="40" Margin="0,3,4,0" VerticalAlignment="Center" FontSize="10"
+                               Foreground="{DynamicResource ThemeTextBrush}"/>
+                    <!--
+                        TextBox inherits the dialog Foreground from the inherited
+                        Application.Resources ThemeBg brush, so we only need to override
+                        Background + BorderBrush for a chrome-coherent look on the dark
+                        dialog. The theme WinMetersRateTextBox style is narrower than we
+                        want for the chord itself (it's tuned for short numeric strings);
+                        inline overrides keep the same pattern instead of adding a new
+                        textbox style.
+                    -->
+                    <TextBox x:Name="TxtHotkey" Width="200" FontSize="10" TabIndex="26" VerticalContentAlignment="Center"
+                             Background="{DynamicResource ThemeBgBrush}"
+                             Foreground="{DynamicResource ThemeTextBrush}"
+                             BorderBrush="{DynamicResource ThemeTextBrush}"/>
+                    <!--
+                        "Default" button — one-click path back to the canonical chord (currently
+                        Ctrl+Alt+Shift+M, exposed as HotkeyService.DefaultHotkeyString) after a
+                        RegisterFailed collision event. TabIndex=33 places it after the meter-order
+                        list so the keyboard tab cycle still lands on the destructive global Reset
+                        last. The ToolTip draws on ThemeTextBrush so the message stays readable on
+                        the dark dialog chrome.
+                    -->
+                    <Button x:Name="BtnResetHotkey" Content="_Default" Margin="6,0,0,0" Padding="6,2"
+                            Foreground="{DynamicResource ThemeTextBrush}"
+                            Background="{DynamicResource ThemeBgBrush}"
+                            BorderBrush="{DynamicResource ThemeTextBrush}"
+                            Click="BtnResetHotkey_Click" TabIndex="33"
+                            ToolTip="Restore the hotkey chord to its default value (Ctrl+Alt+Shift+M)"/>
+                    <TextBlock x:Name="LblHotkeyStatus" Margin="6,3,0,0" VerticalAlignment="Center" FontSize="9"
+                               Foreground="{DynamicResource ThemeTextBrush}"/>
+                </StackPanel>
+
+                <!-- Section divider (same shape as above; see first occurrence). -->
+                <Border BorderBrush="{DynamicResource ThemeTextBrush}"
+                        BorderThickness="0,1,0,0"
+                        Opacity="0.22"
+                        Margin="0,10,0,10"/>
 
                 <!-- Meter Display Order -->
                 <TextBlock Text="Meter Display Order" Style="{StaticResource WinMetersSectionHeader}"/>

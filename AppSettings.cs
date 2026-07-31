@@ -11,22 +11,6 @@ public class AppSettings
     public ColorSettings Colors { get; set; } = new();
     public VisibilitySettings Visibility { get; set; } = new();
     public RateSettings Rates { get; set; } = new();
-    public MaxValueSettings MaxValues { get; set; } = new();
-    // Per-meter section color tokens, keyed by the canonical meter short key
-    // (Cpu / Ram / Gpu / Net / Disk). One entry per meter -- replaces the older
-    // 14-swatch combo editor that lived on the Appearance page. Defaults were
-    // chosen for maximum hue separation on a dark background. Persisted across
-    // saves so any future per-meter colour affordance can drop in without
-    // touching settings.json -- the current SettingsWindow does not edit these
-    // directly, but the renderer honours them via Settings.Colors.
-    public Dictionary<string, string> SectionColors { get; set; } = new(StringComparer.Ordinal)
-    {
-        ["Cpu"]  = "#FFFF6B6B",
-        ["Ram"]  = "#FF4ECDC4",
-        ["Gpu"]  = "#FF95E1D3",
-        ["Net"]  = "#FF6C5CE7",
-        ["Disk"] = "#FFFFEAA7",
-    };
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
     private static readonly string BaseDir = Path.GetDirectoryName(Environment.ProcessPath ?? string.Empty) ?? AppDomain.CurrentDomain.BaseDirectory;
@@ -40,11 +24,7 @@ public class AppSettings
 
         WinMeters.Log.D("Load: Primary settings failed, trying backup...");
         settings = TryLoadFromFile(BackupPath);
-        if (settings is not null)
-        {
-            settings.Save();
-            return settings;
-        }
+        if (settings is not null) { settings.Save(); return settings; }
 
         WinMeters.Log.D("Load: No valid settings found, creating defaults.");
         var defaults = new AppSettings();
@@ -55,13 +35,11 @@ public class AppSettings
     private static AppSettings? TryLoadFromFile(string path)
     {
         if (!File.Exists(path)) return null;
-
         try
         {
             string json = File.ReadAllText(path);
             var settings = JsonSerializer.Deserialize<AppSettings>(json);
-            if (settings is not null)
-                MigrateSettings(settings, json);
+            if (settings is not null) MigrateSettings(settings, json);
             return settings;
         }
         catch (Exception ex)
@@ -73,30 +51,24 @@ public class AppSettings
 
     private static void MigrateSettings(AppSettings settings, string rawJson)
     {
-        // Older settings.json files lack the MaxValues / SectionColors keys
-        // (added in the per-meter refactor) -- seed them with the current
-        // defaults so the bar's per-meter normalization + section-color
-        // state never crashes on stale files. Visibility / Rate / Color
-        // legacy fields are the renderer's source of truth and stay
-        // untouched here.
-        if (!Has(rawJson, "MaxValues"))
-        {
-            settings.MaxValues = new MaxValueSettings();
-        }
-        if (!Has(rawJson, "SectionColors"))
-        {
-            settings.SectionColors = new Dictionary<string, string>(StringComparer.Ordinal)
-            {
-                ["Cpu"]  = "#FFFF6B6B",
-                ["Ram"]  = "#FF4ECDC4",
-                ["Gpu"]  = "#FF95E1D3",
-                ["Net"]  = "#FF6C5CE7",
-                ["Disk"] = "#FFFFEAA7",
-            };
-        }
+        // We still use a fast substring probe for the cheap "is this property present at all"
+        // gate (cheap; short-circuits the bulk of newer-field checks on modern saves) but the
+        // actual *value* extraction below now goes through JsonDocument. The previous hand-rolled
+        // TryReadBool / TryReadString were IndexOf/substring scans that mishandled escaped quotes
+        // or a hex value happening to contain an int token inside it.
+        using var doc = InitializeJsonDocument(rawJson);
+        // TryGetProperty on a default(JsonElement) throws InvalidOperationException, so guard
+        // every structured read with the same `canReadStructured` predicate. The substring
+        // `Has(rawJson, ...)` checks below are still safe even when doc is null. Note the
+        // substring path can no-op cleanly (e.g. it never shadows DefaultSectionColors /
+        // MaxValues territory either) when structured data is unavailable; rolled up there.
+        bool canReadStructured = doc is not null && doc.RootElement.ValueKind == JsonValueKind.Object;
+        var root = doc is null ? default : doc.RootElement;
+        var colors = canReadStructured && root.TryGetProperty("Colors", out var cEl) && cEl.ValueKind == JsonValueKind.Object ? cEl : default;
+        var window = canReadStructured && root.TryGetProperty("Window", out var wEl) && wEl.ValueKind == JsonValueKind.Object ? wEl : default;
 
-        // Migrate legacy MeterOrder keys (older versions used human-readable labels)
-        // to the canonical short keys the rest of the app uses.
+        static bool Has(string raw, string token) => raw.Contains(token, StringComparison.OrdinalIgnoreCase);
+
         var legacyKey = new Dictionary<string, string>(StringComparer.Ordinal)
         {
             ["Cpu Temp"] = "CpuTemp",
@@ -109,15 +81,9 @@ public class AppSettings
         for (int i = 0; i < settings.General.MeterOrder.Count; i++)
         {
             settings.General.MeterOrder[i] = legacyKey.TryGetValue(settings.General.MeterOrder[i], out var mapped)
-                ? mapped
-                : settings.General.MeterOrder[i];
+                ? mapped : settings.General.MeterOrder[i];
         }
-
-        // Deduplicate the list to ensure clean settings.
         settings.General.MeterOrder = settings.General.MeterOrder.Distinct().ToList();
-
-        // Apply defaults for fields absent from the JSON — indicates an older settings file.
-        static bool Has(string raw, string token) => raw.Contains(token, StringComparison.OrdinalIgnoreCase);
 
         if (!Has(rawJson, "ShowGpuDedicated")) settings.Visibility.ShowGpuDedicated = true;
         if (!Has(rawJson, "ShowGpuShared"))    settings.Visibility.ShowGpuShared    = true;
@@ -132,117 +98,93 @@ public class AppSettings
         if (!Has(rawJson, "Time24H"))   settings.General.Time24H       = true;
         if (!Has(rawJson, "TimeText"))  settings.Colors.TimeText       = "#FFD54F";
 
-        // Migrate Colors.Background default from "#FF202020" (opaque
-        // dark) to "#CC202020" (translucent dark) so the bar's
-        // MainBorder matches the new ThemeBarBgBrush + the original
-        // MainWindow.xaml translucent intent (see git log / blame
-        // for the corresponding commit on
-        // feature/metriccard-and-wpfui-toggle). Users who never
-        // customised Background saw the opaque pre-recode default;
-        // rebasing their explicit "#FF202020" to "#CC202020" on next
-        // load avoids a silent visual change at upgrade. Users who
-        // DID customise to any other hex keep their value untouched
-        // — case-insensitive equality against the legacy default is
-        // the gate, so hand-edited settings.json files with lowercase
-        // "#ff202020" still rebase while anything else passes through
-        // unchanged.
-        if (Has(rawJson, "Background"))
+        if (Has(rawJson, "Background") && colors.ValueKind == JsonValueKind.Object)
         {
-            // Trim before the case-insensitive equality so hand-edited
-            // values like "#FF202020\n" or " #FF202020" still match the
-            // legacy default; the rule is value-aware, not byte-exact.
-            string? legacyBg = TryReadString(rawJson, "Background")?.Trim();
+            // JsonDocument returns null for explicit JSON null without throwing out of GetString,
+            // matching the legacy TryReadString behavior for {"Background":null} — preserving the
+            // pinned "BackgroundIsNull leaves Background null" test contract. The
+            // colors.ValueKind == Object guard above is what makes this safe when doc is null /
+            // root is not an Object — without it colors would be a default(JsonElement) whose
+            // TryGetProperty throws InvalidOperationException.
+            string? legacyBg = colors.TryGetProperty("Background", out var bgEl) ? bgEl.GetString() : null;
+            legacyBg = legacyBg?.Trim();
             if (string.Equals(legacyBg, "#FF202020", StringComparison.OrdinalIgnoreCase))
                 settings.Colors.Background = "#CC202020";
         }
 
-        // Both this rule's rebase target hex and ColorSettings.Background's
-        // default initializer must mirror ThemeBarBgBrush in
-        // Themes/WinMetersTheme.xaml. If you change one, change the other.
-
         EnsureMeterOrderEntry(settings.General.MeterOrder, "Time", afterKey: null);
 
-        // StickToTaskbar / monitor migration — old files used DockOnTaskbar + WindowMode;
-        // honour the legacy DockOnTaskbar where present and default to "stuck" otherwise
-        // so first-launch behaviour matches the prior AppBar default.
-        if (Has(rawJson, "DockOnTaskbar"))
+        if (Has(rawJson, "DockOnTaskbar") && canReadStructured)
         {
-            // The user had an explicit preference encoded as DockOnTaskbar in the legacy
-            // JSON; mirror it into the new field. Bool.TryParse keeps us safe against
-            // hand-edited files that carry a non-boolean token here.
-            bool legacyDock = TryReadBool(rawJson, "DockOnTaskbar", defaultValue: true);
+            // The legacy field lived at the *top level* of the JSON, not under Window. canReadStructured
+            // gates the root.TryGetProperty inside JsonReadBool — falls back to defaultValue when the
+            // document is unparseable.
+            bool legacyDock = JsonReadBool(root, "DockOnTaskbar", defaultValue: true);
             settings.Window.StickToTaskbar = legacyDock;
         }
-        if (Has(rawJson, "WindowMode"))
+        if (Has(rawJson, "WindowMode") && canReadStructured)
         {
-            // "Floating" => unstick; anything else (including "AppBar") => stuck.
-            // Default to stuck if we cannot parse the token so we match the kil0bit default.
-            string legacyMode = TryReadString(rawJson, "WindowMode") ?? "AppBar";
+            string legacyMode = JsonReadString(root, "WindowMode") ?? "AppBar";
             bool legacyFloating = legacyMode.Equals("Floating", StringComparison.OrdinalIgnoreCase);
-            // Only override if DockOnTaskbar wasn't also present (DockOnTaskbar wins if both).
             if (!Has(rawJson, "DockOnTaskbar"))
                 settings.Window.StickToTaskbar = !legacyFloating;
         }
         if (!Has(rawJson, "MonitorIndex"))
             settings.Window.MonitorIndex = 0;
-        // Clamp a bogus value from a corrupted settings file rather than crash later.
         if (settings.Window.MonitorIndex < 0)
             settings.Window.MonitorIndex = 0;
     }
 
     /// <summary>
-    /// Best-effort bool read from a raw JSON token. Falls back to
-    /// <paramref name="defaultValue"/> when the token is missing or not a clean
-    /// JSON boolean. Walks a 32-char window after the key so we don't pick up
-    /// accidental substrings.
+    /// Tolerant parse of the raw JSON document. Malformed JSON (a corrupt backup file, partial
+    /// save mid-write, etc.) runs through MigrateSettings' cheap "Has(rawJson, …)" substring
+    /// checks but the JsonDocument value extraction gracefully falls back to defaults instead
+    /// of throwing JsonException out of <see cref="Load"/>.
     /// </summary>
-    private static bool TryReadBool(string raw, string key, bool defaultValue)
+    private static JsonDocument? InitializeJsonDocument(string rawJson)
     {
-        int idx = raw.IndexOf(key, StringComparison.Ordinal);
-        if (idx < 0) return defaultValue;
-        // Walk past the key + colon and any whitespace to find the literal.
-        int scan = idx + key.Length;
-        while (scan < raw.Length && (raw[scan] == ':' || char.IsWhiteSpace(raw[scan]))) scan++;
-        if (scan >= raw.Length) return defaultValue;
-        if (raw[scan] == 't' || raw[scan] == 'T') return true;
-        if (raw[scan] == 'f' || raw[scan] == 'F') return false;
+        try { return JsonDocument.Parse(rawJson); }
+        catch (Exception ex) { WinMeters.Log.D($"AppSettings.InitializeJsonDocument: {ex.Message}"); return null; }
+    }
+
+    private static bool JsonReadBool(in JsonElement root, string key, bool defaultValue)
+    {
+        if (!root.TryGetProperty(key, out var el)) return defaultValue;
+        bool hasTrue = el.ValueKind == JsonValueKind.True;
+        bool hasFalse = el.ValueKind == JsonValueKind.False;
+        if (hasTrue) return true;
+        if (hasFalse) return false;
+        // Be faithful to the legacy behavior: any non-bool value (string "true"/"false",
+        // numeric, null) also returns true if the first detected character is t/T, false if f/F.
+        string? s = el.ValueKind == JsonValueKind.String ? el.GetString() : null;
+        if (!string.IsNullOrEmpty(s))
+        {
+            switch (char.ToLowerInvariant(s[0]))
+            {
+                case 't': return true;
+                case 'f': return false;
+            }
+            if (bool.TryParse(s, out var parsed)) return parsed;
+        }
         return defaultValue;
     }
 
-    /// <summary>
-    /// Naive string-token read for legacy <c>WindowMode</c> etc. Looks for
-    /// <c>"&lt;key&gt;" : "&lt;value&gt;"</c> and returns the value, or
-    /// <c>null</c> if no clean match exists.
-    /// </summary>
-    private static string? TryReadString(string raw, string key)
+    private static string? JsonReadString(in JsonElement root, string key)
     {
-        string token = $"\"{key}\"";
-        int idx = raw.IndexOf(token, StringComparison.Ordinal);
-        if (idx < 0) return null;
-        int colon = raw.IndexOf(':', idx + token.Length);
-        if (colon < 0) return null;
-        int firstQuote = raw.IndexOf('"', colon + 1);
-        if (firstQuote < 0) return null;
-        int secondQuote = raw.IndexOf('"', firstQuote + 1);
-        if (secondQuote < 0) return null;
-        return raw.Substring(firstQuote + 1, secondQuote - firstQuote - 1);
+        if (!root.TryGetProperty(key, out var el)) return null;
+        return el.ValueKind switch
+        {
+            JsonValueKind.String => el.GetString(),
+            JsonValueKind.Null => null,
+            _ => el.GetRawText() // legacy hand scanner returned whatever was between the quotes; raw text keeps parity for non-string scalars.
+        };
     }
 
     private static void EnsureMeterOrderEntry(List<string> order, string key, string? afterKey)
     {
         if (order.Contains(key)) return;
-
-        int insertAt;
-        if (afterKey is null)
-        {
-            insertAt = order.Count;
-        }
-        else
-        {
-            // -1 + 1 = 0 won't fire here because null branch was taken first.
-            insertAt = order.IndexOf(afterKey) + 1;
-            if (insertAt <= 0) insertAt = order.Count;
-        }
+        int insertAt = afterKey is null ? order.Count : order.IndexOf(afterKey) + 1;
+        if (insertAt <= 0) insertAt = order.Count;
         order.Insert(insertAt, key);
     }
 
@@ -253,15 +195,11 @@ public class AppSettings
             if (File.Exists(SettingsPath))
             {
                 try { File.Copy(SettingsPath, BackupPath, overwrite: true); }
-                catch (Exception ex) { WinMeters.Log.D($"Save: Failed to create backup: {ex.Message}"); }
+                catch (Exception ex) { WinMeters.Log.D($"Save: backup failed: {ex.Message}"); }
             }
-
             File.WriteAllText(SettingsPath, JsonSerializer.Serialize(this, JsonOptions));
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"Save: failed to write settings: {ex}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"Save: {ex}"); }
     }
 
     public class GeneralSettings
@@ -269,75 +207,40 @@ public class AppSettings
         public int RefreshRateMs { get; set; } = 1000;
         public double Opacity { get; set; } = 1.0;
         public double Scale { get; set; } = 1.0;
-        /// <summary>
-        /// WinMeters-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
-        /// WinMeters-style “Keep on Top” toggle. Drives <c>this.Topmost</c> on the Bar's
-        /// WPF Window and gates the float-mode EnforceZOrder timer. Mirrors kil0bit's
-        /// <c>_config.Config.AlwaysOnTop</c>; default true to preserve WinMeters's
-        /// pre-toggle behaviour (TOPMOST + periodic re-assertion).
-        /// </summary>
         public bool KeepOnTop { get; set; } = true;
-        /// <summary>
-        /// WinMeters-style “Hide in Fullscreen” toggle. When true and a fullscreen app
-        /// is the foreground, the bar is collapsed. Mirror kil0bit's
-        /// <c>_config.Config.HideOnFullscreen</c>. Dock-mode fullscreen detection
-        /// rides on the existing AppBarService ABN_FULLSCREENAPP handler; floating
-        /// mode rides on a WM_ACTIVATEAPP hook in MainWindow (borderless-maximised
-        /// detection -- same heuristic as kil0bit).
-        /// </summary>
         public bool HideInFullscreen { get; set; } = false;
         public string? NetworkInterfaceName { get; set; }
         public string DiskInstanceName { get; set; } = "_Total";
         public bool CombineLogicalCores { get; set; } = true;
         public List<string> MeterOrder { get; set; } = ["Cpu", "CpuTemp", "GpuTemp", "GpuDedicated", "GpuShared", "Ram", "Disk", "Net", "Time"];
-        /// <summary>
-        /// Whether the SettingsWindow left rail is in its collapsed state
-        /// (icons only, 48px wide). Persisted across SettingsWindow
-        /// openings so the user doesn't have to re-collapse the rail
-        /// every time they open settings. Defaults to false (expanded)
-        /// to match the kil0bit NavigationView's first-open behaviour.
-        /// </summary>
         public bool NavRailCollapsed { get; set; } = false;
         public bool EnableHardwareMonitor { get; set; } = true;
         public bool Time24H { get; set; } = true;
+        /// <summary>
+        /// Global hotkey chord in <c>"[Mods+]Key"</c> form (e.g. <c>"Ctrl+Shift+M"</c>,
+        /// <c>"Alt+Shift+H"</c>). Defaults to the historical hard-coded
+        /// <c>"Ctrl+Alt+Shift+M"</c>. Resolved by
+        /// <see cref="WinMeters.Services.HotkeyService.ParseHotkeyString"/> at register
+        /// time — unrecognized multi-character tokens (e.g. <c>"F12"</c>) log a warning
+        /// and fall back to <c>VK_M</c> rather than trapping the user on a silent no-op.
+        /// </summary>
+        public string Hotkey { get; set; } = "Ctrl+Alt+Shift+M";
     }
 
     public class WindowSettings
     {
         public bool LockPosition { get; set; } = false;
-        /// <summary>
-        /// Single kil0bit-style flag. When <c>true</c> the window is parented to the
-        /// shell taskbar (registered as an appbar) and Y-centring is enforced inside
-        /// the WndProc whenever the shell repositions us. When <c>false</c> the bar
-        /// is a free-floating window whose X/Y are honoured verbatim.
-        /// </summary>
         public bool StickToTaskbar { get; set; } = true;
         public double? PositionX { get; set; }
         public double? PositionY { get; set; }
         public double Height { get; set; }
         public bool IsHiddenByUser { get; set; }
-        /// <summary>
-        /// Legacy monitor hint. Not consumed by the post-migration code path —
-        /// kept only so older settings.json files load without losing data. New
-        /// installs rely on whatever monitor the window is currently on, matching
-        /// kil0bit's behaviour.
-        /// </summary>
         public int MonitorIndex { get; set; } = 0;
     }
 
     public class ColorSettings
     {
-        /// <summary>
-        /// Accent color used for kil0bit-style UI affordances: focused nav-rail item,
-        /// ToggleSwitch track (on), button accents, link underline. Mirrors kil0bit's
-        /// <c>Config.AccentColorHex</c>; default #00CCFF (kil0bit's default accent).
-        /// Editing this updates the theme; live-preview re-applies on the open dialog.
-        /// </summary>
         public string Accent { get; set; } = "#00CCFF";
-        // Must mirror ThemeBarBgBrush hex in Themes/WinMetersTheme.xaml;
-        // the MigrateSettings rebase rule below rewrites the legacy
-        // "#FF202020" value to match this initializer's "#CC202020"
-        // for pre-recode upgrades.
         public string Background { get; set; } = "#CC202020";
         public string Border { get; set; } = "#44FFFFFF";
         public double BorderThickness { get; set; }
@@ -387,21 +290,4 @@ public class AppSettings
         public int? GpuShared { get; set; }
     }
 
-    /// <summary>
-    /// Per-meter max-value pairs (one per logical meter) used to normalise the
-    /// bar fill when one is configured. CPU / RAM / GPU default to 100
-    /// (percentage-bounded); Net and Disk default to 0 (absolute KB/s -- the
-    /// bar grows them at runtime based on the user's read / write activity).
-    /// Retained on the data model so any future per-meter Max affordance can
-    /// drop in without touching settings.json -- no SettingsWindow UI edits
-    /// these directly today.
-    /// </summary>
-    public class MaxValueSettings
-    {
-        public double Cpu { get; set; } = 100;
-        public double Ram { get; set; } = 100;
-        public double Gpu { get; set; } = 100;
-        public double Net { get; set; } = 0;
-        public double Disk { get; set; } = 0;
-    }
 }

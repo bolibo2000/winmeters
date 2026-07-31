@@ -1,3 +1,32 @@
+// IMPORTANT — CHECKBOX ALIAS DISCIPLINE:
+//
+// This file keeps TWO usings for System.Windows.Controls:
+//
+//   using System.Windows.Controls;       // exposes TextBlock, StackPanel, Grid, Border, … directly
+//   using WnControls = System.Windows.Controls;  // expose via alias for collision-prone references
+//
+// The plain using is what enables the bare `TextBlock` / `StackPanel` / `Grid`
+// references throughout this file (otherwise we'd need `WnControls.TextBlock`
+// everywhere, ~120 lines of noise). It is ALSO what triggered the CS0104
+// "ambiguous reference" when an unqualified `CheckBox` collided with the
+// `WnForms.CheckBox` brought in by the conditional `using
+// WnForms = System.Windows.Forms;` at design-time.
+//
+// Therefore: any WPF control type that has a same-name WinForms counterpart
+// (CheckBox today; ComboBox, Button, TextBox for symmetry) MUST be referenced
+// as `WnControls.CheckBox` etc. — never unqualified. The qualifying `WnControls.`
+// alias wins over the plain using, so the design-time ambiguity never resurfaces.
+// The WnControls qualifier explicitly annotates every collision-prone reference
+// in this file (PopulateHotkey's TxtHotkey/LblHotkeyStatus, PopulateVisibilityCheckboxes,
+// ApplyValuesToWorking's checkbox tuple list, etc.).
+//
+// Do NOT drop the plain `using System.Windows.Controls;` line. If you do, every
+// bare `TextBlock` / `StackPanel` / `Grid` / `Border` / `WrapPanel` / `Orientation`
+// reference will fail to compile (CS0246). Either keep both usings together and
+// discipline the CheckBox alias as above, or migrate every WPF reference in this
+// file to the WnControls qualifier — that is a much larger sweep and not worth
+// the churn.
+
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text.Json;
@@ -8,29 +37,17 @@ using WnControls = System.Windows.Controls;
 using WnShapes = System.Windows.Shapes;
 #if !DESIGN_TIME
 using WnForms = System.Windows.Forms;
-using WnDrawing = System.Drawing;
 #endif
+using WinMeters.Services;
+// NOTE: SettingsBindings (the string-driven checkbox \(\rightarrow\) AppSettings bindings) is
+// in Services/SettingsBindings.cs to keep this file's WPF-coupled code-behind separate
+// from the testable apply-side bindings. The test project compiles it via <Compile Include>
+// so Tests/SettingsBindingsTests can pin ChkKeepOnTop \(\rightarrow\) General.KeepOnTop.
 
 namespace WinMeters;
 
-/// <summary>
-/// Settings dialog window for configuring WinMeters appearance and behavior.
-/// </summary>
 public partial class SettingsWindow : Window
 {
-    // Compat shims preserved from the modernized SettingsWindow: MainWindow.OpenSettings
-    // opens this dialog modeless via Show() and reads WasSaved on Closed to decide whether
-    // to ApplySettings. The single-page .WM.old layout has no nav-rail sections, so the
-    // legacy SelectSection("About") compat shim was removed -- its only caller, the RMB
-    // About entry, was rewired in commit a64acb6 to open the dedicated AboutWindow
-    // instead of routing to this dialog. The legacy DialogResult setter is removed below
-    // because it InvalidOperationException-throws on modeless Show()'d windows and the
-    // MainWindow pair-up doesn't read DialogResult anyway (replaced by WasSaved here).
-
-    // WasSaved: flipped to true in BtnOk_Click right before Close(); BtnCancel_Click
-    // keeps it at the default false (the explicit set is defensive).
-
-    /// <summary>True iff the user clicked OK and the dialog committed its edits to _original.</summary>
     public bool WasSaved { get; private set; }
 
     private readonly AppSettings _original;
@@ -39,7 +56,7 @@ public partial class SettingsWindow : Window
 
     private static readonly Dictionary<string, string> FriendlyNames = new()
     {
-        ["Cpu"] = "CPU Usage",
+        ["Cpu"] = "CPU Cores Usage",
         ["Ram"] = "Total RAM Usage",
         ["Disk"] = "Disk Activity",
         ["Net"] = "Network Activity",
@@ -49,65 +66,27 @@ public partial class SettingsWindow : Window
         ["Time"] = "System Time"
     };
 
-    // Track event handlers for cleanup
     private readonly List<RoutedPropertyChangedEventHandler<double>> _sliderValueHandlers = new();
     private readonly List<RoutedEventHandler> _checkboxHandlers = new();
     private readonly List<TextChangedEventHandler> _rateTextChangedHandlers = new();
     private readonly List<TextCompositionEventHandler> _ratePreviewTextHandlers = new();
-    // PopulateDisks / PopulateNetworkInterfaces SelectionChanged lambdas tracked
-    // separately so UnsubscribeDialogHandlers can detach them on close AND
-    // before a Reset-driven re-PopulateUi. Without this list pattern they
-    // would multiply one extra subscription per Reset (the old lambda stays
-    // attached to the ComboBox, and on every future user interaction it fires
-    // alongside the new lambda and calls TriggerLiveUpdate through the
-    // rebroadcast old closure). Mirrors the existing per-list pattern.
     private readonly List<SelectionChangedEventHandler> _diskComboHandlers = new();
     private readonly List<SelectionChangedEventHandler> _nicComboHandlers  = new();
 
-    // Debounce timer for live updates to avoid excessive processing
     private System.Windows.Threading.DispatcherTimer? _liveUpdateTimer;
     private const int LiveUpdateDebounceMs = 100;
+
+    // Stored as fields so TxtHotkey_TextChanged can unsubscribe in UnsubscribeDialogHandlers
+    // without a stale capture of the closure tearing down setting reload mid-edit. The handler
+    // is wired in PopulateUi; only the TextChanged channel needs an explicit list because WPF's
+    // default TextBox subscription model holds the handler alive past Window closure unless
+    // we explicitly -= it.
+    private TextChangedEventHandler? _hotkeyTextChangedHandler;
 
     public SettingsWindow(AppSettings original)
     {
         InitializeComponent();
 
-        // Opt this process into dark mode so the OS-painted chrome (the
-        // title bar's DWMWA_USE_IMMERSIVE_DARK_MODE attribute, the bar's
-        // RMB popup HMENU) lands on the dark variant. Win10 1903's
-        // per-process uxtheme-aware PreferredAppMode translation only
-        // honours the dark value when PreferredAppMode is set to
-        // FORCE_DARK first; otherwise the title bar / HMENU paint the
-        // legacy light-mode chrome even on a dark-themed system. The
-        // extraction into ThemeService.InitializeDarkMode() means future
-        // cold-open sites (MainWindow itself, any future dialog) can
-        // opt in with a single call. Note: the dialog's WPF content
-        // area no longer samples COLOR_MENU / COLOR_MENUTEXT / etc.
-        // (the Maximal recode retired ColorHelper.GetMenuBackgroundBrush
-        // and friends); it paints from the merged
-        // Themes/WinMetersTheme.xaml dictionary via
-        // ColorHelper.ThemeBrush("ThemeBgBrush") /
-        // ColorHelper.ThemeBrush("ThemeTextBrush") / etc.
-        Services.ThemeService.InitializeDarkMode();
-
-
-        // Single brush-resolution block: the dialog's Background (Window
-        // + RootGrid, the latter defending against WPF's Window template
-        // masking the visible client area) and Foreground (inherited by
-        // every CheckBox.Content, TextBlock, Button.Content, ComboBox
-        // item, and ListBoxItem label) both come from the merged
-        // Themes/WinMetersTheme.xaml dictionary. The Foreground lookup
-        // has a ?? Brushes.White fallback so a ThemeBrush miss can never
-        // clear the local Foreground DP and fall through to WPF's default
-        // SystemColors.WindowText (black on Windows). Cached locally so Window / RootGrid paint the SAME brush
-        // instance (one allocation shared by both DPs; the pre-collapse
-        // ctor cached this brush too, so this is a shared-instance win,
-        // not an allocation-count reduction). The dialog no
-        // longer samples the live OS menu chrome (that trade-off was the
-        // explicit "Maximal recode" choice); it lands on a consistent
-        // dark chrome regardless of OS theme state. The bar's RMB popup
-        // remains OS-painted via uxtheme via the InitializeDarkMode call
-        // above.
         var menuBackground = ColorHelper.ThemeBrush("ThemeBgBrush");
         var menuForeground = ColorHelper.ThemeBrush("ThemeTextBrush") ?? System.Windows.Media.Brushes.White;
         this.Background = menuBackground;
@@ -115,23 +94,12 @@ public partial class SettingsWindow : Window
         this.Foreground = menuForeground;
 
         _original = original ?? throw new ArgumentNullException(nameof(original));
-
-        // Deep clone to avoid mutating original until user confirms
         var json = JsonSerializer.Serialize(original);
         _working = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
         _snapshotBeforeEdit = JsonSerializer.Deserialize<AppSettings>(json) ?? new AppSettings();
 
         DataContext = _working;
         SetupLiveUpdateDebounce();
-
-        // The ListBoxItem container style is set inline in SettingsWindow.xaml
-        // via ItemContainerStyle="{StaticResource WinMetersListBoxItem}" so no
-        // code-behind helper is required; the theme style paints the
-        // resting Foreground (ThemeTextBrush so labels render white) and
-        // the IsMouseOver + IsSelected highlight (ThemeAccentBrush
-        // background + ThemeTextBrush foreground) the same way the
-        // previous CreateMenuListBoxItemStyle helper did.
-
         PopulateUi();
 
         this.Closed += SettingsWindow_Closed;
@@ -158,25 +126,10 @@ public partial class SettingsWindow : Window
 
     private void SettingsWindow_Closed(object? sender, EventArgs e)
     {
-        // Live-update debounce timer is a no-op once the window is gone;
-        // DispatcherTimer doesn't implement IDisposable in WPF.
         _liveUpdateTimer?.Stop();
-
-        // Memory-leak prevention: drop every per-control handler we subscribed
-        // during PopulateUi. Extracted to UnsubscribeDialogHandlers so
-        // BtnReset_Click can re-use the same cleanup before re-populating
-        // against a default-constructed _working instance.
         UnsubscribeDialogHandlers();
     }
 
-    /// <summary>
-    /// Removes every event handler we subscribed during PopulateUi (sliders /
-    /// visibility checkboxes / refresh-rate textboxes / refresh-rate preview)
-    /// and clears the tracking lists so a follow-up PopulateUi starts from a
-    /// clean slate. Called from BOTH SettingsWindow_Closed (memory-leak
-    /// prevention) AND BtnReset_Click (so the old handlers don't double-fire
-    /// alongside the new ones after _working is swapped for defaults).
-    /// </summary>
     private void UnsubscribeDialogHandlers()
     {
         foreach (var handler in _sliderValueHandlers)
@@ -188,7 +141,7 @@ public partial class SettingsWindow : Window
 
         foreach (var handler in _checkboxHandlers)
         {
-            foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
+            foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
             {
                 chk.Checked -= handler;
                 chk.Unchecked -= handler;
@@ -222,22 +175,22 @@ public partial class SettingsWindow : Window
         }
         _ratePreviewTextHandlers.Clear();
 
-        // Detach the disk / NIC ComboBox SelectionChanged lambdas that
-        // PopulateDisks / PopulateNetworkInterfaces tracked. Without this
-        // teardown a Reset-driven re-PopulateUi would leave the old lambdas
-        // attached -- they keep firing on every future user interaction, and
-        // each one closes over _working calling TriggerLiveUpdate.
         foreach (var handler in _diskComboHandlers)
-        {
             ComboDisk.SelectionChanged -= handler;
-        }
         _diskComboHandlers.Clear();
 
         foreach (var handler in _nicComboHandlers)
-        {
             ComboNetwork.SelectionChanged -= handler;
-        }
         _nicComboHandlers.Clear();
+
+        // Detach the hotkey TextChanged handler last (after the per-list
+        // tracker cleanup) since it isn't tracked in any list — it's a
+        // single delegate stashed in a field. Null-checks keeps the
+        // unsubscribe idempotent against SettingsWindow_Closed firing
+        // twice in some shutdown paths.
+        if (_hotkeyTextChangedHandler is not null && TxtHotkey is not null)
+            TxtHotkey.TextChanged -= _hotkeyTextChangedHandler;
+        _hotkeyTextChangedHandler = null;
     }
 
     private void PopulateUi()
@@ -249,11 +202,125 @@ public partial class SettingsWindow : Window
         PopulateDisks();
         PopulateNetworkInterfaces();
         PopulateMeterOrder();
+        PopulateHotkey();
+    }
+
+    private void PopulateHotkey()
+    {
+        // Designer builds (DesignTimeBuild=true) compile WinMeters.csproj's stripped source
+        // set with the SettingsWindow XAML excluded; in that path TxtHotkey + LblHotkeyStatus
+        // are never wired and the controls stay null. The Debug.Assert trips immediately so
+        // a future contributor restoring the XAML surface at design-time catches the regression
+        // at first run instead of seeing a StatusLabel that never updates without explanation.
+        // The null-check + return is enough for Release; the assert is purely diagnostic.
+        System.Diagnostics.Debug.Assert(
+            TxtHotkey is not null && LblHotkeyStatus is not null,
+            "TxtHotkey/LblHotkeyStatus missing — XAML surface not wired at design-time?");
+        if (TxtHotkey is null || LblHotkeyStatus is null) return;
+
+        TxtHotkey.Text = _working.General.Hotkey;
+        UpdateHotkeyStatus();
+
+        // Wire TextChanged once per dialog lifetime. The ??= stores the delegate so we can
+        // -= it cleanly in UnsubscribeDialogHandlers without re-finding a closure identity.
+        if (_hotkeyTextChangedHandler is null)
+        {
+            _hotkeyTextChangedHandler = new TextChangedEventHandler((s, e) =>
+            {
+                UpdateHotkeyStatus();
+                TriggerLiveUpdate();
+            });
+            TxtHotkey.TextChanged += _hotkeyTextChangedHandler;
+        }
+    }
+
+    private void BtnResetHotkey_Click(object sender, RoutedEventArgs e)
+    {
+        // Designer-build guard mirrors PopulateHotkey's null-check pattern — when the
+        // XAML surface isn't wired at design-time the button isn't reachable, but we
+        // null-check anyway so a future XAML refactor can't silently remove the
+        // chord from a designer session. The textbox write fires the cached TextChanged
+        // handler (so the status label updates without a second manual call) and
+        // TriggerLiveUpdate propagates the new chord to the live preview immediately.
+        if (TxtHotkey is null) return;
+        TxtHotkey.Text = HotkeyService.DefaultHotkeyString;
+        TriggerLiveUpdate();
+    }
+
+    private void UpdateHotkeyStatus()
+    {
+        if (TxtHotkey is null || LblHotkeyStatus is null) return;
+
+        // logWarnings:false so per-keystroke edits don't spam the rolling error log when the
+        // user types then deletes (every intermediate chord would otherwise fire a "fallback
+        // used" log). Resolve silently here; the in-line label reflects what was registered.
+        //
+        // The status label is a TextBlock (not a Label) so .Text accepts arbitrary
+        // characters (underscore, ampersand) without them being swallowed as WPF
+        // access-key accelerators (Label.Content would). This matters when we render
+        // the user's raw input back in the warning label — e.g. "Ctrl+Junk" or
+        // "Ctrl+++Foo" must display verbatim, not as a hotkey cue.
+        string text = TxtHotkey.Text?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrEmpty(text))
+        {
+            // Empty input falls back to the canonical default chord — call this out so a
+            // user who clears the box to "blank out" the config understands what's actually
+            // registered. We interpolate HotkeyService.DefaultHotkeyString rather than
+            // hard-coding "Ctrl+Alt+Shift+M" so a future shift in the canonical fallback
+            // (e.g. to avoid a colliding Win10 system chord) doesn't silently drift from
+            // what this label claims.
+            LblHotkeyStatus.Text = $"(empty → using default {HotkeyService.DefaultHotkeyString})";
+            // Reset foreground explicitly so a previous failed-edit pass doesn't trap
+            // the label in the warning color after the user clears the box. WPF's
+            // DynamicResource binding (which XAML uses for Foreground=ThemeTextBrush)
+            // does NOT auto-restore when we change .Foreground in code, so each state
+            // has to set it explicitly.
+            LblHotkeyStatus.Foreground = System.Windows.Media.Brushes.LightGray;
+            LblHotkeyStatus.ToolTip = null;
+            return;
+        }
+
+        if (HotkeyService.TryParseHotkeyString(text, out var chord, logWarnings: false))
+        {
+            // Clean parse — render the resolved chord. FormatChord routes printable VKs
+            // through their ASCII character (so the user sees the same letters they
+            // typed) and named keys through FriendlyKeyNames ("Ctrl+Shift+F12" not
+            // "Ctrl+Shift+Vk0x7B"). User can copy-paste this back into the JSON Hotkey
+            // setting without round-tripping through hex math.
+            LblHotkeyStatus.Text = $"active: \"{HotkeyService.FormatChord(chord.fsModifiers, chord.vk)}\"";
+            // Explicit reset to default color in case the previous edit was caught by
+            // the warning branch below.
+            LblHotkeyStatus.Foreground = System.Windows.Media.Brushes.LightGray;
+            LblHotkeyStatus.ToolTip = null;
+        }
+        else
+        {
+            // Parse fell through to the canonical fallback even though the user typed
+            // something. Use the ThreeState disclosure: show the raw input verbatim so
+            // the user can spot their typo, then the canonical fallback the runtime
+            // actually registered so they don't silently end up on Ctrl+Alt+Shift+M
+            // for a chord they intended differently. Foreground = Red (same SSKP color
+            // used by ShowError's red border on rate Validation) so the cue matches the
+            // dialog's existing error-affordance vocabulary.
+            //
+            // Tooltip carries the verbose explanation: list of supported key tokens.
+            // Without it, a user with no parser familiarity lands on a warning label
+            // and doesn't know how to fix the chord. With it, they see exactly what's
+            // accepted and can repair the input without reading the rolling debug log.
+            LblHotkeyStatus.Text = $"\u26a0 '{text}' \u2192 {HotkeyService.DefaultHotkeyString} (parse failed)";
+            LblHotkeyStatus.Foreground = System.Windows.Media.Brushes.Red;
+            LblHotkeyStatus.ToolTip =
+                $"WinMeters couldn't parse '{text}' as a valid hotkey chord. " +
+                $"Falling back to {HotkeyService.DefaultHotkeyString}. " +
+                "Supported key tokens: single characters (e.g. Ctrl+M), F1\u2013F12, Space, Tab, " +
+                "Enter, Esc, Backspace, Up/Down/Left/Right, PageUp/PageDown, Home/End, " +
+                "Insert/Delete. Modifier tokens: Ctrl, Alt, Shift, Win (any order).";
+        }
     }
 
     private void PopulateSliders()
     {
-        // Opacity (formatted as integer 0%..100% via FormatOpacityValue; see helper below).
         SliderOpacity.Value = _working.General.Opacity;
         TxtOpacity.Text = FormatOpacityValue(_working.General.Opacity);
         var opacityHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
@@ -264,7 +331,6 @@ public partial class SettingsWindow : Window
         SliderOpacity.ValueChanged += opacityHandler;
         _sliderValueHandlers.Add(opacityHandler);
 
-        // Scale (formatted as "1.0×" / "1.5×" / ...; see FormatScaleValue helper below).
         SliderScale.Value = _working.General.Scale;
         TxtScale.Text = FormatScaleValue(_working.General.Scale);
         var scaleHandler = new RoutedPropertyChangedEventHandler<double>((s, e) =>
@@ -284,31 +350,18 @@ public partial class SettingsWindow : Window
         ChkNet.IsChecked = _working.Visibility.ShowNet;
         ChkCpuTemp.IsChecked = _working.Visibility.ShowCpuTemp;
         ChkGpuTemp.IsChecked = _working.Visibility.ShowGpuTemp;
-        ChkHardwareLoad.IsChecked = _working.Visibility.ShowHardwareLoad;
         ChkGpuDedicated.IsChecked = _working.Visibility.ShowGpuDedicated;
         ChkGpuShared.IsChecked = _working.Visibility.ShowGpuShared;
         ChkCombineCpu.IsChecked = _working.General.CombineLogicalCores;
         ChkTime.IsChecked = _working.Visibility.ShowTime;
         ChkTime24H.IsChecked = _working.General.Time24H;
-        ChkEnableHardwareMonitor.IsChecked = _working.General.EnableHardwareMonitor;
-        // Access toggles: live-preview wired (every other Visibility toggle too).
-        // Unlike ChkEnableHardwareMonitor, none of these have a one-shot
-        // side-effect that would churn on every drag tick -- LockPosition is
-        // read on next MouseLeftButtonDown, HideInFullscreen by AppBarService's
-        // ABN_FULLSCREENAPP handler, StickToTaskbar + KeepOnTop via
-        // MainWindow.ApplyWindowMode (called from ApplySettingsLive).
         ChkLockPosition.IsChecked      = _working.Window.LockPosition;
         ChkHideInFullscreen.IsChecked  = _working.General.HideInFullscreen;
         ChkSnapToTaskbar.IsChecked     = _working.Window.StickToTaskbar;
         ChkKeepOnTop.IsChecked         = _working.General.KeepOnTop;
 
         var checkHandler = new RoutedEventHandler((s, e) => TriggerLiveUpdate());
-        // ChkEnableHardwareMonitor intentionally NOT subscribed here -- toggling it triggers
-        // initialization / shutdown of the LibreHardwareMonitorService in MainWindow, which
-        // only runs after the dialog commits via BtnOk_Click + ApplySettingsLive. Subscribing
-        // it to TriggerLiveUpdate would cause spurious hardware-monitor churn on every ticked
-        // live-preview during scroll / hover interactions before the user actually saves.
-        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkHardwareLoad, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
+        foreach (var chk in new[] { ChkCpu, ChkRam, ChkDisk, ChkNet, ChkCpuTemp, ChkGpuTemp, ChkGpuDedicated, ChkGpuShared, ChkCombineCpu, ChkTime, ChkTime24H, ChkLockPosition, ChkHideInFullscreen, ChkSnapToTaskbar, ChkKeepOnTop })
         {
             chk.Checked += checkHandler;
             chk.Unchecked += checkHandler;
@@ -330,7 +383,6 @@ public partial class SettingsWindow : Window
             { TxtRateGpuShared, nameof(_working.Rates.GpuShared) }
         };
 
-        // Set initial values
         foreach (var (tb, prop) in rateMap)
         {
             var value = prop switch
@@ -348,16 +400,13 @@ public partial class SettingsWindow : Window
             tb.Text = value.ToString();
         }
 
-        // Setup validation and input filtering
         var textChangedHandler = new TextChangedEventHandler((s, e) =>
         {
             if (s is WnControls.TextBox tb)
             {
                 var errorBlock = tb.Parent is WnControls.StackPanel panel && panel.Children.Count >= 3
-                    ? panel.Children[2] as TextBlock
-                    : null;
-                if (ValidateRate(tb, errorBlock))
-                    TriggerLiveUpdate();
+                    ? panel.Children[2] as TextBlock : null;
+                if (ValidateRate(tb, errorBlock)) TriggerLiveUpdate();
             }
         });
 
@@ -374,7 +423,6 @@ public partial class SettingsWindow : Window
             _ratePreviewTextHandlers.Add(previewTextHandler);
         }
 
-        // Setup error display references
         SetupRateError(TxtRateCpu, ErrRateCpu);
         SetupRateError(TxtRateRam, ErrRateRam);
         SetupRateError(TxtRateDisk, ErrRateDisk);
@@ -387,11 +435,7 @@ public partial class SettingsWindow : Window
         ValidateAll();
     }
 
-    private void SetupRateError(WnControls.TextBox tb, TextBlock err)
-    {
-        // Store error reference for validation
-        tb.Tag = err;
-    }
+    private void SetupRateError(WnControls.TextBox tb, TextBlock err) => tb.Tag = err;
 
     private void PopulateColors()
     {
@@ -417,9 +461,7 @@ public partial class SettingsWindow : Window
         };
 
         foreach (var (name, setter) in colorProperties)
-        {
             AddColorEditor(name, setter);
-        }
     }
 
     private void AddColorEditor(string name, Action<string> setter)
@@ -453,18 +495,13 @@ public partial class SettingsWindow : Window
 
         panel.Children.Add(new TextBlock
         {
-            Text = name,
-            Width = 60,
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10
+            Text = name, Width = 60, VerticalAlignment = VerticalAlignment.Center, FontSize = 10
         });
 
         var rect = new WnShapes.Rectangle
         {
-            Width = 20,
-            Height = 20,
-            Stroke = System.Windows.Media.Brushes.Black,
-            StrokeThickness = 1,
+            Width = 20, Height = 20,
+            Stroke = System.Windows.Media.Brushes.Black, StrokeThickness = 1,
             Margin = new Thickness(6, 0, 6, 0),
             Fill = ColorHelper.ParseBrush(GetHex()),
             Cursor = System.Windows.Input.Cursors.Hand
@@ -474,10 +511,7 @@ public partial class SettingsWindow : Window
 
         var txt = new TextBlock
         {
-            Text = GetHex(),
-            VerticalAlignment = VerticalAlignment.Center,
-            FontSize = 10,
-            MinWidth = 70
+            Text = GetHex(), VerticalAlignment = VerticalAlignment.Center, FontSize = 10, MinWidth = 70
         };
         panel.Children.Add(txt);
 
@@ -500,23 +534,15 @@ public partial class SettingsWindow : Window
                 var hex = ColorHelper.ToHexString(dlg.Color);
                 setter(hex);
                 rect.Fill = ColorHelper.FromDrawingColor(dlg.Color);
-
-                // Update the text block
                 if (rect.Parent is StackPanel parent && parent.Children.Count >= 3)
-                {
                     (parent.Children[2] as TextBlock)?.SetText(hex);
-                }
-
                 TriggerLiveUpdate();
             }
 #else
             rect.Fill = ColorHelper.ParseBrush(getCurrentHex());
 #endif
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.OpenColorPicker: {ex}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"SettingsWindow.OpenColorPicker: {ex}"); }
     }
 
     private void PopulateDisks()
@@ -525,7 +551,6 @@ public partial class SettingsWindow : Window
         {
             using var mgr = new Monitors.MonitorManager();
             var disks = mgr.GetDiskInstances();
-
             ComboDisk.ItemsSource = disks;
             SelectComboItem(ComboDisk, _working.General.DiskInstanceName);
 
@@ -540,10 +565,7 @@ public partial class SettingsWindow : Window
             ComboDisk.SelectionChanged += diskHandler;
             _diskComboHandlers.Add(diskHandler);
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"PopulateDisks: {ex}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"PopulateDisks: {ex}"); }
     }
 
     private void PopulateNetworkInterfaces()
@@ -559,28 +581,22 @@ public partial class SettingsWindow : Window
             }
 
             ComboNetwork.ItemsSource = interfaces;
-
             var selectedNet = string.IsNullOrWhiteSpace(_working.General.NetworkInterfaceName)
-                ? "(All Interfaces)"
-                : _working.General.NetworkInterfaceName;
+                ? "(All Interfaces)" : _working.General.NetworkInterfaceName;
             SelectComboItem(ComboNetwork, selectedNet);
 
             SelectionChangedEventHandler nicHandler = (s, e) =>
             {
                 if (ComboNetwork.SelectedItem is string sel)
                 {
-                    _working.General.NetworkInterfaceName =
-                        (sel == "(All Interfaces)") ? null : sel;
+                    _working.General.NetworkInterfaceName = (sel == "(All Interfaces)") ? null : sel;
                     TriggerLiveUpdate();
                 }
             };
             ComboNetwork.SelectionChanged += nicHandler;
             _nicComboHandlers.Add(nicHandler);
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"PopulateNetworkInterfaces: {ex}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"PopulateNetworkInterfaces: {ex}"); }
     }
 
     private void SelectComboItem(WnControls.ComboBox combo, string? value)
@@ -643,23 +659,15 @@ public partial class SettingsWindow : Window
     {
         if (!ValidateAll())
         {
-            System.Windows.MessageBox.Show(
-                this,
+            System.Windows.MessageBox.Show(this,
                 $"One or more refresh rates are invalid. Fix the highlighted values (minimum {Constants.Timing.MinValidationRateMs} ms) before saving.",
-                "Validation Error",
-                System.Windows.MessageBoxButton.OK,
-                System.Windows.MessageBoxImage.Warning);
+                "Validation Error", System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Warning);
             return;
         }
 
         ApplyValuesToWorking();
         CopyWorkingToOriginal();
         _original.Save();
-
-        // Compat shim: flip WasSaved so MainWindow.OpenSettings's Closed
-        // subscriber calls ApplySettings(). The legacy DialogResult setter is intentionally
-        // dropped -- it InvalidOperationException-throws on modeless Show()'d windows, and
-        // MainWindow creates this dialog as modeless so the user can still drag the bar.
         WasSaved = true;
         Close();
     }
@@ -673,86 +681,36 @@ public partial class SettingsWindow : Window
             _original.Colors = _snapshotBeforeEdit.Colors;
             _original.Visibility = _snapshotBeforeEdit.Visibility;
             _original.Rates = _snapshotBeforeEdit.Rates;
-
-            if (Owner is MainWindow mw)
-                mw.ApplySettingsLive(_original);
+            if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.CancelRevert: {ex}");
-        }
-
-        // WasSaved stays at its default false here -- no explicit flip needed (matches the
-        // initial property state). DialogResult setter removed (it's been removed on the OK
-        // path too) because it InvalidOperationException-throws on modeless Show()'d windows;
-        // MainWindow reads WasSaved via its Closed subscriber instead. See BtnOk_Click for
-        // the broader avoid-DialogResult reasoning.
+        catch (Exception ex) { WinMeters.Log.D($"SettingsWindow.CancelRevert: {ex}"); }
         Close();
     }
 
-    /// <summary>
-    /// Replaces <c>_working</c> with a default-constructed AppSettings (the same
-    /// values AppSettings.Load writes to settings.json on first launch when no
-    /// settings file exists), re-populates the dialog UI against the fresh
-    /// _working, and live-previews the reset on the bar so the user sees the
-    /// defaults land without having to OK the dialog.
-    ///
-    /// Safe under Cancel: _snapshotBeforeEdit is unchanged, so BtnCancel_Click
-    /// still restores the values the dialog opened with -- the Reset is freely
-    /// reversible via Cancel. The Reset tabindex (27) puts it after every other
-    /// keyboard-focusable control so tabbing through the dialog reaches it
-    /// LAST, matching the "I'm done fiddling, want to bail" mental model.
-    /// </summary>
     private void BtnReset_Click(object sender, RoutedEventArgs e)
     {
         try
         {
-            // _working is readonly, so reset by copying each nested reference
-            // from a transient new AppSettings() rather than reassigning.
-            // The transient's auto-property initializers supply the factory
-            // defaults so we don't hardcode each one (which would silently
-            // drift on any future AppSettings field addition).
             var defaults = new AppSettings();
             _working.General       = defaults.General;
             _working.Window        = defaults.Window;
             _working.Colors        = defaults.Colors;
             _working.Visibility    = defaults.Visibility;
             _working.Rates         = defaults.Rates;
-            _working.MaxValues     = defaults.MaxValues;
-            _working.SectionColors = defaults.SectionColors;
-            // `defaults` falls out of scope at method return and is GC'd.
 
-            // Unsubscribe the old per-control handlers before PopulateUi re-adds
-            // them so a single Slider drag doesn't fire both old + new lambdas.
             UnsubscribeDialogHandlers();
-
-            // Re-fill every control group against the fresh _working.
-            // PopulateColors starts with ColorsPanel.Children.Clear() and
-            // PopulateRateTextboxes calls ValidateAll() at the end -- the
-            // reset UI lands in a consistent, validated state.
             PopulateUi();
-
-            // Mirror the existing slider-drag live-preview path so MainWindow
-            // picks up the defaults immediately. ApplyChangesLive copies
-            // _working -> _original and forwards to MainWindow.ApplySettingsLive
-            // -- same contract as the slider/checkbox drag ticks.
             ApplyChangesLive();
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.BtnReset_Click: {ex}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"SettingsWindow.BtnReset_Click: {ex}"); }
     }
 
     private void ApplyChangesLive()
     {
         if (!ValidateAll()) return;
-
         ApplyValuesToWorking();
         CopyWorkingToOriginal();
-
-        if (Owner is MainWindow mw)
-            mw.ApplySettingsLive(_original);
+        if (Owner is MainWindow mw) mw.ApplySettingsLive(_original);
     }
 
     private void ApplyValuesToWorking()
@@ -767,29 +725,60 @@ public partial class SettingsWindow : Window
         _working.Rates.CpuTemp = ParseNullableInt(TxtRateCpuTemp.Text);
         _working.Rates.GpuTemp = ParseNullableInt(TxtRateGpuTemp.Text);
         _working.Rates.GpuDedicated = ParseNullableInt(TxtRateGpuDedicated.Text);
-        _working.Rates.GpuShared = ParseNullableInt(TxtRateGpuShared.Text);
+        _working.Rates.GpuShared = ParseNullableInt(TxtRateGpuShared.Text);        // Data-driven checkbox → property push. The bindings are owned by
+        // Services/SettingsBindings (single source of truth, unit-tested via
+        // Tests/SettingsBindingsTests) — the dictionary below resolves each
+        // binding's string name to the actual WPF CheckBox instance, which is
+        // the only WPF-specific part of the apply path. Adding a new checkbox
+        // + property pair is one row in SettingsBindings + one dictionary
+        // entry here, not a hand-written assignment that could drift between
+        // writers. The wiring-contract test in SettingsBindingsTests pins each
+        // row's lambda to the specific AppSettings field it should mutate, so
+        // a typo in either side (the binding's lambda or the dictionary lookup
+        // here) fails the build at the affected row rather than landing
+        // silently in production.
+        var chkByName = new Dictionary<string, WnControls.CheckBox>(StringComparer.Ordinal)
+        {
+            ["ChkCpu"]              = ChkCpu,
+            ["ChkRam"]              = ChkRam,
+            ["ChkDisk"]             = ChkDisk,
+            ["ChkNet"]              = ChkNet,
+            ["ChkCpuTemp"]          = ChkCpuTemp,
+            ["ChkGpuTemp"]          = ChkGpuTemp,
+            ["ChkGpuDedicated"]     = ChkGpuDedicated,
+            ["ChkGpuShared"]        = ChkGpuShared,
+            ["ChkCombineCpu"]       = ChkCombineCpu,
+            ["ChkTime"]             = ChkTime,
+            ["ChkTime24H"]          = ChkTime24H,
+            ["ChkLockPosition"]     = ChkLockPosition,
+            ["ChkHideInFullscreen"] = ChkHideInFullscreen,
+            ["ChkSnapToTaskbar"]    = ChkSnapToTaskbar,
+            ["ChkKeepOnTop"]        = ChkKeepOnTop,
+        };
+        // Drift-prevention: every SettingsBindings binding name must have a
+        // matching entry in chkByName. Adding a row to SettingsBindings
+        // without updating this dictionary surfaces immediately at
+        // design-time (Debug build) rather than at runtime with a cryptic
+        // KeyNotFoundException. The diagnostic message reports the count
+        // mismatch so a contributor can fix both sides in one edit.
+        var keys = new HashSet<string>(chkByName.Keys, StringComparer.Ordinal);
+        System.Diagnostics.Debug.Assert(
+            keys.SetEquals(SettingsBindings.AllBindingNames),
+            $"chkByName keys ({keys.Count}) don't SetEquals SettingsBindings.AllBindingNames " +
+            $"({SettingsBindings.AllBindingNames.Count}). Either add the missing CheckBox " +
+            $"references to chkByName in SettingsWindow.xaml.cs, or update " +
+            $"Services/SettingsBindings.cs to match the canonical CheckBox x:Name set.");
 
-        _working.Visibility.ShowCpu = ChkCpu.IsChecked == true;
-        _working.Visibility.ShowRam = ChkRam.IsChecked == true;
-        _working.Visibility.ShowDisk = ChkDisk.IsChecked == true;
-        _working.Visibility.ShowNet = ChkNet.IsChecked == true;
-        _working.Visibility.ShowCpuTemp = ChkCpuTemp.IsChecked == true;
-        _working.Visibility.ShowGpuTemp = ChkGpuTemp.IsChecked == true;
-        _working.Visibility.ShowHardwareLoad = ChkHardwareLoad.IsChecked == true;
-        _working.Visibility.ShowGpuDedicated = ChkGpuDedicated.IsChecked == true;
-        _working.Visibility.ShowGpuShared = ChkGpuShared.IsChecked == true;
-        _working.General.CombineLogicalCores = ChkCombineCpu.IsChecked == true;
-        _working.Visibility.ShowTime = ChkTime.IsChecked == true;
-        _working.General.Time24H = ChkTime24H.IsChecked == true;
-        _working.General.EnableHardwareMonitor = ChkEnableHardwareMonitor.IsChecked == true;
-        // Access toggle writes mirror the 4 IsChecked reads in PopulateVisibilityCheckboxes.
-        // Field mapping (UI name -> AppSettings) -- StickToTaskbar toggles _settings.Window
-        // .StickToTaskbar (kil0bit-style docked-as-AppBar vs floating-window), and KeepOnTop
-        // toggles _settings.General.KeepOnTop. Round-trips to the bar via ApplySettingsLive.
-        _working.Window.LockPosition      = ChkLockPosition.IsChecked == true;
-        _working.General.HideInFullscreen  = ChkHideInFullscreen.IsChecked == true;
-        _working.Window.StickToTaskbar     = ChkSnapToTaskbar.IsChecked == true;
-        _working.General.KeepOnTop         = ChkKeepOnTop.IsChecked == true;
+        foreach (var (name, apply) in SettingsBindings.GetVisibilityBindings(_working))
+            apply(chkByName[name].IsChecked == true);
+
+        // Hotkey text. Trim and default to the canonical default chord when the user clears
+        // the box (preserved through the BtnOk path). The fallback reads from
+        // HotkeyService.DefaultHotkeyString so a future canonical shift propagates here
+        // without further edits.
+        _working.General.Hotkey = string.IsNullOrWhiteSpace(TxtHotkey.Text)
+            ? HotkeyService.DefaultHotkeyString
+            : TxtHotkey.Text.Trim();
 
         if (ListMeterOrder.ItemsSource is ObservableCollection<MeterOrderItem> list)
         {
@@ -802,58 +791,34 @@ public partial class SettingsWindow : Window
                     newOrder.Add("GpuTemp");
                 }
                 else
-                {
                     newOrder.Add(item.Key);
-                }
             }
             _working.General.MeterOrder = newOrder;
         }
     }
 
-    private static int? ParseNullableInt(string? s)
-    {
-        if (string.IsNullOrEmpty(s)) return null;
-        return int.TryParse(s, out var v) ? v : null;
-    }
+    private static int? ParseNullableInt(string? s) =>
+        string.IsNullOrEmpty(s) ? null : (int.TryParse(s, out var v) ? v : null);
 
     private bool ValidateRate(WnControls.TextBox tb, TextBlock? err)
     {
         var s = tb.Text?.Trim() ?? string.Empty;
-
-        if (string.IsNullOrEmpty(s))
-        {
-            ClearError(tb, err);
-            return true;
-        }
-
-        if (!int.TryParse(s, out var v))
-        {
-            ShowError(tb, err, "Invalid number");
-            return false;
-        }
-
-        if (v < Constants.Timing.MinValidationRateMs)
-        {
-            ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms");
-            return false;
-        }
-
+        if (string.IsNullOrEmpty(s)) { ClearError(tb, err); return true; }
+        if (!int.TryParse(s, out var v)) { ShowError(tb, err, "Invalid number"); return false; }
+        if (v < Constants.Timing.MinValidationRateMs) { ShowError(tb, err, $"Minimum {Constants.Timing.MinValidationRateMs} ms"); return false; }
         ClearError(tb, err);
         return true;
     }
 
-    private bool ValidateAll()
-    {
-        return
-            ValidateRate(TxtRateCpu, ErrRateCpu) &&
-            ValidateRate(TxtRateRam, ErrRateRam) &&
-            ValidateRate(TxtRateDisk, ErrRateDisk) &&
-            ValidateRate(TxtRateNet, ErrRateNet) &&
-            ValidateRate(TxtRateCpuTemp, ErrRateCpuTemp) &&
-            ValidateRate(TxtRateGpuTemp, ErrRateGpuTemp) &&
-            ValidateRate(TxtRateGpuDedicated, ErrRateGpuDedicated) &&
-            ValidateRate(TxtRateGpuShared, ErrRateGpuShared);
-    }
+    private bool ValidateAll() =>
+        ValidateRate(TxtRateCpu, ErrRateCpu) &&
+        ValidateRate(TxtRateRam, ErrRateRam) &&
+        ValidateRate(TxtRateDisk, ErrRateDisk) &&
+        ValidateRate(TxtRateNet, ErrRateNet) &&
+        ValidateRate(TxtRateCpuTemp, ErrRateCpuTemp) &&
+        ValidateRate(TxtRateGpuTemp, ErrRateGpuTemp) &&
+        ValidateRate(TxtRateGpuDedicated, ErrRateGpuDedicated) &&
+        ValidateRate(TxtRateGpuShared, ErrRateGpuShared);
 
     private void ShowError(WnControls.TextBox tb, TextBlock? err, string message)
     {
@@ -880,86 +845,33 @@ public partial class SettingsWindow : Window
         _original.Rates = _working.Rates;
     }
 
-    // Helper class for meter order display
     private class MeterOrderItem
     {
         public string Key { get; set; } = string.Empty;
         public string Name { get; set; } = string.Empty;
     }
 
-    /// <summary>
-    /// Formats the Opacity slider value (0.0..1.0 stored, 0..100 displayed)
-    /// as an integer percent using <see cref="CultureInfo.InvariantCulture"/>
-    /// so a comma-decimal locale doesn't double up separators. Math.Round uses
-    /// the .NET 6+ default banker's-rounding which is tolerable for percent
-    /// display; matches the modernized dialog's badge format.
-    /// </summary>
     private static string FormatOpacityValue(double v) =>
         ((int)Math.Round(v * 100)).ToString(CultureInfo.InvariantCulture) + "%";
 
-    /// <summary>
-    /// Formats the Scale slider value (0.5..2.0) as "1.0×" / "1.5×" / "2.0×"
-    /// using <see cref="CultureInfo.InvariantCulture"/>'s decimal point so
-    /// the value stays parseable across locales. The multiplication sign
-    /// (U+00D7) reads better than ASCII "x" on HiDPI displays and matches
-    /// FormatScaleValue / FormatOpacityValue parity with the modernized
-    /// dialog's slider badge format.
-    /// </summary>
     private static string FormatScaleValue(double v) =>
         v.ToString("F2", CultureInfo.InvariantCulture) + "\u00d7";
 
-    /// <summary>
-    /// Opt the SettingsWindow's HWND into the modern dark-chrome title bar
-    /// so the OS-drawn non-client area matches the WPF content area's
-    /// follow-OS-theme brush (this.Background etc., sourced from
-    /// ThemeBgBrush via ColorHelper.ThemeBrush at dialog ctor). Distinct
-    /// from uxtheme's SetPreferredAppMode(FORCE_DARK) used by the bar's
-    /// RMB popup to force-dark an HMENU: this is the DWM-attribute path
-    /// for title-bar darkness, available since Windows 10 1903. The
-    /// WPF content-area brushes track the merged
-    /// Themes/WinMetersTheme.xaml dictionary (ThemeBgBrush /
-    /// ThemeTextBrush / ThemeAccentBrush / etc.) at dialog ctor via
-    /// ColorHelper.ThemeBrush; the title bar stays forced-dark so the
-    /// title bar strip doesn't paint a jarring light stripe above a
-    /// content area that's #1F1F1F in dark themed Windows. Best-effort:
-    /// if the DWM call fails (older Windows), WinMeters.Log.D captures
-    /// the HRESULT and the dialog opens with whatever default chrome
-    /// the older OS gives, instead of crashing the Show().
-    /// </summary>
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
-
         try
         {
             var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
             if (hwnd == IntPtr.Zero) return;
-
             int useDark = 1;
-            int hr = NativeMethods.DwmSetWindowAttribute(
-                hwnd,
-                NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE,
-                ref useDark,
-                sizeof(int));
-
-            // DwmSetWindowAttribute returns S_OK (0) on success; non-zero
-            // HRESULT means the OS rejected the request (older build,
-            // pre-1903 without the attribute). WinMeters.Log.D it so we
-            // don't alert the user -- the dialog still opens, just with
-            // the OS-default light title bar.
-            if (hr != 0)
-            {
-                WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: DwmSetWindowAttribute(DWMWA_USE_IMMERSIVE_DARK_MODE) returned HRESULT 0x{hr:X8}.");
-            }
+            int hr = NativeMethods.DwmSetWindowAttribute(hwnd, NativeMethods.DWMWA_USE_IMMERSIVE_DARK_MODE, ref useDark, sizeof(int));
+            if (hr != 0) WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: DWM dark mode HRESULT 0x{hr:X8}.");
         }
-        catch (Exception ex)
-        {
-            WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: {ex.Message}");
-        }
+        catch (Exception ex) { WinMeters.Log.D($"SettingsWindow.OnSourceInitialized: {ex.Message}"); }
     }
 }
 
-// Extension method to avoid type casting
 internal static class SettingsWindowExtensions
 {
     public static void SetText(this TextBlock tb, string text) => tb.Text = text;

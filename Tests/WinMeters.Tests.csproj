@@ -38,6 +38,8 @@
     <Compile Include="..\ColorHelper.cs" Link="Sources\ColorHelper.cs" />
     <Compile Include="..\Constants.cs" Link="Sources\Constants.cs" />
     <Compile Include="..\NativeMethods.cs" Link="Sources\NativeMethods.cs" />
+    <Compile Include="..\Services\HotkeyService.cs" Link="Sources\HotkeyService.cs" />
+    <Compile Include="..\Services\SettingsBindings.cs" Link="Sources\SettingsBindings.cs" />
     <Compile Include="..\Utils\Log.cs" Link="Sources\Log.cs" />
     <Compile Include="..\Utils\PieChartRenderer.cs" Link="Sources\PieChartRenderer.cs" />
   </ItemGroup>

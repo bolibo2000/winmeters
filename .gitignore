@@ -73,3 +73,4 @@ project.lock.json
 *.msm
 *.msp
 commit_msg*.txt
+.aider*
